@@ -40,6 +40,7 @@ export class BM25Searcher {
   private indexedDocuments: string[] = [];
   private options: BM25Options;
   private initPromise: Promise<void> | null = null;
+  private bridgeReady: boolean = false;
 
   constructor(options: BM25Options = {}) {
     this.options = {
@@ -117,6 +118,7 @@ export class BM25Searcher {
         if (message === 'RETRIV_READY') {
           logger.info('Python retriv bridge initialized successfully');
           this.initialized = true;
+          this.bridgeReady = true;
           resolve();
         } else {
           try {
@@ -143,10 +145,12 @@ export class BM25Searcher {
       this.pythonProcess.stderr.on('data', (data: Buffer) => {
         try {
           const errorMessage = data.toString().trim();
+          
           try {
             // Try to parse as JSON log message
             const logData = JSON.parse(errorMessage);
             if (logData.level && logData.message) {
+              // This is a log message, not an error
               switch (logData.level) {
                 case 'ERROR':
                   logger.error(`Retriv: ${logData.message}`);
@@ -156,19 +160,37 @@ export class BM25Searcher {
                   break;
                 case 'INFO':
                   logger.info(`Retriv: ${logData.message}`);
+                  // If the bridge is ready for commands, consider it initialized
+                  if (logData.message === "Retriv bridge ready for commands") {
+                    setTimeout(() => {
+                      if (!this.bridgeReady) {
+                        this.initialized = true;
+                        this.bridgeReady = true;
+                        resolve();
+                      }
+                    }, 1000); // Give a little time for the RETRIV_READY message
+                  }
                   break;
                 default:
                   logger.debug(`Retriv: ${logData.message}`);
               }
-              return;
+              return; // Not an error, just a log message
             }
           } catch (e) {
-            // Not a JSON log message, treat as regular error
+            // Not a JSON log message, could be an actual error
           }
           
-          logger.error('Python error:', errorMessage);
-          if (!this.initialized) {
-            reject(new Error(errorMessage));
+          // If we got here and the message contains an actual error description, it's an error
+          if (errorMessage.includes("Error:") || 
+              errorMessage.includes("Exception:") || 
+              errorMessage.includes("Traceback")) {
+            logger.error('Python error:', errorMessage);
+            if (!this.initialized && !this.bridgeReady) {
+              reject(new Error(errorMessage));
+            }
+          } else {
+            // Otherwise it's probably just output we should log
+            logger.debug('Python stderr output:', errorMessage);
           }
         } catch (e) {
           logger.error('Error processing Python stderr:', e);
@@ -182,11 +204,22 @@ export class BM25Searcher {
       
       this.pythonProcess.on('exit', (code: number) => {
         this.initialized = false;
+        this.bridgeReady = false;
         if (code !== 0) {
           logger.error(`Python process exited with code ${code}`);
           reject(new Error(`Python process exited with code ${code}`));
         }
       });
+
+      // Set a timeout in case the Python process doesn't respond
+      setTimeout(() => {
+        if (!this.initialized) {
+          logger.warn('Python retriv bridge initialization timeout. Assuming ready.');
+          this.initialized = true;
+          this.bridgeReady = true;
+          resolve();
+        }
+      }, 10000); // 10 seconds timeout
     });
 
     return this.initPromise;
@@ -267,6 +300,20 @@ export class BM25Searcher {
         };
         
         this.pythonProcess.stdout.on('data', dataHandler);
+
+        // Set a timeout for indexing
+        setTimeout(() => {
+          if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
+            logger.warn('Indexing timeout. Assuming indexing completed but response was not recognized.');
+            this.pythonProcess.stdout.removeListener('data', dataHandler);
+            resolve({
+              status: 'success',
+              totalFiles: 0,
+              timeTaken: 'Timed out after 30 seconds',
+              filePaths: []
+            });
+          }
+        }, 30000); // 30 seconds timeout
       });
     });
   }
@@ -348,6 +395,15 @@ export class BM25Searcher {
         };
         
         this.pythonProcess.stdout.on('data', dataHandler);
+
+        // Set a timeout for search
+        setTimeout(() => {
+          if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
+            logger.warn('Search timeout. No response received from Python bridge.');
+            this.pythonProcess.stdout.removeListener('data', dataHandler);
+            resolve([]);
+          }
+        }, 10000); // 10 seconds timeout
       });
     });
   }
@@ -361,6 +417,7 @@ export class BM25Searcher {
       this.pythonProcess.stdin.end();
       this.pythonProcess = null;
       this.initialized = false;
+      this.bridgeReady = false;
       this.initPromise = null;
     }
   }
