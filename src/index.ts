@@ -6,10 +6,15 @@ import { setupResourceHandlers } from './modules/api-integration/resources.js';
 import { setupToolHandlers } from './modules/api-integration/tools.js';
 import { logger } from './utils/logger.js';
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-// Read version from package.json
-const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8'));
+// Get the current file's directory path in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Read version from package.json - adjust path to point directly to the project root
+const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
 const version = packageJson.version;
 
 /**
