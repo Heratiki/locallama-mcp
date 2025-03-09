@@ -25,6 +25,7 @@ export interface SearchResult {
   index: number;
   score: number;
   content: string;
+  file_path?: string;
 }
 
 export interface IndexingResult {
@@ -113,31 +114,29 @@ export class BM25Searcher {
       // Spawn a Python process
       this.pythonProcess = spawn('python', [scriptPath]);
       
+      // Buffer for collecting stdout data
+      let stdoutBuffer = '';
+      
       this.pythonProcess.stdout.on('data', (data: Buffer) => {
         const message = data.toString().trim();
-        if (message === 'RETRIV_READY') {
+        stdoutBuffer += message;
+        
+        // Check for command delimitation (newlines)
+        const lines = stdoutBuffer.split('\n');
+        if (lines.length > 1) {
+          // Process all complete lines
+          for (let i = 0; i < lines.length - 1; i++) {
+            this.processStdoutLine(lines[i], resolve);
+          }
+          // Keep the last (possibly incomplete) line in the buffer
+          stdoutBuffer = lines[lines.length - 1];
+        } else if (message === 'RETRIV_READY') {
+          // Special case for the ready message
           logger.info('Python retriv bridge initialized successfully');
           this.initialized = true;
           this.bridgeReady = true;
           resolve();
-        } else {
-          try {
-            // Parse other responses as JSON
-            const response = JSON.parse(message);
-            
-            if (response.status === 'success' && response.total_files !== undefined) {
-              logger.info(`Successfully indexed ${response.total_files} files in ${response.time_taken}`);
-            } else if (response.action === 'search_results') {
-              logger.info(`Search completed with ${response.results.length} results in ${response.time_taken || 'N/A'}`);
-            } else if (response.error) {
-              logger.error(`Python error: ${response.error}`);
-              if (response.stack_trace) {
-                logger.debug(`Stack trace: ${response.stack_trace}`);
-              }
-            }
-          } catch (e) {
-            logger.debug('Python output:', message);
-          }
+          stdoutBuffer = '';
         }
       });
       
@@ -148,49 +147,66 @@ export class BM25Searcher {
           
           try {
             // Try to parse as JSON log message
-            const logData = JSON.parse(errorMessage);
-            if (logData.level && logData.message) {
-              // This is a log message, not an error
-              switch (logData.level) {
-                case 'ERROR':
-                  logger.error(`Retriv: ${logData.message}`);
-                  break;
-                case 'WARNING':
-                  logger.warn(`Retriv: ${logData.message}`);
-                  break;
-                case 'INFO':
-                  logger.info(`Retriv: ${logData.message}`);
-                  // If the bridge is ready for commands, consider it initialized
-                  if (logData.message === "Retriv bridge ready for commands") {
-                    setTimeout(() => {
-                      if (!this.bridgeReady) {
-                        this.initialized = true;
-                        this.bridgeReady = true;
-                        resolve();
+            const lines = errorMessage.split('\n');
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              
+              try {
+                const logData = JSON.parse(line);
+                if (logData.level && logData.message) {
+                  // This is a log message, not an error
+                  switch (logData.level) {
+                    case 'ERROR':
+                      logger.error(`Retriv: ${logData.message}`);
+                      break;
+                    case 'WARNING':
+                      logger.warn(`Retriv: ${logData.message}`);
+                      break;
+                    case 'INFO':
+                      logger.info(`Retriv: ${logData.message}`);
+                      // If the bridge is ready for commands, consider it initialized
+                      if (logData.message === "Retriv bridge ready for commands") {
+                        setTimeout(() => {
+                          if (!this.bridgeReady) {
+                            this.initialized = true;
+                            this.bridgeReady = true;
+                            resolve();
+                          }
+                        }, 1000); // Give a little time for the RETRIV_READY message
                       }
-                    }, 1000); // Give a little time for the RETRIV_READY message
+                      break;
+                    default:
+                      logger.debug(`Retriv: ${logData.message}`);
                   }
-                  break;
-                default:
-                  logger.debug(`Retriv: ${logData.message}`);
+                }
+              } catch (e) {
+                // Not a JSON log message, could be an actual error
+                if (line.includes("Error:") || 
+                    line.includes("Exception:") || 
+                    line.includes("Traceback")) {
+                  logger.error('Python error:', line);
+                  if (!this.initialized && !this.bridgeReady) {
+                    reject(new Error(line));
+                  }
+                } else if (line.trim()) {
+                  // Otherwise it's probably just output we should log
+                  logger.debug('Python stderr output:', line);
+                }
               }
-              return; // Not an error, just a log message
             }
           } catch (e) {
-            // Not a JSON log message, could be an actual error
-          }
-          
-          // If we got here and the message contains an actual error description, it's an error
-          if (errorMessage.includes("Error:") || 
-              errorMessage.includes("Exception:") || 
-              errorMessage.includes("Traceback")) {
-            logger.error('Python error:', errorMessage);
-            if (!this.initialized && !this.bridgeReady) {
-              reject(new Error(errorMessage));
+            // If JSON parsing of the whole string failed, just log it as is
+            if (errorMessage.includes("Error:") || 
+                errorMessage.includes("Exception:") || 
+                errorMessage.includes("Traceback")) {
+              logger.error('Python error:', errorMessage);
+              if (!this.initialized && !this.bridgeReady) {
+                reject(new Error(errorMessage));
+              }
+            } else {
+              // Otherwise it's probably just output we should log
+              logger.debug('Python stderr output:', errorMessage);
             }
-          } else {
-            // Otherwise it's probably just output we should log
-            logger.debug('Python stderr output:', errorMessage);
           }
         } catch (e) {
           logger.error('Error processing Python stderr:', e);
@@ -226,95 +242,140 @@ export class BM25Searcher {
   }
 
   /**
-   * Index a collection of documents or directories
-   * @param documents Array of text documents to index or directories to scan
-   * @param isDirectories Whether the input is a list of directories (true) or documents (false)
+   * Process a line from the Python process stdout
    */
-  public async indexDocuments(documents: string[], isDirectories: boolean = false): Promise<IndexingResult> {
+  private processStdoutLine(line: string, resolveInit?: () => void): void {
+    if (!line.trim()) return;
+    
+    if (line === 'RETRIV_READY') {
+      logger.info('Python retriv bridge initialized successfully');
+      this.initialized = true;
+      this.bridgeReady = true;
+      if (resolveInit) resolveInit();
+      return;
+    }
+    
+    try {
+      // Try to parse as JSON
+      const response = JSON.parse(line);
+      
+      if (response.status === 'success' || response.status === 'warning') {
+        logger.info(`Retriv ${response.status}: ${response.message || ''}`);
+      } else if (response.status === 'error') {
+        logger.error(`Retriv error: ${response.message}`);
+      } else if (response.action === 'search_results') {
+        logger.info(`Search completed with ${response.results ? response.results.length : 0} results in ${response.time_taken || 'N/A'}`);
+      } else {
+        logger.debug('Python output:', response);
+      }
+    } catch (e) {
+      // Not JSON or not the response we're looking for
+      logger.debug('Non-JSON Python output:', line);
+    }
+  }
+
+  /**
+   * Index a collection of documents
+   * @param documents Array of text documents to index
+   * @returns Detailed information about the indexing process
+   */
+  public async indexDocuments(documents: string[]): Promise<IndexingResult> {
     if (!this.initialized) {
       await this.initialize();
     }
     
-    if (!isDirectories) {
-      this.indexedDocuments = documents;
-    }
+    this.indexedDocuments = documents;
     
     const message = JSON.stringify({
       action: 'index',
-      [isDirectories ? 'directories' : 'documents']: documents,
+      documents: documents,
       options: this.options
     });
     
-    logger.info(`Indexing ${isDirectories ? 'directories' : 'documents'}: ${documents.length} items`);
+    logger.info(`Indexing ${documents.length} documents`);
     
     return new Promise<IndexingResult>((resolve, reject) => {
+      // Buffer for collecting stdout data
+      let stdoutBuffer = '';
+      
+      const dataHandler = (data: Buffer) => {
+        const responseStr = data.toString();
+        stdoutBuffer += responseStr;
+        
+        // Process complete lines
+        const lines = stdoutBuffer.split('\n');
+        if (lines.length > 1) {
+          // Process all complete lines except the last one (which might be incomplete)
+          for (let i = 0; i < lines.length - 1; i++) {
+            try {
+              const line = lines[i].trim();
+              if (!line) continue;
+              
+              if (line === 'INDEX_COMPLETE') {
+                logger.info('Indexing completed successfully (legacy format)');
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                resolve({
+                  status: 'success',
+                  totalFiles: documents.length,
+                  timeTaken: 'N/A',
+                  filePaths: []
+                });
+                return;
+              }
+              
+              const response = JSON.parse(line);
+              
+              if (response.status === 'success' || response.status === 'warning') {
+                logger.info(`Indexing ${response.status}: ${response.message || ''}`);
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                
+                resolve({
+                  status: response.status,
+                  totalFiles: response.total_files || documents.length,
+                  timeTaken: response.time_taken || 'N/A',
+                  filePaths: response.file_paths || []
+                });
+                return;
+              } else if (response.status === 'error') {
+                logger.error(`Indexing error: ${response.message}`);
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                reject(new Error(response.message));
+                return;
+              }
+            } catch (e) {
+              // Not a valid JSON response or not the response we're looking for
+            }
+          }
+          
+          // Keep the last (possibly incomplete) line in the buffer
+          stdoutBuffer = lines[lines.length - 1];
+        }
+      };
+      
+      this.pythonProcess.stdout.on('data', dataHandler);
+      
       this.pythonProcess.stdin.write(message + '\n', (err: Error | null) => {
         if (err) {
           logger.error('Error writing to Python process:', err);
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
           reject(err);
           return;
         }
-        
-        // Wait for indexing result from Python
-        const dataHandler = (data: Buffer) => {
-          const responseStr = data.toString().trim();
-          
-          if (responseStr === 'INDEX_COMPLETE') {
-            logger.info('Indexing completed successfully (legacy format)');
-            this.pythonProcess.stdout.removeListener('data', dataHandler);
-            resolve({
-              status: 'success',
-              totalFiles: documents.length,
-              timeTaken: 'N/A',
-              filePaths: []
-            });
-            return;
-          }
-          
-          try {
-            const response = JSON.parse(responseStr);
-            
-            if (response.status === 'success' || response.status === 'warning') {
-              logger.info(`Indexing ${response.status}: ${response.message || ''}`);
-              this.pythonProcess.stdout.removeListener('data', dataHandler);
-              
-              if (response.file_paths && isDirectories) {
-                // Store the indexed documents content if available
-                this.indexedDocuments = response.file_paths;
-              }
-              
-              resolve({
-                status: response.status,
-                totalFiles: response.total_files || 0,
-                timeTaken: response.time_taken || 'N/A',
-                filePaths: response.file_paths || []
-              });
-            } else if (response.status === 'error') {
-              logger.error(`Indexing error: ${response.message}`);
-              this.pythonProcess.stdout.removeListener('data', dataHandler);
-              reject(new Error(response.message));
-            }
-          } catch (e) {
-            // Not JSON or not the response we're looking for
-          }
-        };
-        
-        this.pythonProcess.stdout.on('data', dataHandler);
-
-        // Set a timeout for indexing
-        setTimeout(() => {
-          if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
-            logger.warn('Indexing timeout. Assuming indexing completed but response was not recognized.');
-            this.pythonProcess.stdout.removeListener('data', dataHandler);
-            resolve({
-              status: 'success',
-              totalFiles: 0,
-              timeTaken: 'Timed out after 30 seconds',
-              filePaths: []
-            });
-          }
-        }, 30000); // 30 seconds timeout
       });
+
+      // Set a timeout for indexing
+      setTimeout(() => {
+        if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
+          logger.warn('Indexing timeout. Assuming indexing completed but response was not recognized.');
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
+          resolve({
+            status: 'success',
+            totalFiles: documents.length,
+            timeTaken: 'Timed out after 30 seconds',
+            filePaths: []
+          });
+        }
+      }, 30000); // 30 seconds timeout
     });
   }
 
@@ -323,7 +384,94 @@ export class BM25Searcher {
    * @param directories Array of directory paths to index
    */
   public async indexDirectories(directories: string[]): Promise<IndexingResult> {
-    return this.indexDocuments(directories, true);
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    
+    const message = JSON.stringify({
+      action: 'index',
+      directories: directories,
+      options: this.options
+    });
+    
+    logger.info(`Indexing directories: ${directories.join(', ')}`);
+    
+    return new Promise<IndexingResult>((resolve, reject) => {
+      // Buffer for collecting stdout data
+      let stdoutBuffer = '';
+      
+      const dataHandler = (data: Buffer) => {
+        const responseStr = data.toString();
+        stdoutBuffer += responseStr;
+        
+        // Process complete lines
+        const lines = stdoutBuffer.split('\n');
+        if (lines.length > 1) {
+          // Process all complete lines except the last one (which might be incomplete)
+          for (let i = 0; i < lines.length - 1; i++) {
+            try {
+              const line = lines[i].trim();
+              if (!line) continue;
+              
+              const response = JSON.parse(line);
+              
+              if (response.status === 'success' || response.status === 'warning') {
+                logger.info(`Indexing ${response.status}: ${response.message || ''}`);
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                
+                if (response.file_paths) {
+                  // Store the indexed documents content if available
+                  this.indexedDocuments = response.file_paths;
+                }
+                
+                resolve({
+                  status: response.status,
+                  totalFiles: response.total_files || 0,
+                  timeTaken: response.time_taken || 'N/A',
+                  filePaths: response.file_paths || []
+                });
+                return;
+              } else if (response.status === 'error') {
+                logger.error(`Indexing error: ${response.message}`);
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                reject(new Error(response.message));
+                return;
+              }
+            } catch (e) {
+              // Not a valid JSON response or not the response we're looking for
+            }
+          }
+          
+          // Keep the last (possibly incomplete) line in the buffer
+          stdoutBuffer = lines[lines.length - 1];
+        }
+      };
+      
+      this.pythonProcess.stdout.on('data', dataHandler);
+      
+      this.pythonProcess.stdin.write(message + '\n', (err: Error | null) => {
+        if (err) {
+          logger.error('Error writing to Python process:', err);
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
+          reject(err);
+          return;
+        }
+      });
+
+      // Set a timeout for indexing
+      setTimeout(() => {
+        if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
+          logger.warn('Indexing timeout. Assuming indexing completed but response was not recognized.');
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
+          resolve({
+            status: 'success',
+            totalFiles: 0,
+            timeTaken: 'Timed out after 30 seconds',
+            filePaths: []
+          });
+        }
+      }, 30000); // 30 seconds timeout
+    });
   }
 
   /**
@@ -337,11 +485,6 @@ export class BM25Searcher {
       await this.initialize();
     }
     
-    if (this.indexedDocuments.length === 0) {
-      logger.warn('No documents have been indexed yet');
-      return [];
-    }
-    
     const message = JSON.stringify({
       action: 'search',
       query,
@@ -351,60 +494,75 @@ export class BM25Searcher {
     logger.info(`Searching for: "${query}" (top ${topK} results)`);
     
     return new Promise<SearchResult[]>((resolve, reject) => {
+      // Buffer for collecting stdout data
+      let stdoutBuffer = '';
+      
+      const dataHandler = (data: Buffer) => {
+        const responseStr = data.toString();
+        stdoutBuffer += responseStr;
+        
+        // Process complete lines
+        const lines = stdoutBuffer.split('\n');
+        if (lines.length > 1) {
+          // Process all complete lines except the last one (which might be incomplete)
+          for (let i = 0; i < lines.length - 1; i++) {
+            try {
+              const line = lines[i].trim();
+              if (!line) continue;
+              
+              const response = JSON.parse(line);
+              
+              if (response.action === 'search_results') {
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                
+                if (response.error) {
+                  logger.error(`Search error: ${response.error}`);
+                  reject(new Error(response.error));
+                  return;
+                }
+                
+                logger.info(`Search completed with ${response.results.length} results in ${response.time_taken || 'N/A'}`);
+                
+                // Format the results
+                const results: SearchResult[] = response.results.map((result: any) => ({
+                  index: result.index,
+                  score: result.score,
+                  content: result.content || '',
+                  file_path: result.file_path || 'Unknown'
+                }));
+                
+                resolve(results);
+                return;
+              }
+            } catch (e) {
+              // Not a valid JSON response or not the response we're looking for
+            }
+          }
+          
+          // Keep the last (possibly incomplete) line in the buffer
+          stdoutBuffer = lines[lines.length - 1];
+        }
+      };
+      
+      this.pythonProcess.stdout.on('data', dataHandler);
+      
       this.pythonProcess.stdin.write(message + '\n', (err: Error | null) => {
         if (err) {
           logger.error('Error writing to Python process:', err);
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
           reject(err);
           return;
         }
-        
-        // Wait for search results from Python
-        const dataHandler = (data: Buffer) => {
-          try {
-            const response = JSON.parse(data.toString().trim());
-            if (response.action === 'search_results') {
-              this.pythonProcess.stdout.removeListener('data', dataHandler);
-              
-              if (response.error) {
-                logger.error(`Search error: ${response.error}`);
-                reject(new Error(response.error));
-                return;
-              }
-              
-              logger.info(`Search completed with ${response.results.length} results in ${response.time_taken || 'N/A'}`);
-              
-              // Map indices to actual documents
-              const results: SearchResult[] = response.results.map((result: any) => {
-                const docIndex = result.index;
-                const content = docIndex < this.indexedDocuments.length 
-                  ? this.indexedDocuments[docIndex]
-                  : `[Document #${docIndex} not available]`;
-                
-                return {
-                  index: docIndex,
-                  score: result.score,
-                  content: content
-                };
-              });
-              
-              resolve(results);
-            }
-          } catch (e) {
-            // Ignore non-JSON messages
-          }
-        };
-        
-        this.pythonProcess.stdout.on('data', dataHandler);
-
-        // Set a timeout for search
-        setTimeout(() => {
-          if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
-            logger.warn('Search timeout. No response received from Python bridge.');
-            this.pythonProcess.stdout.removeListener('data', dataHandler);
-            resolve([]);
-          }
-        }, 10000); // 10 seconds timeout
       });
+
+      // Set a timeout for search
+      setTimeout(() => {
+        if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
+          logger.warn('Search timeout. No response received from Python bridge.');
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
+          resolve([]);
+        }
+      }, 10000); // 10 seconds timeout
     });
   }
 
