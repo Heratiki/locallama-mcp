@@ -10,6 +10,7 @@ import { costMonitor } from '../cost-monitor/index.js';
 import { openRouterModule } from '../openrouter/index.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
+import { jobTracker } from '../decision-engine/services/jobTracker.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -52,6 +53,12 @@ export function setupResourceHandlers(server: Server): void {
         mimeType: 'application/json',
         description: 'List of available local LLM models',
       },
+      {
+        uri: 'locallama://jobs/active',
+        name: 'Active Jobs',
+        mimeType: 'application/json',
+        description: 'List of currently active jobs',
+      },
     ];
     
     // Add OpenRouter resources if API key is configured
@@ -91,6 +98,12 @@ export function setupResourceHandlers(server: Server): void {
         name: 'API Usage Statistics',
         mimeType: 'application/json',
         description: 'Token usage and cost statistics for a specific API',
+      },
+      {
+        uriTemplate: 'locallama://jobs/progress/{jobId}',
+        name: 'Job Progress',
+        mimeType: 'application/json',
+        description: 'Progress information for a specific job',
       },
     ];
     
@@ -402,6 +415,73 @@ export function setupResourceHandlers(server: Server): void {
         throw new McpError(
           ErrorCode.InternalError,
           `Failed to get OpenRouter prompting strategy: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+    
+    // Handle job resources
+    if (uri === 'locallama://jobs/active') {
+      try {
+        const activeJobs = jobTracker.getActiveJobs();
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify({
+                count: activeJobs.length,
+                jobs: activeJobs,
+                timestamp: new Date().toISOString(),
+              }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        logger.error('Failed to get active jobs:', error);
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to get active jobs: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+    
+    // Handle job progress
+    const jobProgressMatch = uri.match(/^locallama:\/\/jobs\/progress\/(.+)$/);
+    if (jobProgressMatch) {
+      try {
+        const jobId = decodeURIComponent(jobProgressMatch[1]);
+        const job = jobTracker.getJob(jobId);
+        
+        if (!job) {
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            `Job not found: ${jobId}`
+          );
+        }
+        
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify({
+                job_id: job.id,
+                status: job.status,
+                progress: job.progress,
+                estimated_time_remaining: job.estimated_time_remaining,
+                task: job.task,
+                model: job.model,
+                start_time: job.startTime,
+                timestamp: new Date().toISOString(),
+              }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        logger.error('Failed to get job progress:', error);
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to get job progress: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }

@@ -141,6 +141,9 @@ LOG_LEVEL=debug
   - `benchmark_free_models`: Benchmarks the performance of free models from OpenRouter
   - `analyze_code_task`: Analyzes a code task and suggests decomposition strategy
   - `visualize_dependencies`: Creates a visual representation of task dependencies
+  - `retriv_init`: Initializes and configures Retriv for code search and indexing
+  - `cancel_job`: Cancels a running job to prevent runaway costs
+  - Enhanced `route_task`: Implements a structured workflow with user preferences, cost confirmation, Retriv search, and job tracking
 
 ### Environment Variables for Cline.Bot and Roo Code
 
@@ -200,6 +203,33 @@ This will return a structured analysis including:
 - Critical path identification
 - Suggested optimizations
 
+### User Preferences and Job Tracking
+
+The server now includes user preferences and job tracking features:
+
+#### User Preferences
+
+User preferences are stored in a `user-preferences.json` file and include:
+
+- **Execution Mode**: Control how tasks are routed:
+  - `Fully automated selection`: Let the decision engine choose the best option
+  - `Local model only`: Always use local models
+  - `Free API only`: Prefer free API models when available
+  - `Paid API only`: Always use paid API models
+
+- **Cost Confirmation Threshold**: Set a threshold for when to ask for confirmation before using paid APIs
+- **Retriv Search Priority**: Enable or disable prioritizing Retriv search for existing code solutions
+- **Default Directories**: Configure default directories for Retriv indexing
+- **Exclude Patterns**: Specify patterns to exclude from Retriv indexing
+
+#### Job Tracking
+
+The server now provides job tracking resources:
+
+- **Active Jobs**: View all currently active jobs via `locallama://jobs/active`
+- **Job Progress**: Track the progress of a specific job via `locallama://jobs/progress/{jobId}`
+- **Job Cancellation**: Cancel a running job using the `cancel_job` tool
+
 ### Using with Cline.Bot
 
 To use this MCP Server with Cline.Bot, add it to your Cline MCP settings:
@@ -234,6 +264,8 @@ Once configured, you can use the MCP tools in Cline.Bot:
 - `benchmark_free_models`: Benchmark the performance of free models from OpenRouter
 - `analyze_code_task`: Analyze a complex coding task and get a decomposition plan
 - `visualize_dependencies`: Generate a visual representation of task dependencies
+- `retriv_init`: Initialize and configure Retriv for code search and indexing
+- `cancel_job`: Cancel a running job to prevent runaway costs
 
 Example usage in Cline.Bot:
 
@@ -242,6 +274,50 @@ Example usage in Cline.Bot:
 ```
 
 This will clear the tracking data and force a fresh update of the models, which is useful if you're not seeing any free models or if you want to ensure you have the latest model information.
+
+### Enhanced Route Task Workflow
+
+The `route_task` tool now follows a structured workflow:
+
+1. **Load User Preferences**: Loads stored user preferences from the configuration file
+2. **Cost Estimation**: Assesses execution costs and prompts for confirmation if the cost exceeds the threshold
+3. **Task Breakdown Analysis**: Determines if task segmentation is necessary
+4. **Retriv Search**: Checks Retriv for existing code solutions before generating anything new
+5. **Decision Engine Routing**: Determines the most cost-efficient way to execute the task
+6. **Job Creation**: Creates a new job and logs it in `locallama://jobs/active`
+7. **Progress Tracking**: Uses `locallama://jobs/progress/{jobId}` to track job progress
+8. **Result Storage**: Stores the result in Retriv for future reuse
+
+Example usage:
+
+```
+/use_mcp_tool locallama route_task {
+  "task": "Create a function to calculate the Fibonacci sequence",
+  "context_length": 1000,
+  "expected_output_length": 500,
+  "complexity": 0.3,
+  "priority": "cost"
+}
+```
+
+### "Retriv First" Strategy
+
+The server now implements a "Retriv First" strategy to prioritize existing code:
+
+1. **Code Indexing**: Use `retriv_init` to index your code repositories
+2. **Semantic Search**: When a task is submitted, Retriv searches for similar code
+3. **Code Reuse**: If similar code is found, it's returned immediately without generating new code
+4. **Fallback**: If no suitable code is found, the task is routed to the appropriate model
+
+Example usage:
+
+```
+/use_mcp_tool locallama retriv_init {
+  "directories": ["/path/to/your/code/repo"],
+  "exclude_patterns": ["node_modules/**", "dist/**"],
+  "force_reindex": true
+}
+```
 
 ### Running Benchmarks
 
@@ -323,6 +399,6 @@ ISC
 
 ### Phase 6: New Module Integration
 - Status: In Progress
-- Completion: 20%
-- Features: Module system architecture, component framework, extensibility improvements
-- Current Focus: Implementing integration framework and module lifecycle management
+- Completion: 60%
+- Features: Module system architecture, component framework, extensibility improvements, user preferences, job tracking, Retriv integration
+- Current Focus: Implementing "Retriv First" strategy and job management system

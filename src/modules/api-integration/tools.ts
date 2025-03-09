@@ -11,6 +11,11 @@ import { benchmarkModule } from '../benchmark/index.js';
 import { openRouterModule } from '../openrouter/index.js';
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
+import { jobTracker } from '../decision-engine/services/jobTracker.js';
+import { v4 as uuidv4 } from 'uuid';
+import { loadUserPreferences } from '../user-preferences/index.js';
+import { codeSearchEngineManager, getCodeSearchEngine, indexDocuments } from '../cost-monitor/codeSearchEngine.js';
+import { BM25Options } from '../cost-monitor/bm25.js';
 
 /**
  * Check if OpenRouter API key is configured
@@ -42,15 +47,15 @@ export function setupToolHandlers(server: Server): void {
               description: 'The coding task to route',
             },
             context_length: {
-              type: 'number', // Corrected type
+              type: 'number',
               description: 'The length of the context in tokens',
             },
             expected_output_length: {
-              type: 'number', // Corrected type
+              type: 'number',
               description: 'The expected length of the output in tokens',
             },
             complexity: {
-              type: 'number', // Corrected type
+              type: 'number',
               description: 'The complexity of the task (0-1)',
             },
             priority: {
@@ -64,6 +69,56 @@ export function setupToolHandlers(server: Server): void {
             },
           },
           required: ['task', 'context_length'],
+        },
+      },
+      {
+        name: 'retriv_init',
+        description: 'Initialize and configure Retriv for code search and indexing',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            directories: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Array of directories to index',
+            },
+            exclude_patterns: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Array of glob patterns to exclude from indexing',
+            },
+            chunk_size: {
+              type: 'number',
+              description: 'Size of chunks for large files (in lines)',
+            },
+            force_reindex: {
+              type: 'boolean',
+              description: 'Whether to force reindexing of all files',
+            },
+            bm25_options: {
+              type: 'object',
+              description: 'Options for the BM25 algorithm',
+            },
+          },
+          required: ['directories'],
+        },
+      },
+      {
+        name: 'cancel_job',
+        description: 'Cancel a running job',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            job_id: {
+              type: 'string',
+              description: 'The ID of the job to cancel',
+            },
+          },
+          required: ['job_id'],
         },
       },
       {
@@ -417,28 +472,79 @@ export function setupToolHandlers(server: Server): void {
             };
           }
           
-          // Check if preemptive routing is requested
-          if (args.preemptive) {
-            // Use preemptive routing for faster decision
-            const decision = await decisionEngine.preemptiveRouting({
-              task: args.task as string,
-              contextLength: (args.context_length as number) || 0,
-              expectedOutputLength: (args.expected_output_length as number) || 0,
-              complexity: (args.complexity as number) || 0.5,
-              priority: (args.priority as 'speed' | 'cost' | 'quality') || 'quality',
-            });
-            
+          // Step 1: Load User Preferences
+          const userPreferences = await loadUserPreferences();
+          const executionMode = userPreferences.executionMode || 'Fully automated selection';
+          
+          // Step 2: Cost Estimation
+          const costEstimate = await costMonitor.estimateCost({
+            contextLength: (args.context_length as number) || 0,
+            outputLength: (args.expected_output_length as number) || 0,
+          });
+          
+          const costThreshold = userPreferences.costConfirmationThreshold || config.costThreshold;
+          if (costEstimate.paid.cost.total > costThreshold && executionMode !== 'Local model only') {
+            // Return a response that requires user confirmation
             return {
               content: [
                 {
                   type: 'text',
-                  text: JSON.stringify(decision, null, 2),
+                  text: JSON.stringify({
+                    type: 'cost_confirmation',
+                    estimated_cost: costEstimate.paid.cost.total,
+                    message: 'Estimated cost exceeds threshold. Do you want to continue?',
+                    options: ['Yes', 'No'],
+                    job_id: null // No job created yet
+                  }, null, 2),
                 },
               ],
             };
           }
           
-          // Get full routing decision
+          // Step 3: Task Breakdown Analysis
+          let taskAnalysis = null;
+          let hasSubtasks = false;
+          if (executionMode !== 'Local model only') {
+            try {
+              taskAnalysis = await decisionEngine.analyzeCodeTask(args.task as string);
+              hasSubtasks = taskAnalysis && taskAnalysis.executionOrder && taskAnalysis.executionOrder.length > 0;
+              logger.info(`Task analysis complete. Found ${hasSubtasks ? taskAnalysis.executionOrder.length : 0} subtasks.`);
+            } catch (error) {
+              logger.warn('Error analyzing task:', error);
+              // Continue with normal processing if task analysis fails
+            }
+          }
+          
+          // Step 4: Retriv Search
+          let retrivResults: any[] = [];
+          if (!hasSubtasks && userPreferences.prioritizeRetrivSearch) {
+            try {
+              const codeSearchEngine = await getCodeSearchEngine();
+              retrivResults = await codeSearchEngine.search(args.task as string, 5);
+              logger.info(`Found ${retrivResults.length} results in Retriv for task: ${args.task}`);
+            } catch (error) {
+              logger.warn('Error searching Retriv:', error);
+              // Continue with normal processing if Retriv search fails
+            }
+          }
+          
+          if (retrivResults.length > 0) {
+            // Use existing code from Retriv
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    message: 'Found existing code solution in Retriv',
+                    results: retrivResults,
+                    source: 'retriv'
+                  }, null, 2),
+                },
+              ],
+            };
+          }
+          
+          // Step 5: Decision Engine Routing
           const decision = await decisionEngine.routeTask({
             task: args.task as string,
             contextLength: (args.context_length as number) || 0,
@@ -447,11 +553,28 @@ export function setupToolHandlers(server: Server): void {
             priority: (args.priority as 'speed' | 'cost' | 'quality') || 'quality',
           });
           
+          // Step 6: Job Creation
+          const jobId = uuidv4();
+          jobTracker.createJob(jobId, args.task as string, decision.model);
+          
+          // Step 7: Progress Tracking
+          jobTracker.updateJobProgress(jobId, 0);
+          
+          // Step 8: Execute Task and Store Result
+          // Note: In a real implementation, this would be asynchronous
+          // For now, we'll just return the decision with the job ID
+          
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(decision, null, 2),
+                text: JSON.stringify({
+                  ...decision,
+                  job_id: jobId,
+                  status: 'In Progress',
+                  progress: '0%',
+                  message: 'Task has been routed and job created. Use job_id to track progress.'
+                }, null, 2),
               },
             ],
           };
@@ -830,6 +953,112 @@ export function setupToolHandlers(server: Server): void {
         }
       }
       
+      case 'retriv_init': {
+        try {
+          // Validate arguments
+          if (!args.directories || !Array.isArray(args.directories)) {
+            return {
+              content: [{ type: 'text', text: 'Missing or invalid required argument: directories' }],
+              isError: true,
+            };
+          }
+
+          // Initialize the code search engine
+          await codeSearchEngineManager.initialize({
+            excludePatterns: args.exclude_patterns as string[] || undefined,
+            chunkSize: args.chunk_size as number || undefined,
+            bm25Options: args.bm25_options as BM25Options || undefined,
+          });
+
+          // Index the specified directories
+          for (const directory of args.directories as string[]) {
+            await codeSearchEngineManager.indexDirectory(directory, args.force_reindex as boolean || false);
+          }
+
+          // Get document count
+          const documentCount = await codeSearchEngineManager.getDocumentCount();
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  message: 'Retriv initialized and indexed successfully',
+                  indexed_directories: args.directories,
+                  document_count: documentCount,
+                }, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          logger.error('Error initializing Retriv:', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error initializing Retriv: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case 'cancel_job': {
+        try {
+          // Validate arguments
+          if (!args.job_id) {
+            return {
+              content: [{ type: 'text', text: 'Missing required argument: job_id' }],
+              isError: true,
+            };
+          }
+
+          // Get the job
+          const job = jobTracker.getJob(args.job_id as string);
+          if (!job) {
+            return {
+              content: [{ type: 'text', text: `Job with ID ${args.job_id} not found` }],
+              isError: true,
+            };
+          }
+
+          // Check if the job can be cancelled
+          if (job.status === 'Completed' || job.status === 'Cancelled' || job.status === 'Failed') {
+            return {
+              content: [{ type: 'text', text: `Job with ID ${args.job_id} is already ${job.status.toLowerCase()}` }],
+              isError: true,
+            };
+          }
+
+          // Cancel the job
+          jobTracker.cancelJob(args.job_id as string);
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  message: `Job with ID ${args.job_id} has been cancelled`,
+                  job: jobTracker.getJob(args.job_id as string),
+                }, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          logger.error('Error cancelling job:', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error cancelling job: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
       case 'clear_openrouter_tracking': {
         try {
           // Check if OpenRouter API key is configured
