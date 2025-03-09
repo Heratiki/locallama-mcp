@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
 import { loadUserPreferences } from '../user-preferences/index.js';
 import * as path from 'path';
+import { IndexingResult } from './bm25.js';
 
 /**
  * Singleton wrapper for CodeSearchEngine to ensure consistent access across the application
@@ -26,6 +27,7 @@ class CodeSearchEngineManager {
    */
   public async initialize(options?: CodeSearchEngineOptions): Promise<void> {
     if (this.initialized && this.codeSearchEngine) {
+      logger.info('Code search engine already initialized, skipping initialization');
       return;
     }
 
@@ -40,12 +42,14 @@ class CodeSearchEngineManager {
         ...options // Override with provided options
       };
 
+      logger.info('Initializing code search engine with options:', engineOptions);
+      
       // Create and initialize the code search engine
       this.codeSearchEngine = new CodeSearchEngine(config.rootDir, engineOptions);
       await this.codeSearchEngine.initialize();
       
       this.initialized = true;
-      logger.info('Code search engine manager initialized');
+      logger.info('Code search engine manager initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize code search engine manager', error);
       throw error;
@@ -58,6 +62,7 @@ class CodeSearchEngineManager {
    */
   public async getCodeSearchEngine(): Promise<CodeSearchEngine> {
     if (!this.initialized || !this.codeSearchEngine) {
+      logger.info('Code search engine not initialized, initializing with default settings');
       await this.initialize();
     }
     
@@ -68,25 +73,49 @@ class CodeSearchEngineManager {
    * Index a specific directory
    * @param directory The directory to index
    * @param forceReindex Whether to force reindexing
+   * @returns Results of the indexing operation
    */
-  public async indexDirectory(directory: string, forceReindex: boolean = false): Promise<void> {
-    const engine = await this.getCodeSearchEngine();
-    
-    // Convert relative path to absolute
-    const absolutePath = path.isAbsolute(directory) 
-      ? directory 
-      : path.join(config.rootDir, directory);
-    
-    // Create a new engine instance for this directory
-    const directoryEngine = new CodeSearchEngine(absolutePath, {
-      excludePatterns: engine['excludePatterns'],
-      chunkSize: engine['options'].chunkSize
-    });
-    
-    await directoryEngine.initialize();
-    await directoryEngine.indexWorkspace(forceReindex);
-    
-    logger.info(`Indexed directory: ${directory}`);
+  public async indexDirectory(directory: string, forceReindex: boolean = false): Promise<IndexingResult> {
+    try {
+      const engine = await this.getCodeSearchEngine();
+      
+      // Convert relative path to absolute
+      const absolutePath = path.isAbsolute(directory) 
+        ? directory 
+        : path.join(config.rootDir, directory);
+      
+      logger.info(`Preparing to index directory: ${absolutePath} (force reindex: ${forceReindex})`);
+      
+      // Create a new engine instance for this directory
+      const directoryEngine = new CodeSearchEngine(absolutePath, {
+        excludePatterns: engine['excludePatterns'],
+        chunkSize: engine['options'].chunkSize
+      });
+      
+      await directoryEngine.initialize();
+      
+      // Index the directory and get detailed results
+      const startTime = Date.now();
+      const result = await directoryEngine.indexWorkspaceWithDetails(forceReindex);
+      const endTime = Date.now();
+      const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+      
+      if (result) {
+        logger.info(`Successfully indexed directory ${directory}: ${result.totalFiles} files in ${timeTaken} seconds`);
+        return result;
+      } else {
+        logger.info(`Indexed directory ${directory} (legacy mode, no details available)`);
+        return {
+          status: 'success',
+          totalFiles: 0,
+          timeTaken: `${timeTaken} seconds`,
+          filePaths: []
+        };
+      }
+    } catch (error) {
+      logger.error(`Error indexing directory ${directory}:`, error);
+      throw error;
+    }
   }
 
   /**
@@ -95,16 +124,31 @@ class CodeSearchEngineManager {
    * @param topK Number of top results to return
    */
   public async search(query: string, topK: number = 5): Promise<CodeSearchResult[]> {
-    const engine = await this.getCodeSearchEngine();
-    return engine.search(query, topK);
+    try {
+      logger.info(`Searching for: "${query}" (top ${topK} results)`);
+      const engine = await this.getCodeSearchEngine();
+      const results = await engine.search(query, topK);
+      logger.info(`Found ${results.length} results for query: ${query}`);
+      return results;
+    } catch (error) {
+      logger.error(`Error searching for "${query}":`, error);
+      throw error;
+    }
   }
 
   /**
    * Get the document count
    */
   public async getDocumentCount(): Promise<number> {
-    const engine = await this.getCodeSearchEngine();
-    return engine.getDocumentCount();
+    try {
+      const engine = await this.getCodeSearchEngine();
+      const count = await engine.getDocumentCount();
+      logger.info(`Total indexed documents: ${count}`);
+      return count;
+    } catch (error) {
+      logger.error('Error getting document count:', error);
+      throw error;
+    }
   }
 
   /**
@@ -118,19 +162,26 @@ class CodeSearchEngineManager {
     lastUpdate: number;
     error?: string;
   }> {
-    const engine = await this.getCodeSearchEngine();
-    return engine.getIndexStatus();
+    try {
+      const engine = await this.getCodeSearchEngine();
+      return engine.getIndexStatus();
+    } catch (error) {
+      logger.error('Error getting index status:', error);
+      throw error;
+    }
   }
 
   /**
    * Reset the code search engine
    */
   public async reset(): Promise<void> {
+    logger.info('Resetting code search engine');
     if (this.codeSearchEngine) {
       this.codeSearchEngine.dispose();
       this.codeSearchEngine = null;
     }
     this.initialized = false;
+    logger.info('Code search engine reset complete');
   }
 }
 
@@ -148,7 +199,16 @@ export async function getCodeSearchEngine(): Promise<CodeSearchEngine> {
  * Index documents with the code search engine
  * @param documents Array of documents to index
  */
-export async function indexDocuments(documents: { content: string, path: string, language: string }[]): Promise<void> {
-  const engine = await getCodeSearchEngine();
-  await engine['bm25Searcher'].indexDocuments(documents.map(doc => doc.content));
+export async function indexDocuments(documents: { content: string, path: string, language: string }[]): Promise<IndexingResult> {
+  try {
+    logger.info(`Indexing ${documents.length} documents`);
+    const engine = await getCodeSearchEngine();
+    // Use the enhanced indexDocuments method that returns detailed results
+    const results = await engine['bm25Searcher'].indexDocuments(documents.map(doc => doc.content));
+    logger.info(`Successfully indexed ${documents.length} documents`);
+    return results;
+  } catch (error) {
+    logger.error('Error indexing documents:', error);
+    throw error;
+  }
 }

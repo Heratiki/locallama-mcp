@@ -973,29 +973,76 @@ export function setupToolHandlers(server: Server): void {
             };
           }
 
-          // Initialize the code search engine
+          logger.info(`Initializing Retriv for directories: ${(args.directories as string[]).join(', ')}`);
+          
+          // Initialize the code search engine with detailed feedback
+          logger.info('Starting code search engine initialization...');
           await codeSearchEngineManager.initialize({
             excludePatterns: args.exclude_patterns as string[] || undefined,
             chunkSize: args.chunk_size as number || undefined,
             bm25Options: args.bm25_options as BM25Options || undefined,
           });
-
-          // Index the specified directories
+          logger.info('Code search engine initialized successfully');
+          
+          // Index the specified directories with progress updates
+          let totalFiles = 0;
+          const startTime = Date.now();
+          const indexResults = [];
+          
           for (const directory of args.directories as string[]) {
-            await codeSearchEngineManager.indexDirectory(directory, args.force_reindex as boolean || false);
+            logger.info(`Indexing directory: ${directory}`);
+            try {
+              const result = await codeSearchEngineManager.indexDirectory(directory, args.force_reindex as boolean || false);
+              if (result && typeof result === 'object') {
+                const fileCount = result.totalFiles || 0;
+                totalFiles += fileCount;
+                indexResults.push({
+                  directory,
+                  files_indexed: fileCount,
+                  status: 'success',
+                  time_taken: result.timeTaken || 'N/A'
+                });
+                logger.info(`Successfully indexed ${fileCount} files in ${directory}`);
+              } else {
+                indexResults.push({
+                  directory,
+                  status: 'warning',
+                  message: 'Directory indexed but no result details available'
+                });
+                logger.warn(`Directory indexed but no result details available for ${directory}`);
+              }
+            } catch (error) {
+              indexResults.push({
+                directory,
+                status: 'error',
+                message: error instanceof Error ? error.message : String(error)
+              });
+              logger.error(`Error indexing directory ${directory}:`, error);
+            }
           }
-
-          // Get document count
+          
+          // Get document count and additional statistics
           const documentCount = await codeSearchEngineManager.getDocumentCount();
-
+          const endTime = Date.now();
+          const totalTimeTaken = ((endTime - startTime) / 1000).toFixed(2);
+          
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
                   message: 'Retriv initialized and indexed successfully',
-                  indexed_directories: args.directories,
-                  document_count: documentCount,
+                  summary: {
+                    indexed_directories: (args.directories as string[]).length,
+                    total_files: totalFiles,
+                    document_count: documentCount,
+                    total_time_taken: `${totalTimeTaken} seconds`
+                  },
+                  details: indexResults,
+                  search_ready: documentCount > 0,
+                  next_steps: documentCount > 0 
+                    ? 'You can now use the retriv command to search through indexed documents'
+                    : 'No documents were indexed. Please check your directories and try again.'
                 }, null, 2),
               },
             ],
@@ -1006,7 +1053,12 @@ export function setupToolHandlers(server: Server): void {
             content: [
               {
                 type: 'text',
-                text: `Error initializing Retriv: ${error instanceof Error ? error.message : String(error)}`,
+                text: JSON.stringify({
+                  status: 'error',
+                  message: `Error initializing Retriv: ${error instanceof Error ? error.message : String(error)}`,
+                  stack: error instanceof Error && error.stack ? error.stack : undefined,
+                  directories_attempted: args.directories
+                }, null, 2),
               },
             ],
             isError: true,

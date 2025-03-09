@@ -143,6 +143,105 @@ export class CodeSearchEngine {
   }
 
   /**
+   * Index all code files in the workspace with detailed results
+   * @param forceReindex Whether to force reindexing even if files have been indexed before
+   * @returns Detailed information about the indexing process
+   */
+  public async indexWorkspaceWithDetails(forceReindex: boolean = false): Promise<{
+    status: string;
+    totalFiles: number;
+    timeTaken: string;
+    filePaths: string[];
+  }> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    
+    const startTime = Date.now();
+    const indexedFiles: string[] = [];
+    
+    try {
+      this.indexingStatus.indexing = true;
+      this.indexingStatus.lastUpdate = Date.now();
+      
+      // Find all code files in the workspace
+      const codeFiles = await this.findCodeFiles();
+      this.indexingStatus.totalFiles = codeFiles.length;
+      
+      logger.info(`Found ${codeFiles.length} code files in workspace`);
+      
+      const newOrUpdatedFiles = forceReindex ? codeFiles : this.filterNewOrUpdatedFiles(codeFiles);
+      
+      if (newOrUpdatedFiles.length === 0) {
+        logger.info('No new or updated files to index');
+        this.indexingStatus.indexing = false;
+        
+        const endTime = Date.now();
+        const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+        
+        return {
+          status: 'success',
+          totalFiles: 0,
+          timeTaken: `${timeTaken} seconds`,
+          filePaths: []
+        };
+      }
+      
+      logger.info(`Indexing ${newOrUpdatedFiles.length} code files`);
+      
+      // Read and process each code file
+      for (const file of newOrUpdatedFiles) {
+        this.indexingStatus.currentFile = file;
+        this.indexingStatus.filesIndexed++;
+        this.indexingStatus.lastUpdate = Date.now();
+        indexedFiles.push(file);
+        
+        logger.debug(`Processing file: ${file}`);
+      }
+      
+      const newDocuments = await this.readCodeFiles(newOrUpdatedFiles);
+      
+      logger.info(`Loaded ${newDocuments.length} documents from ${newOrUpdatedFiles.length} files`);
+      
+      this.documents = [...this.documents.filter(doc => 
+        !newOrUpdatedFiles.includes(doc.path)), ...newDocuments];
+      
+      // Update the indexedPaths set
+      newOrUpdatedFiles.forEach(path => this.indexedPaths.add(path));
+      
+      // Index the documents with the BM25 searcher
+      const documentContents = this.documents.map(doc => doc.content);
+      logger.info(`Sending ${documentContents.length} documents to BM25 indexer`);
+      
+      // Use the enhanced indexDocuments method that returns details
+      const indexResult = await this.bm25Searcher.indexDocuments(documentContents);
+      
+      logger.info(`Indexed ${this.documents.length} code documents successfully`);
+      this.indexingStatus.indexing = false;
+      this.indexingStatus.error = undefined;
+      
+      const endTime = Date.now();
+      const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+      
+      return {
+        status: 'success',
+        totalFiles: newOrUpdatedFiles.length,
+        timeTaken: indexResult.timeTaken || `${timeTaken} seconds`,
+        filePaths: indexedFiles
+      };
+    } catch (error) {
+      logger.error('Failed to index workspace', error);
+      this.indexingStatus.error = error instanceof Error ? error.message : 'Unknown error';
+      this.indexingStatus.indexing = false;
+      
+      const endTime = Date.now();
+      const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+      
+      throw error;
+    }
+  }
+
+  /**
    * Search for code using a query string
    * @param query The search query
    * @param topK Number of top results to return
