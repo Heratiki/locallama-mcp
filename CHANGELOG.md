@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.9.0](https://github.com/Heratiki/locallama-mcp/compare/v1.8.0...v1.9.0) (2025-03-09)
+
+
+### Features
+
+* add user preferences management with loading, saving, and updating capabilities ([319e88b](https://github.com/Heratiki/locallama-mcp/commit/319e88b99f5440af3761d3dc0bbf19dc3eb69c81))
+
+
+### Bug Fixes
+
+* update path handling in index.ts to use fileURLToPath and dirname for improved compatibility with ES modules ([3f5ef6c](https://github.com/Heratiki/locallama-mcp/commit/3f5ef6c6ee764e4b10bbb33de3b924360e3a5730))
+* update resource module to use fileURLToPath and dirname for improved path handling ([f616701](https://github.com/Heratiki/locallama-mcp/commit/f616701cca13b2a58a0150cd3a69092d0c5deb0c))
+
 ## [1.8.0](https://github.com/Heratiki/locallama-mcp/compare/v1.7.0...v1.8.0) (2025-03-09)
 
 
