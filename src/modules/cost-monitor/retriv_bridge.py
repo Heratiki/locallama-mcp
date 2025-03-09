@@ -13,7 +13,7 @@ import time
 import traceback
 
 # Global variables
-sparse_retriever = None
+retriever = None
 indexed = False
 indexed_docs = []
 indexed_files = []
@@ -33,9 +33,9 @@ def log_message(message, level="INFO"):
 
 def process_index_command(command_data):
     """
-    Index documents using retriv SparseRetriever with BM25
+    Index documents using retriv
     """
-    global sparse_retriever, indexed, indexed_docs, indexed_files
+    global retriever, indexed, indexed_docs, indexed_files
     
     directories = command_data.get("directories", [])
     documents = command_data.get("documents", [])
@@ -54,42 +54,45 @@ def process_index_command(command_data):
     log_message(f"Using BM25 parameters: k1={k1}, b={b}, epsilon={epsilon}")
     
     try:
-        # Create a new clean instance of the retriv library components directly
+        # Try to import retriv correctly
         try:
-            # Try importing directly
-            from retriv.sparse.bm25 import BM25
-            log_message("Imported retriv.sparse.bm25.BM25 directly")
-            use_direct_import = True
-        except ImportError:
-            # Fall back to the sparse_retriever approach
-            from retriv.sparse_retriever.sparse_retriever import SparseRetriever
-            log_message("Imported retriv.sparse_retriever.sparse_retriever.SparseRetriever")
-            use_direct_import = False
-        
-        # Configure hyperparameters
-        hyperparams = {
-            "k1": k1,
-            "b": b,
-            "epsilon": epsilon
-        }
-        
-        if use_direct_import:
-            # Use direct BM25 instance
-            sparse_retriever = BM25(**hyperparams)
-            log_message("Created BM25 instance directly")
-        else:
-            # Use SparseRetriever with BM25 model
-            sparse_retriever = SparseRetriever(
+            from retriv import SparseRetriever
+            log_message("Successfully imported retriv.SparseRetriever")
+            
+            # Create the retriever instance
+            retriever = SparseRetriever(
+                index_name="locallama-index",
                 model="bm25",
-                hyperparams=hyperparams
+                min_df=1,
+                tokenizer="whitespace",
+                stemmer="english",
+                stopwords="english",
+                do_lowercasing=True,
+                do_ampersand_normalization=True,
+                do_special_chars_normalization=True,
+                do_acronyms_normalization=True,
+                do_punctuation_removal=True,
             )
-            log_message("Created SparseRetriever with BM25 model")
+            
+            # Set BM25 hyperparameters if needed
+            if k1 != 1.5 or b != 0.75 or epsilon != 0.25:
+                if hasattr(retriever, 'hyperparams'):
+                    retriever.hyperparams = {
+                        "k1": k1,
+                        "b": b,
+                        "epsilon": epsilon
+                    }
+                    log_message(f"Set custom BM25 parameters: k1={k1}, b={b}, epsilon={epsilon}")
+        except ImportError as e:
+            log_message(f"Failed to import retriv.SparseRetriever: {str(e)}", "ERROR")
+            raise
         
         log_message("Retriever initialized successfully")
         
         # Collect documents
         text_documents = []
         file_paths = []
+        doc_ids = []
         
         # Process directories if provided
         if directories:
@@ -119,6 +122,7 @@ def process_index_command(command_data):
                                         files_with_content += 1
                                         text_documents.append(content)
                                         file_paths.append(file_path)
+                                        doc_ids.append(f"doc_{len(doc_ids)}")
                                         log_message(f"Added file {dir_files_count}: {file_path} ({len(content)} bytes)")
                                     else:
                                         log_message(f"Skipping empty file: {file_path}", "WARNING")
@@ -135,6 +139,7 @@ def process_index_command(command_data):
                 if doc.strip():  # Ensure document is not empty
                     text_documents.append(doc)
                     file_paths.append(f"document_{i}")
+                    doc_ids.append(f"doc_{i}")
                     log_message(f"Added document #{i} ({len(doc)} bytes)")
                 else:
                     log_message(f"Skipping empty document #{i}", "WARNING")
@@ -151,40 +156,32 @@ def process_index_command(command_data):
             start_time = time.time()
             
             try:
-                # Index the documents
-                if use_direct_import:
-                    sparse_retriever.index(text_documents)
-                    log_message("Documents indexed using direct BM25")
-                else:
-                    sparse_retriever.index(text_documents)
-                    log_message("Documents indexed using SparseRetriever")
+                # Index the documents - using the indexing approach from the documentation
+                # First, prepare documents in the format expected by retriv
+                formatted_docs = []
+                for i, (doc_text, doc_path) in enumerate(zip(text_documents, file_paths)):
+                    formatted_docs.append({
+                        "id": doc_ids[i],
+                        "text": doc_text
+                    })
                 
+                # Try to index documents directly
+                retriever.index(formatted_docs)
+                log_message("Documents indexed successfully using direct index method")
                 indexed = True
+                
                 end_time = time.time()
                 duration = end_time - start_time
                 
                 # Check indexed documents count
-                doc_count = 0
-                try:
-                    if hasattr(sparse_retriever, 'get_doc_ids'):
-                        doc_ids = sparse_retriever.get_doc_ids()
-                        doc_count = len(doc_ids)
-                    else:
-                        # If get_doc_ids not available, assume all docs were indexed
-                        doc_count = total_docs
-                except Exception as e:
-                    log_message(f"Could not get document count: {str(e)}", "WARNING")
-                    doc_count = total_docs
-                
-                log_message(f"Indexing completed in {duration:.2f} seconds")
-                log_message(f"Documents in index: {doc_count}")
+                doc_count = len(text_documents)
                 
                 # Test retrieval capacity
                 if total_docs > 0:
                     try:
-                        sample_query = "documentation"
+                        sample_query = "documentation" if any("documentation" in doc.lower() for doc in text_documents) else text_documents[0].split()[0]
                         log_message(f"Testing retrieval with sample query: '{sample_query}'")
-                        results = sparse_retriever.search(sample_query, k=1)
+                        results = retriever.search(sample_query, cutoff=1)
                         log_message(f"Sample query returned {len(results)} results")
                     except Exception as e:
                         log_message(f"Sample query failed: {str(e)}", "WARNING")
@@ -201,12 +198,47 @@ def process_index_command(command_data):
                 error_msg = str(e)
                 log_message(f"Error during indexing: {error_msg}", "ERROR")
                 log_message(f"Stack trace: {traceback.format_exc()}", "ERROR")
-                response = {
-                    "status": "error",
-                    "message": f"Error during indexing: {error_msg}",
-                    "total_files": total_docs
-                }
-                print(json.dumps(response))
+                
+                # Try alternative indexing method if the direct method failed
+                try:
+                    log_message("Trying alternative indexing method...")
+                    
+                    # Create a temporary jsonl file with the documents
+                    tmp_file_path = os.path.join(os.getcwd(), "temp_docs_for_indexing.jsonl")
+                    with open(tmp_file_path, 'w', encoding='utf-8') as f:
+                        for i, (doc_text, doc_path) in enumerate(zip(text_documents, file_paths)):
+                            f.write(json.dumps({
+                                "id": doc_ids[i],
+                                "text": doc_text
+                            }) + "\n")
+                    
+                    # Index from file
+                    retriever.index_file(tmp_file_path)
+                    os.remove(tmp_file_path)
+                    log_message("Documents indexed successfully using file-based method")
+                    indexed = True
+                    
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    
+                    response = {
+                        "status": "success",
+                        "total_files": total_docs,
+                        "time_taken": f"{duration:.2f} seconds",
+                        "file_paths": file_paths,
+                        "document_count": len(text_documents)
+                    }
+                    print(json.dumps(response))
+                except Exception as e2:
+                    log_message(f"Alternative indexing method also failed: {str(e2)}", "ERROR")
+                    log_message(f"Stack trace: {traceback.format_exc()}", "ERROR")
+                    
+                    response = {
+                        "status": "error",
+                        "message": f"Error during indexing: {error_msg}. Alternative method error: {str(e2)}",
+                        "total_files": total_docs
+                    }
+                    print(json.dumps(response))
         else:
             log_message("No documents found to index", "WARNING")
             print(json.dumps({
@@ -229,9 +261,9 @@ def process_search_command(command_data):
     """
     Search indexed documents using the query
     """
-    global sparse_retriever, indexed, indexed_docs, indexed_files
+    global retriever, indexed, indexed_docs, indexed_files
     
-    if not indexed or sparse_retriever is None:
+    if not indexed or retriever is None:
         log_message("No documents have been indexed yet", "ERROR")
         print(json.dumps({
             "action": "search_results",
@@ -257,43 +289,41 @@ def process_search_command(command_data):
     # Perform the search
     try:
         start_time = time.time()
-        results = sparse_retriever.search(query, k=top_k)
+        
+        # Using the search method according to the documentation
+        results = retriever.search(query, cutoff=top_k, return_docs=True)
+        
         end_time = time.time()
         
         log_message(f"Search completed in {end_time - start_time:.4f} seconds. Found {len(results)} results.")
         
         # Format results for TypeScript
         formatted_results = []
-        for i, result_item in enumerate(results):
+        
+        for i, result in enumerate(results):
             try:
-                if isinstance(result_item, tuple) and len(result_item) == 2:
-                    doc_id, score = result_item
-                    # Try to convert doc_id to integer
-                    try:
-                        doc_id = int(doc_id)
-                    except (ValueError, TypeError):
-                        # If we can't convert to int, use the index
-                        doc_id = i
-                else:
-                    # Unknown format, use index as doc_id and 1.0 as score
-                    doc_id, score = i, 1.0
+                doc_id = result.get("id", "unknown")
+                score = result.get("score", 0.0)
+                text = result.get("text", "")
                 
-                # Ensure doc_id is within range
-                if 0 <= doc_id < len(indexed_docs):
-                    content = indexed_docs[doc_id]
-                    file_path = indexed_files[doc_id] if doc_id < len(indexed_files) else "Unknown"
-                else:
-                    content = f"[Document #{doc_id} not available]"
-                    file_path = "Unknown"
+                # Map the result back to our original files if possible
+                file_path = "Unknown"
+                try:
+                    # Try to get the file path from our indexed files
+                    if isinstance(doc_id, str) and doc_id.startswith("doc_"):
+                        idx = int(doc_id[4:])  # Extract number from "doc_X"
+                        if 0 <= idx < len(indexed_files):
+                            file_path = indexed_files[idx]
+                except Exception:
+                    pass
                 
                 formatted_results.append({
-                    "index": doc_id,
+                    "index": i,  # Use position as index
                     "score": float(score),
-                    "content": content,
-                    "content_preview": content[:100] + "..." if len(content) > 100 else content,
+                    "content": text,
                     "file_path": file_path
                 })
-                log_message(f"Result {i+1}: Document #{doc_id} with score {score:.4f} - {file_path}")
+                log_message(f"Result {i+1}: {doc_id} with score {score:.4f} - {file_path}")
             except Exception as e:
                 log_message(f"Error processing result {i}: {str(e)}", "ERROR")
         
