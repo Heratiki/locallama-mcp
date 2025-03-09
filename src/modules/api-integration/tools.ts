@@ -483,7 +483,13 @@ export function setupToolHandlers(server: Server): void {
           });
           
           const costThreshold = userPreferences.costConfirmationThreshold || config.costThreshold;
-          if (costEstimate.paid.cost.total > costThreshold && executionMode !== 'Local model only') {
+          
+          // Check if the execution mode allows paid APIs
+          const allowsPaidAPIs = executionMode !== 'Local model only' &&
+                                executionMode !== 'Free API only' &&
+                                executionMode !== 'Local and Free API';
+          
+          if (costEstimate.paid.cost.total > costThreshold && allowsPaidAPIs) {
             // Return a response that requires user confirmation
             return {
               content: [
@@ -504,7 +510,11 @@ export function setupToolHandlers(server: Server): void {
           // Step 3: Task Breakdown Analysis
           let taskAnalysis = null;
           let hasSubtasks = false;
-          if (executionMode !== 'Local model only') {
+          
+          // Check if the execution mode allows any API (free or paid)
+          const allowsAnyAPI = executionMode !== 'Local model only';
+          
+          if (allowsAnyAPI) {
             try {
               taskAnalysis = await decisionEngine.analyzeCodeTask(args.task as string);
               hasSubtasks = taskAnalysis && taskAnalysis.executionOrder && taskAnalysis.executionOrder.length > 0;

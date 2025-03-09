@@ -3,8 +3,17 @@ import * as path from 'path';
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
 
+export type ExecutionMode =
+  | 'Fully automated selection'  // Use any model based on task requirements
+  | 'Local model only'           // Only use locally running models
+  | 'Free API only'              // Only use free API models
+  | 'Paid API only'              // Only use paid API models
+  | 'Local and Free API'         // Use local models and free APIs, but no paid APIs
+  | 'Free and Paid API'          // Use both free and paid APIs, but no local models
+  | 'Local and Paid API';        // Use local models and paid APIs, but no free APIs
+
 export interface UserPreferences {
-  executionMode: 'Fully automated selection' | 'Local model only' | 'Free API only' | 'Paid API only';
+  executionMode: ExecutionMode;
   costConfirmationThreshold: number;
   prioritizeRetrivSearch: boolean;
   defaultDirectories: string[];
@@ -120,6 +129,14 @@ class UserPreferencesManager {
   /**
    * Update user preferences
    * @param newPreferences The new preferences to set
+   * @remarks When updating executionMode, use one of the following options:
+   * - 'Fully automated selection': Use any model based on task requirements
+   * - 'Local model only': Only use locally running models
+   * - 'Free API only': Only use free API models
+   * - 'Paid API only': Only use paid API models
+   * - 'Local and Free API': Use local models and free APIs, but no paid APIs
+   * - 'Free and Paid API': Use both free and paid APIs, but no local models
+   * - 'Local and Paid API': Use local models and paid APIs, but no free APIs
    */
   public async updatePreferences(newPreferences: Partial<UserPreferences>): Promise<UserPreferences> {
     this.preferences = {
