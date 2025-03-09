@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.10.0](https://github.com/Heratiki/locallama-mcp/compare/v1.9.1...v1.10.0) (2025-03-09)
+
+
+### Features
+
+* add bridge readiness handling and implement timeouts for initialization and indexing ([76dcbef](https://github.com/Heratiki/locallama-mcp/commit/76dcbefa29c9cb2e8ca29f34901dd37406b46b6c))
+* enhance execution mode handling and update user preferences type definitions ([fb1ee03](https://github.com/Heratiki/locallama-mcp/commit/fb1ee03585956d9a37ad56c3e49eb92674801606))
+
+
+### Bug Fixes
+
+* enhance task routing and add new commands for job management and model initialization ([b400399](https://github.com/Heratiki/locallama-mcp/commit/b4003996e88fb598b935abd8b7d7491882bc9e3e))
+
 ### [1.9.1](https://github.com/Heratiki/locallama-mcp/compare/v1.9.0...v1.9.1) (2025-03-09)
 
 ## [1.9.0](https://github.com/Heratiki/locallama-mcp/compare/v1.8.0...v1.9.0) (2025-03-09)
