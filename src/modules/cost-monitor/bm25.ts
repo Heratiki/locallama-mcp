@@ -6,7 +6,13 @@
 
 import { spawn } from 'child_process';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { logger } from '../../utils/logger.js';
+
+// Create equivalents for __dirname and __filename in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface BM25Options {
   k1?: number; // Term saturation parameter (default: 1.5)

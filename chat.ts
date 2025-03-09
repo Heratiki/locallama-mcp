@@ -10,9 +10,10 @@ import fs from 'fs';
 interface TaskRoutingParams {
   task: string;
   context_length: number;
-  expected_output_length: number;
-  complexity: number;
-  priority: 'speed' | 'cost' | 'quality';
+  expected_output_length?: number;
+  complexity?: number;
+  priority?: 'speed' | 'cost' | 'quality';
+  preemptive?: boolean;
 }
 
 // Create a log file stream - changed from 'a' to 'w' to clear the file on each run
@@ -265,16 +266,18 @@ const readResource = (uri: string) => {
 };
 
 // Function to route a task
-const routeTask = (task: string, contextLength: number, expectedOutputLength: number, 
-                  complexity: number, priority: 'speed' | 'cost' | 'quality') => {
-  sendJsonRpc('tools/call', { 
-    name: 'route_task', 
+const routeTask = (task: string, contextLength: number, expectedOutputLength?: number,
+                   complexity?: number, priority?: 'speed' | 'cost' | 'quality', preemptive?: boolean) => {
+  const toolName = preemptive ? 'preemptive_route_task' : 'route_task';
+  sendJsonRpc('tools/call', {
+    name: toolName,
     arguments: {
       task,
       context_length: contextLength,
       expected_output_length: expectedOutputLength,
       complexity,
-      priority
+      priority,
+      preemptive
     }
   });
 };
@@ -306,6 +309,90 @@ const runBenchmark = (modelId: string) => {
   });
 };
 
+// Run multiple benchmarks
+const runBenchmarks = (tasks: Array<{
+  taskId: string;
+  task: string;
+  contextLength: number;
+  expectedOutputLength?: number;
+  complexity?: number;
+  localModel?: string;
+  paidModel?: string;
+}>, runsPerTask?: number, parallel?: boolean, maxParallelTasks?: number) => {
+  sendJsonRpc('tools/call', {
+    name: 'benchmark_tasks',
+    arguments: {
+      tasks: tasks.map(task => ({
+        task_id: task.taskId,
+        task: task.task,
+        context_length: task.contextLength,
+        expected_output_length: task.expectedOutputLength,
+        complexity: task.complexity,
+        local_model: task.localModel,
+        paid_model: task.paidModel
+      })),
+      runs_per_task: runsPerTask,
+      parallel: parallel,
+      max_parallel_tasks: maxParallelTasks
+    }
+  });
+};
+
+// Initialize Retriv
+const initializeRetriv = (directory: string, excludePatterns?: string[], options?: any) => {
+  sendJsonRpc('tools/call', {
+    name: 'retriv_init',
+    arguments: {
+      directories: [directory],
+      exclude_patterns: excludePatterns,
+      ...options
+    }
+  });
+};
+
+// Get free models from OpenRouter
+const getFreeModels = (forceUpdate: boolean = false) => {
+  sendJsonRpc('tools/call', {
+    name: 'get_free_models',
+    arguments: {
+      preemptive: forceUpdate
+    }
+  });
+};
+
+// Clear OpenRouter tracking data
+const clearOpenRouterTracking = () => {
+  sendJsonRpc('tools/call', {
+    name: 'clear_openrouter_tracking',
+    arguments: {}
+  });
+};
+
+// Set model prompting strategy
+const setModelStrategy = (modelId: string, systemPrompt: string, userPrompt: string,
+                         assistantPrompt: string, useChat: boolean = true) => {
+  sendJsonRpc('tools/call', {
+    name: 'set_model_prompting_strategy',
+    arguments: {
+      task: modelId, // The ID of the model to update
+      expected_output_length: systemPrompt, // The system prompt to use
+      priority: userPrompt, // The user prompt template to use
+      complexity: assistantPrompt, // The assistant prompt template to use
+      preemptive: useChat // Whether to use chat format
+    }
+  });
+};
+
+// Cancel a job
+const cancelJob = (jobId: string) => {
+  sendJsonRpc('tools/call', {
+    name: 'cancel_job',
+    arguments: {
+      job_id: jobId
+    }
+  });
+};
+
 // Show available commands
 const showHelp = () => {
   const helpText = `
@@ -327,11 +414,20 @@ Tool Commands:
 - benchmark <modelId>      : Run benchmarks on a specific model
                              Example: benchmark local:llama3:8b
 
+Advanced Commands:
+- cancel <jobId>           : Cancel a running job
+                             Example: cancel job-123456
+- retriv <directory>       : Initialize Retriv for code search in a directory
+                             Example: retriv /path/to/code
+- free-models              : Get list of free models from OpenRouter
+- clear-tracking           : Clear OpenRouter tracking data
+
 System Commands:
 - list resources           : List all available resources
 - list tools               : List all available tools
 - call <tool> [args]       : Call a tool with arguments
                              Example: call route_task task="Code review" context_length=2000
+                             Example: call benchmark_tasks tasks=[{...}] runs_per_task=3
 - help                     : Show this help message
 - exit                     : Exit the chat interface
 
@@ -449,6 +545,30 @@ rl.on('line', (input: string) => {
     }
     
     runBenchmark(modelId);
+    
+  } else if (trimmedInput.startsWith('cancel ')) {
+    const jobId = trimmedInput.substring(7).trim();
+    if (!jobId) {
+      log('Please specify a job ID. Example: cancel job-123456', true);
+      return;
+    }
+    
+    cancelJob(jobId);
+    
+  } else if (trimmedInput.startsWith('retriv ')) {
+    const directory = trimmedInput.substring(7).trim();
+    if (!directory) {
+      log('Please specify a directory. Example: retriv /path/to/code', true);
+      return;
+    }
+    
+    initializeRetriv(directory);
+    
+  } else if (trimmedInput === 'free-models') {
+    getFreeModels(true);
+    
+  } else if (trimmedInput === 'clear-tracking') {
+    clearOpenRouterTracking();
     
   } else if (trimmedInput.startsWith('call ')) {
     const parts = trimmedInput.substring(5).split(' ');
