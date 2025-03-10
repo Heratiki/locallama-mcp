@@ -548,7 +548,7 @@ export const decisionEngine = {
     
     try {
       // Get Ollama API endpoint from config or use default
-      const ollamaEndpoint = 'http://localhost:11434/api/generate';
+      const ollamaEndpoint = config.ollamaEndpoint || 'http://localhost:11434/api/generate';
       
       // Make a request to the Ollama API
       const response = await fetch(ollamaEndpoint, {
@@ -578,15 +578,14 @@ export const decisionEngine = {
   },
 
   /**
-    logger.info(`Executing executeLMStudioModel`);
    * Execute a task with an LM Studio model
    */
   async executeLMStudioModel(model: string, task: string, maxTokens: number): Promise<string> {
-    logger.debug(`Executing task with LM Studio model ${model}`);
+    logger.info(`Executing task with LM Studio model ${model}`);
     
     try {
       // Get LM Studio API endpoint from config or use default
-      const lmStudioEndpoint = 'http://localhost:1234/v1/completions';
+      const lmStudioEndpoint = config.lmStudioEndpoint || 'http://localhost:1234/v1/completions';
       
       // Make a request to the LM Studio API
       const response = await fetch(lmStudioEndpoint, {
@@ -595,6 +594,7 @@ export const decisionEngine = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          model: model,
           prompt: task,
           max_tokens: maxTokens,
           temperature: 0.7,
@@ -619,31 +619,44 @@ export const decisionEngine = {
    * Execute a task with a local llama model
    */
   async executeLocalLlamaModel(model: string, task: string, maxTokens: number): Promise<string> {
-    logger.info(`Executing executeLocalLlamaModel`);
-    logger.debug(`Executing task with local model ${model}`);
+    logger.info(`Executing task with local Llama model ${model}`);
     
     try {
-      // This is where you would integrate with a local model server or library
-      // For this example, we'll create a simulated response
-
-      // Simple way to choose response complexity based on the model version
-      const modelVersion = model.includes('3') ? 3 : model.includes('2') ? 2 : 1;
-      const modelSize = model.includes('70b') ? 70 : 
-                        model.includes('13b') ? 13 : 
-                        model.includes('8b') ? 8 : 7;
+      // Use configuration to determine the API endpoint for the local model
+      // This could be a local server running on localhost or a remote server
+      const localApiEndpoint = config.localLlamaEndpoint || 'http://localhost:8080/v1/completions';
       
-      // Simulate processing time based on model size and requested tokens
-      const processingDelay = Math.min(5000, (modelSize * maxTokens) / 100);
+      // Make a request to the local API
+      const response = await fetch(localApiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: model,
+          prompt: task,
+          max_tokens: maxTokens,
+          temperature: 0.7,
+          stream: false
+        }),
+      });
       
-      // Simulate processing
-      await new Promise(resolve => setTimeout(resolve, processingDelay));
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Local API error (${response.status}): ${errorText}`);
+      }
       
-      // Generate a simulated response
-      // In a real implementation, this would be the output from the local model
-      return `This is a simulated response from local Llama model ${model}.\n\nHere's a solution to your task:\n\n\`\`\`\nfunction processTask(task) {\n  // Implementation would go here\n  console.log("Processing task:", task);\n  return "Completed";\n}\n\`\`\`\n\nThis simulated response is meant to represent the output from a local model. In a real implementation, this would contain actual generated content from the model.`;
-    } catch (error) {
-      logger.error(`Error executing task with local model ${model}:`, error);
-      throw error;
+      const result = await response.json();
+      return result.choices?.[0]?.text || result.response || 'No response from local model';
+      
+    } catch (error: unknown) {
+      logger.error(`Error executing task with local Llama model ${model}:`, error);
+      // If the local model fails, return a clear error message that can be shown to the user
+      if (error instanceof Error) {
+        throw new Error(`Failed to execute task with local model ${model}: ${error.message}. Please check if your local model server is running.`);
+      } else {
+        throw new Error(`Failed to execute task with local model ${model}. Please check if your local model server is running.`);
+      }
     }
   }
 };

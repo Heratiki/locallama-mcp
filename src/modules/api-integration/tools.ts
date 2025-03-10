@@ -81,7 +81,7 @@ async function executeTask(model: string, task: string, jobId: string): Promise<
   try {
     logger.info(`Executing task with model ${model} for job ${jobId}`);
     
-    // Update job progress to executing
+    // Update job progress to executing (25%)
     jobTracker.updateJobProgress(jobId, 25, 120000);
     
     let result;
@@ -89,7 +89,19 @@ async function executeTask(model: string, task: string, jobId: string): Promise<
     // Determine the execution path based on model provider
     if (model.startsWith('openrouter:')) {
       // Handle OpenRouter execution
-      result = await openRouterModule.executeTask(model.replace('openrouter:', ''), task);
+      try {
+        // Update progress to 50% before API call
+        jobTracker.updateJobProgress(jobId, 50, 60000);
+        
+        // Execute the task via OpenRouter
+        result = await openRouterModule.executeTask(model.replace('openrouter:', ''), task);
+        
+        // Update progress to 75% after successful API call
+        jobTracker.updateJobProgress(jobId, 75, 30000);
+      } catch (error) {
+        logger.error(`Failed to execute task with OpenRouter: ${error}`);
+        throw error;
+      }
       
     } else if (model.startsWith('local:') || model.startsWith('ollama:') || model.startsWith('lm-studio:')) {
       // Handle local model execution
@@ -97,25 +109,30 @@ async function executeTask(model: string, task: string, jobId: string): Promise<
       const modelProvider = model.split(':')[0];
       const modelName = model.split(':').slice(1).join(':');
       
-      // Update progress to 50%
-      jobTracker.updateJobProgress(jobId, 50, 60000);
-      
-      // Execute the task via the decision engine's local model handler
-      result = await decisionEngine.executeLocalTask({
-        task,
-        model: modelName,
-        provider: modelProvider,
-        maxTokens: 4096 // Default reasonable limit
-      });
+      try {
+        // Update progress to 50% before local model execution
+        jobTracker.updateJobProgress(jobId, 50, 60000);
+        
+        // Execute the task via the decision engine's local model handler
+        result = await decisionEngine.executeLocalTask({
+          task,
+          model: modelName,
+          provider: modelProvider,
+          maxTokens: 4096 // Default reasonable limit
+        });
+        
+        // Update progress to 75% after local execution
+        jobTracker.updateJobProgress(jobId, 75, 30000);
+      } catch (error) {
+        logger.error(`Failed to execute task with local model: ${error}`);
+        throw error;
+      }
       
     } else {
       // Unknown model type, log error and throw exception
       logger.error(`Unknown model type for execution: ${model}`);
       throw new Error(`Unknown model type: ${model}`);
     }
-    
-    // Update progress to 75%
-    jobTracker.updateJobProgress(jobId, 75, 30000);
     
     // Process and format result if needed
     const formattedResult = typeof result === 'string' ? result : JSON.stringify(result);
@@ -136,8 +153,9 @@ async function executeTask(model: string, task: string, jobId: string): Promise<
       // Continue even if indexing fails
     }
     
-    // Complete the job
+    // Complete the job (100%)
     jobTracker.completeJob(jobId);
+    logger.info(`Job ${jobId} completed successfully`);
     
     return formattedResult;
   } catch (error) {

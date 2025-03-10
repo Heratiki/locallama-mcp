@@ -46,6 +46,7 @@ export interface Config {
   // Local LLM endpoints
   lmStudioEndpoint: string;
   ollamaEndpoint: string;
+  localLlamaEndpoint: string; // Added local Llama endpoint
   
   // Model configuration
   defaultLocalModel: string;
@@ -112,6 +113,7 @@ export const config: Config = {
   // Local LLM endpoints
   lmStudioEndpoint: process.env.LM_STUDIO_ENDPOINT || 'http://localhost:1234/v1',
   ollamaEndpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api',
+  localLlamaEndpoint: process.env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api', // Added local Llama endpoint
   
   // Model configuration
   defaultLocalModel: process.env.DEFAULT_LOCAL_MODEL || 'llama2',
@@ -177,6 +179,7 @@ export function validateConfig(): void {
   try {
     new URL(config.lmStudioEndpoint);
     new URL(config.ollamaEndpoint);
+    new URL(config.localLlamaEndpoint); // Added local Llama endpoint validation
   } catch (error) {
     errors.push(`Invalid endpoint URL in configuration: ${error}`);
   }
