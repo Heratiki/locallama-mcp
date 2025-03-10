@@ -74,6 +74,80 @@ function generateRequirementsTxt(): string {
 }
 
 /**
+ * Execute a task using the selected model
+ * This handles the actual execution of the task through the appropriate service
+ */
+async function executeTask(model: string, task: string, jobId: string): Promise<string> {
+  try {
+    logger.info(`Executing task with model ${model} for job ${jobId}`);
+    
+    // Update job progress to executing
+    jobTracker.updateJobProgress(jobId, 25, 120000);
+    
+    let result;
+    
+    // Determine the execution path based on model provider
+    if (model.startsWith('openrouter:')) {
+      // Handle OpenRouter execution
+      result = await openRouterModule.executeTask(model.replace('openrouter:', ''), task);
+      
+    } else if (model.startsWith('local:') || model.startsWith('ollama:') || model.startsWith('lm-studio:')) {
+      // Handle local model execution
+      // For local models, use the appropriate service based on the prefix
+      const modelProvider = model.split(':')[0];
+      const modelName = model.split(':').slice(1).join(':');
+      
+      // Update progress to 50%
+      jobTracker.updateJobProgress(jobId, 50, 60000);
+      
+      // Execute the task via the decision engine's local model handler
+      result = await decisionEngine.executeLocalTask({
+        task,
+        model: modelName,
+        provider: modelProvider,
+        maxTokens: 4096 // Default reasonable limit
+      });
+      
+    } else {
+      // Unknown model type, log error and throw exception
+      logger.error(`Unknown model type for execution: ${model}`);
+      throw new Error(`Unknown model type: ${model}`);
+    }
+    
+    // Update progress to 75%
+    jobTracker.updateJobProgress(jobId, 75, 30000);
+    
+    // Process and format result if needed
+    const formattedResult = typeof result === 'string' ? result : JSON.stringify(result);
+    
+    // Index the result in Retriv if possible
+    try {
+      const codeSearchEngine = await getCodeSearchEngine();
+      await indexDocuments([
+        { 
+          content: formattedResult, 
+          path: `job_${jobId}`, 
+          language: 'code' 
+        }
+      ]);
+      logger.info(`Successfully indexed result for job ${jobId} in Retriv`);
+    } catch (error) {
+      logger.warn(`Failed to index result in Retriv: ${error}`);
+      // Continue even if indexing fails
+    }
+    
+    // Complete the job
+    jobTracker.completeJob(jobId);
+    
+    return formattedResult;
+  } catch (error) {
+    logger.error(`Error executing task for job ${jobId}:`, error);
+    jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error during execution');
+    throw error;
+  }
+}
+
+/**
  * Set up tool handlers for the MCP Server
  * 
  * Tools provide functionality for making decisions about routing tasks
@@ -628,9 +702,19 @@ export function setupToolHandlers(server: Server): void {
           jobTracker.updateJobProgress(jobId, 0);
           
           // Step 8: Execute Task and Store Result
-          // Note: In a real implementation, this would be asynchronous
-          // For now, we'll just return the decision with the job ID
+          // Instead of just returning the decision, we'll actually execute the task
+          // but do it asynchronously so we don't block the response
+          (async () => {
+            try {
+              const result = await executeTask(decision.model, args.task as string, jobId);
+              logger.info(`Task execution completed successfully for job ${jobId}`);
+            } catch (error) {
+              logger.error(`Task execution failed for job ${jobId}:`, error);
+              // Job failure is already handled in executeTask
+            }
+          })();
           
+          // Return immediately with the job ID so the user can track progress
           return {
             content: [
               {
@@ -640,7 +724,7 @@ export function setupToolHandlers(server: Server): void {
                   job_id: jobId,
                   status: 'In Progress',
                   progress: '0%',
-                  message: 'Task has been routed and job created. Use job_id to track progress.'
+                  message: 'Task has been routed and execution started. Use job_id to track progress.'
                 }, null, 2),
               },
             ],

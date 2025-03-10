@@ -977,5 +977,58 @@ export const openRouterModule = {
       logger.error('Error clearing tracking data:', error);
       logger.error(`Error details: ${error.message}`);
     }
+  },
+
+  /**
+   * Execute a task using a specific OpenRouter model
+   * @param modelId The ID of the model to use
+   * @param task The task to execute
+   * @returns The result of the task execution
+   */
+  async executeTask(modelId: string, task: string): Promise<string> {
+    logger.info(`Executing task using OpenRouter model ${modelId}`);
+    
+    try {
+      // Check if API key is configured
+      if (!config.openRouterApiKey) {
+        throw new Error('OpenRouter API key not configured');
+      }
+      
+      // Determine the execution timeout (default to 3 minutes)
+      const timeout = 180000;
+      
+      // Call the OpenRouter API
+      const result = await this.callOpenRouterApi(modelId, task, timeout);
+      
+      if (!result.success || !result.text) {
+        if (result.error) {
+          switch (result.error) {
+            case OpenRouterErrorType.RATE_LIMIT:
+              throw new Error('OpenRouter rate limit exceeded. Please try again later.');
+            case OpenRouterErrorType.AUTHENTICATION:
+              throw new Error('OpenRouter authentication error. Check your API key.');
+            case OpenRouterErrorType.CONTEXT_LENGTH_EXCEEDED:
+              throw new Error('Context length exceeded. Please reduce the size of your task.');
+            case OpenRouterErrorType.MODEL_NOT_FOUND:
+              throw new Error(`Model ${modelId} not found in OpenRouter.`);
+            case OpenRouterErrorType.SERVER_ERROR:
+              throw new Error('OpenRouter server error. Please try again later.');
+            default:
+              throw new Error(`Error executing task: ${result.error}`);
+          }
+        }
+        throw new Error('Failed to execute task with OpenRouter');
+      }
+      
+      // Log usage information
+      if (result.usage) {
+        logger.debug(`OpenRouter usage: ${result.usage.prompt_tokens} prompt tokens, ${result.usage.completion_tokens} completion tokens`);
+      }
+      
+      return result.text;
+    } catch (error) {
+      logger.error(`Error executing task with OpenRouter model ${modelId}:`, error);
+      throw error;
+    }
   }
 };
