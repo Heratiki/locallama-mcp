@@ -1,16 +1,21 @@
 /**
  * codeSearch.ts
- * Implements code repository indexing and searching using retriv's BM25 algorithm.
+ * Implements code repository indexing and searching using retriv's algorithms.
  * This module handles scanning the workspace, indexing code files, and providing search functionality.
  */
-import { BM25Options } from './bm25.js';
+import { BM25Options, TextPreprocessingOptions, DenseRetrieverOptions, HybridRetrieverOptions } from './bm25.js';
+export type RetrieverType = 'sparse' | 'dense' | 'hybrid';
 
 export interface CodeSearchEngineOptions {
   chunkSize?: number;
   excludePatterns?: string[];
   bm25Options?: BM25Options;
+  retrieverType?: RetrieverType;
+  // Add new retrievers' options
+  textPreprocessingOptions?: TextPreprocessingOptions;
+  denseRetrieverOptions?: DenseRetrieverOptions;
+  hybridRetrieverOptions?: HybridRetrieverOptions;
 }
-
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -41,6 +46,10 @@ export class CodeSearchEngine {
   private workspaceRoot: string;
   private initialized: boolean = false;
   private options: CodeSearchEngineOptions;
+  private retrieverType: RetrieverType = 'sparse';
+  private textPreprocessingOptions?: TextPreprocessingOptions;
+  private denseRetrieverOptions?: DenseRetrieverOptions;
+  private hybridRetrieverOptions?: HybridRetrieverOptions;
   private indexingStatus = {
     indexing: false,
     filesIndexed: 0,
@@ -64,6 +73,10 @@ export class CodeSearchEngine {
   constructor(workspaceRoot: string, options: CodeSearchEngineOptions = {}) {
     this.workspaceRoot = workspaceRoot;
     this.options = options;
+    this.retrieverType = options.retrieverType || 'sparse';
+    this.textPreprocessingOptions = options.textPreprocessingOptions;
+    this.denseRetrieverOptions = options.denseRetrieverOptions;
+    this.hybridRetrieverOptions = options.hybridRetrieverOptions;
     this.bm25Searcher = new BM25Searcher(options.bm25Options);
     this.excludePatterns = options.excludePatterns || this.excludePatterns;
   }
@@ -77,10 +90,15 @@ export class CodeSearchEngine {
     }
 
     try {
-      // Initialize the BM25 searcher
-      await this.bm25Searcher.initialize();
+      // Pass all retriever options to the BM25 searcher
+      await this.bm25Searcher.initialize({
+        retrieverType: this.retrieverType,
+        textPreprocessingOptions: this.textPreprocessingOptions,
+        denseRetrieverOptions: this.denseRetrieverOptions,
+        hybridRetrieverOptions: this.hybridRetrieverOptions
+      });
       this.initialized = true;
-      logger.info('Code search engine initialized');
+      logger.info(`Code search engine initialized with ${this.retrieverType} retriever`);
     } catch (error) {
       logger.error('Failed to initialize code search engine', error);
       throw error;
@@ -112,7 +130,7 @@ export class CodeSearchEngine {
         return;
       }
 
-      logger.info(`Indexing ${newOrUpdatedFiles.length} code files`);
+      logger.info(`Indexing ${newOrUpdatedFiles.length} code files using ${this.retrieverType} retriever`);
 
       // Read and process each code file
       for (const file of newOrUpdatedFiles) {
@@ -138,6 +156,57 @@ export class CodeSearchEngine {
       logger.error('Failed to index workspace', error);
       this.indexingStatus.error = error instanceof Error ? error.message : 'Unknown error';
       this.indexingStatus.indexing = false;
+      throw error;
+    }
+  }
+
+  /**
+   * Index specific directory or directories 
+   * @param directories Array of directory paths to index
+   * @param forceReindex Whether to force reindexing even if files have been indexed before
+   * @returns Detailed information about the indexing process
+   */
+  public async indexDirectories(
+    directories: string[],
+    forceReindex: boolean = false
+  ): Promise<{
+    status: string;
+    totalFiles: number;
+    timeTaken: string;
+    filePaths: string[];
+  }> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    
+    const startTime = Date.now();
+    
+    try {
+      this.indexingStatus.indexing = true;
+      this.indexingStatus.lastUpdate = Date.now();
+      
+      logger.info(`Starting indexing directories: ${directories.join(', ')}`);
+      
+      // Use the BM25 searcher's built-in directory indexing
+      const result = await this.bm25Searcher.indexDirectories(
+        directories.map(dir => path.resolve(this.workspaceRoot, dir))
+      );
+      
+      this.indexingStatus.indexing = false;
+      this.indexingStatus.error = undefined;
+      
+      return {
+        status: result.status,
+        totalFiles: result.totalFiles,
+        timeTaken: result.timeTaken,
+        filePaths: result.filePaths
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Failed to index directories: ${errorMsg}`, error);
+      this.indexingStatus.error = errorMsg;
+      this.indexingStatus.indexing = false;
+      
       throw error;
     }
   }
@@ -187,7 +256,7 @@ export class CodeSearchEngine {
         };
       }
       
-      logger.info(`Indexing ${newOrUpdatedFiles.length} code files`);
+      logger.info(`Indexing ${newOrUpdatedFiles.length} code files using ${this.retrieverType} retriever`);
       
       // Read and process each code file
       for (const file of newOrUpdatedFiles) {
@@ -211,7 +280,7 @@ export class CodeSearchEngine {
       
       // Index the documents with the BM25 searcher
       const documentContents = this.documents.map(doc => doc.content);
-      logger.info(`Sending ${documentContents.length} documents to BM25 indexer`);
+      logger.info(`Sending ${documentContents.length} documents to retriv indexer`);
       
       // Use the enhanced indexDocuments method that returns details
       const indexResult = await this.bm25Searcher.indexDocuments(documentContents);
@@ -266,17 +335,29 @@ export class CodeSearchEngine {
         const document = this.documents[result.index];
         return {
           ...result,
-          path: document.path,
-          language: document.language,
-          startLine: document.startLine,
-          endLine: document.endLine,
-          relativePath: path.relative(this.workspaceRoot, document.path)
+          path: document ? document.path : result.file_path || 'Unknown',
+          language: document ? document.language : this.getLanguageFromPath(result.file_path || ''),
+          startLine: document ? document.startLine : undefined,
+          endLine: document ? document.endLine : undefined,
+          relativePath: document ? path.relative(this.workspaceRoot, document.path) : 
+                       result.file_path ? path.relative(this.workspaceRoot, result.file_path) : 'Unknown'
         };
       });
     } catch (error) {
       logger.error('Error searching code', error);
       return [];
     }
+  }
+
+  /**
+   * Get the language based on file path
+   * @param filePath Path to the file
+   * @returns The programming language
+   */
+  private getLanguageFromPath(filePath: string): string {
+    if (!filePath) return 'Unknown';
+    const ext = path.extname(filePath).toLowerCase();
+    return this.getLanguageFromExtension(ext);
   }
 
   /**
@@ -422,6 +503,58 @@ export class CodeSearchEngine {
     };
 
     return langMap[extension] || 'Unknown';
+  }
+
+  /**
+   * Set the retriever type and options
+   * @param retrieverType The type of retriever to use
+   * @param options The options for the specified retriever
+   */
+  public setRetrieverOptions(
+    retrieverType: RetrieverType,
+    options?: TextPreprocessingOptions | DenseRetrieverOptions | HybridRetrieverOptions
+  ): void {
+    this.retrieverType = retrieverType;
+    
+    // Set the appropriate options based on the retriever type
+    switch (retrieverType) {
+      case 'sparse':
+        this.textPreprocessingOptions = options as TextPreprocessingOptions;
+        break;
+      case 'dense':
+        this.denseRetrieverOptions = options as DenseRetrieverOptions;
+        break;
+      case 'hybrid':
+        this.hybridRetrieverOptions = options as HybridRetrieverOptions;
+        break;
+    }
+    
+    logger.info(`Retriever type set to ${retrieverType} with custom options`);
+  }
+
+  /**
+   * Get the current retriever options
+   * @returns The current retriever options based on retriever type
+   */
+  public getRetrieverOptions(): TextPreprocessingOptions | DenseRetrieverOptions | HybridRetrieverOptions | undefined {
+    switch (this.retrieverType) {
+      case 'sparse':
+        return this.textPreprocessingOptions;
+      case 'dense':
+        return this.denseRetrieverOptions;
+      case 'hybrid':
+        return this.hybridRetrieverOptions;
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Get the current retriever type
+   * @returns The current retriever type
+   */
+  public getRetrieverType(): RetrieverType {
+    return this.retrieverType;
   }
 
   /**

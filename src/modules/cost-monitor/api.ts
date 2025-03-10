@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger.js';
 import { ApiUsage, Model } from '../../types/index.js';
 import { openRouterModule } from '../openrouter/index.js';
 import { calculateTokenEstimates, modelContextWindows } from './utils.js';
+import { RetrieverType } from './codeSearch.js';
 
 /**
  * Helper method to get OpenRouter API usage
@@ -266,4 +267,55 @@ export async function getAvailableModels(): Promise<Model[]> {
   }
   
   return models;
+}
+
+/**
+ * Get the available retriever types
+ * @returns List of available retriever types
+ */
+export function getAvailableRetrieverTypes(): RetrieverType[] {
+  return ['sparse', 'dense', 'hybrid'];
+}
+
+/**
+ * Get information about the different retriever types
+ * @returns Information about each retriever type
+ */
+export function getRetrieverTypeInfo(): Record<RetrieverType, { 
+  name: string; 
+  description: string; 
+  bestFor: string[]; 
+}> {
+  return {
+    'sparse': {
+      name: 'Sparse Retriever (BM25)',
+      description: 'Traditional text search using lexical matching. Fast and works well for technical content.',
+      bestFor: [
+        'Code search',
+        'Keyword-based queries',
+        'Exact matches',
+        'Technical documentation'
+      ]
+    },
+    'dense': {
+      name: 'Dense Retriever (Semantic)',
+      description: 'Uses deep learning models to understand the meaning of text. Better at finding conceptual matches.',
+      bestFor: [
+        'Natural language queries',
+        'Concept-based search',
+        'Finding similar content',
+        'Handling synonyms'
+      ]
+    },
+    'hybrid': {
+      name: 'Hybrid Retriever',
+      description: 'Combines sparse and dense retrieval for better overall results. More resource-intensive.',
+      bestFor: [
+        'Complex search needs',
+        'When accuracy is critical',
+        'Mixed technical and conceptual content',
+        'When you need both exact and semantic matches'
+      ]
+    }
+  };
 }

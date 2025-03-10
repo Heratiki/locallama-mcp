@@ -15,10 +15,38 @@ import { logger } from '../../utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Basic BM25 algorithm options
 export interface BM25Options {
   k1?: number; // Term saturation parameter (default: 1.5)
   b?: number;  // Document length normalization (default: 0.75)
-  epsilon?: number; // BM25+ parameter
+  epsilon?: number; // BM25+ parameter (default: 0.25)
+}
+
+// Common text preprocessing options applicable to all retriever types
+export interface TextPreprocessingOptions {
+  minDf?: number;             // Terms appearing in fewer docs will be ignored (default: 1)
+  tokenizer?: string | null;  // Tokenizer to use (default: 'whitespace')
+  stemmer?: string | null;    // Stemmer to use (default: 'english')
+  stopwords?: string | null;  // Stopwords to remove (default: 'english')
+  doLowercasing?: boolean;    // Whether to lowercase texts (default: true)
+  doAmpersandNormalization?: boolean;  // Whether to convert & to and (default: true)
+  doSpecialCharsNormalization?: boolean; // Whether to remove special chars (default: true)
+  doAcronymsNormalization?: boolean;   // Whether to normalize acronyms (default: true)
+  doPunctuationRemoval?: boolean;      // Whether to remove punctuation (default: true)
+}
+
+// Options specific to the Dense Retriever
+export interface DenseRetrieverOptions {
+  model?: string;         // Model ID or path (default: 'sentence-transformers/all-MiniLM-L6-v2')
+  normalize?: boolean;    // Whether to L2 normalize vector representations (default: true)
+  maxLength?: number;     // Texts longer will be truncated (default: 128)
+  useAnn?: boolean;       // Use approximate nearest neighbors search (default: true)
+}
+
+// Combined options for the Hybrid Retriever
+export interface HybridRetrieverOptions extends TextPreprocessingOptions, DenseRetrieverOptions {
+  srModel?: string;       // Sparse Retrieval model (default: 'bm25')
+  drModel?: string;       // Dense Retrieval model (default: 'sentence-transformers/all-MiniLM-L6-v2')
 }
 
 export interface SearchResult {
@@ -35,6 +63,13 @@ export interface IndexingResult {
   filePaths: string[];
 }
 
+export interface RetrieverInitOptions {
+  retrieverType?: string;
+  textPreprocessingOptions?: TextPreprocessingOptions;
+  denseRetrieverOptions?: DenseRetrieverOptions; 
+  hybridRetrieverOptions?: HybridRetrieverOptions;
+}
+
 export class BM25Searcher {
   private pythonProcess: any = null;
   private initialized: boolean = false;
@@ -42,6 +77,7 @@ export class BM25Searcher {
   private options: BM25Options;
   private initPromise: Promise<void> | null = null;
   private bridgeReady: boolean = false;
+  private retrieverType: string = 'sparse'; // Default retriever type
 
   constructor(options: BM25Options = {}) {
     this.options = {
@@ -88,14 +124,20 @@ export class BM25Searcher {
 
   /**
    * Initialize the Python retriv process
+   * @param retrieverOptions Options for the specific retriever to use
    */
-  public async initialize(): Promise<void> {
+  public async initialize(retrieverOptions?: RetrieverInitOptions): Promise<void> {
     if (this.initialized) {
       return Promise.resolve();
     }
 
     if (this.initPromise) {
       return this.initPromise;
+    }
+
+    // Store retriever type if provided
+    if (retrieverOptions?.retrieverType) {
+      this.retrieverType = retrieverOptions.retrieverType;
     }
 
     this.initPromise = new Promise<void>((resolve, reject) => {
@@ -135,7 +177,19 @@ export class BM25Searcher {
           logger.info('Python retriv bridge initialized successfully');
           this.initialized = true;
           this.bridgeReady = true;
-          resolve();
+          
+          // Configure the retriever with the provided options
+          if (retrieverOptions) {
+            this.configureRetriever(retrieverOptions).then(() => {
+              resolve();
+            }).catch(err => {
+              logger.error('Error configuring retriever:', err);
+              reject(err);
+            });
+          } else {
+            resolve();
+          }
+          
           stdoutBuffer = '';
         }
       });
@@ -242,6 +296,139 @@ export class BM25Searcher {
   }
 
   /**
+   * Configure the retriever with the provided options
+   * @param options The retriever options
+   */
+  private async configureRetriever(options: RetrieverInitOptions): Promise<void> {
+    if (!this.bridgeReady) {
+      throw new Error('Python bridge not ready');
+    }
+    
+    // Prepare the configuration message based on retriever type
+    const configMessage: any = {
+      action: 'configure_retriever',
+      retriever_type: options.retrieverType || this.retrieverType,
+      bm25_options: this.options
+    };
+    
+    // Add specific options based on retriever type
+    switch (options.retrieverType || this.retrieverType) {
+      case 'sparse':
+        if (options.textPreprocessingOptions) {
+          configMessage.text_preprocessing_options = {
+            min_df: options.textPreprocessingOptions.minDf,
+            tokenizer: options.textPreprocessingOptions.tokenizer,
+            stemmer: options.textPreprocessingOptions.stemmer,
+            stopwords: options.textPreprocessingOptions.stopwords,
+            do_lowercasing: options.textPreprocessingOptions.doLowercasing,
+            do_ampersand_normalization: options.textPreprocessingOptions.doAmpersandNormalization,
+            do_special_chars_normalization: options.textPreprocessingOptions.doSpecialCharsNormalization,
+            do_acronyms_normalization: options.textPreprocessingOptions.doAcronymsNormalization,
+            do_punctuation_removal: options.textPreprocessingOptions.doPunctuationRemoval
+          };
+        }
+        break;
+      case 'dense':
+        if (options.denseRetrieverOptions) {
+          configMessage.dense_retriever_options = {
+            model: options.denseRetrieverOptions.model,
+            normalize: options.denseRetrieverOptions.normalize,
+            max_length: options.denseRetrieverOptions.maxLength,
+            use_ann: options.denseRetrieverOptions.useAnn
+          };
+        }
+        break;
+      case 'hybrid':
+        if (options.hybridRetrieverOptions) {
+          configMessage.hybrid_retriever_options = {
+            sr_model: options.hybridRetrieverOptions.srModel,
+            dr_model: options.hybridRetrieverOptions.drModel,
+            min_df: options.hybridRetrieverOptions.minDf,
+            tokenizer: options.hybridRetrieverOptions.tokenizer,
+            stemmer: options.hybridRetrieverOptions.stemmer,
+            stopwords: options.hybridRetrieverOptions.stopwords,
+            do_lowercasing: options.hybridRetrieverOptions.doLowercasing,
+            do_ampersand_normalization: options.hybridRetrieverOptions.doAmpersandNormalization,
+            do_special_chars_normalization: options.hybridRetrieverOptions.doSpecialCharsNormalization,
+            do_acronyms_normalization: options.hybridRetrieverOptions.doAcronymsNormalization,
+            do_punctuation_removal: options.hybridRetrieverOptions.doPunctuationRemoval,
+            model: options.hybridRetrieverOptions.model,
+            normalize: options.hybridRetrieverOptions.normalize,
+            max_length: options.hybridRetrieverOptions.maxLength,
+            use_ann: options.hybridRetrieverOptions.useAnn
+          };
+        }
+        break;
+      default:
+        logger.warn(`Unknown retriever type: ${options.retrieverType}, using default sparse retriever`);
+    }
+    
+    // Send the configuration message to the Python bridge
+    return new Promise<void>((resolve, reject) => {
+      const message = JSON.stringify(configMessage);
+      
+      // Buffer for collecting stdout data
+      let stdoutBuffer = '';
+      
+      const dataHandler = (data: Buffer) => {
+        const responseStr = data.toString();
+        stdoutBuffer += responseStr;
+        
+        // Process complete lines
+        const lines = stdoutBuffer.split('\n');
+        if (lines.length > 1) {
+          // Process all complete lines except the last one (which might be incomplete)
+          for (let i = 0; i < lines.length - 1; i++) {
+            try {
+              const line = lines[i].trim();
+              if (!line) continue;
+              
+              const response = JSON.parse(line);
+              
+              if (response.status === 'success' || response.status === 'warning') {
+                logger.info(`Retriever configuration ${response.status}: ${response.message || ''}`);
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                resolve();
+                return;
+              } else if (response.status === 'error') {
+                logger.error(`Retriever configuration error: ${response.message}`);
+                this.pythonProcess.stdout.removeListener('data', dataHandler);
+                reject(new Error(response.message));
+                return;
+              }
+            } catch (e) {
+              // Not a valid JSON response or not the response we're looking for
+            }
+          }
+          
+          // Keep the last (possibly incomplete) line in the buffer
+          stdoutBuffer = lines[lines.length - 1];
+        }
+      };
+      
+      this.pythonProcess.stdout.on('data', dataHandler);
+      
+      this.pythonProcess.stdin.write(message + '\n', (err: Error | null) => {
+        if (err) {
+          logger.error('Error writing to Python process:', err);
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
+          reject(err);
+          return;
+        }
+      });
+      
+      // Set a timeout for configuration
+      setTimeout(() => {
+        if (this.pythonProcess.stdout.listeners('data').includes(dataHandler)) {
+          logger.warn('Configuration timeout. Assuming configuration completed but response was not recognized.');
+          this.pythonProcess.stdout.removeListener('data', dataHandler);
+          resolve();
+        }
+      }, 10000); // 10 seconds timeout
+    });
+  }
+
+  /**
    * Process a line from the Python process stdout
    */
   private processStdoutLine(line: string, resolveInit?: () => void): void {
@@ -289,10 +476,11 @@ export class BM25Searcher {
     const message = JSON.stringify({
       action: 'index',
       documents: documents,
-      options: this.options
+      options: this.options,
+      retriever_type: this.retrieverType // Add the retriever type to the indexing message
     });
     
-    logger.info(`Indexing ${documents.length} documents`);
+    logger.info(`Indexing ${documents.length} documents using ${this.retrieverType} retriever`);
     
     return new Promise<IndexingResult>((resolve, reject) => {
       // Buffer for collecting stdout data
@@ -488,10 +676,11 @@ export class BM25Searcher {
     const message = JSON.stringify({
       action: 'search',
       query,
-      topK
+      topK,
+      retriever_type: this.retrieverType // Add the retriever type to the search message
     });
     
-    logger.info(`Searching for: "${query}" (top ${topK} results)`);
+    logger.info(`Searching for: "${query}" (top ${topK} results) using ${this.retrieverType} retriever`);
     
     return new Promise<SearchResult[]>((resolve, reject) => {
       // Buffer for collecting stdout data
