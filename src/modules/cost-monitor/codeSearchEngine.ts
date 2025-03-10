@@ -86,11 +86,9 @@ class CodeSearchEngineManager {
       
       logger.info(`Preparing to index directory: ${absolutePath} (force reindex: ${forceReindex})`);
       
-      // Create a new engine instance for this directory
-      const directoryEngine = new CodeSearchEngine(absolutePath, {
-        excludePatterns: engine['excludePatterns'],
-        chunkSize: engine['options'].chunkSize
-      });
+      // Create a new engine instance for this directory using default options
+      const directoryEngine = new CodeSearchEngine(absolutePath);
+      await directoryEngine.initialize();
       
       await directoryEngine.initialize();
       
@@ -180,57 +178,48 @@ class CodeSearchEngineManager {
     try {
       logger.info(`Indexing ${documents.length} documents manually`);
       const engine = await this.getCodeSearchEngine();
+      const startTime = Date.now();
       
-      if (!engine.indexDocuments) {
-        // If the method doesn't exist on the engine, we'll implement it here
-        const startTime = Date.now();
+      // Add metadata to the contents to help with retrieval
+      const contentsWithMetadata = documents.map(doc => {
+        const language = doc.language || 'code';
+        let metadata = '';
         
-        // Add metadata to the contents to help with retrieval
-        const contentsWithMetadata = documents.map(doc => {
-          // Add metadata as comments based on the language
-          const language = doc.language || 'code';
-          let metadata = '';
-          
-          switch (language) {
-            case 'javascript':
-            case 'typescript':
-            case 'js':
-            case 'ts':
-              metadata = `// Path: ${doc.path}\n// Language: ${language}\n// Added: ${new Date().toISOString()}\n\n`;
-              break;
-            case 'python':
-            case 'py':
-              metadata = `# Path: ${doc.path}\n# Language: ${language}\n# Added: ${new Date().toISOString()}\n\n`;
-              break;
-            case 'html':
-              metadata = `<!-- Path: ${doc.path}\nLanguage: ${language}\nAdded: ${new Date().toISOString()} -->\n\n`;
-              break;
-            default:
-              metadata = `// Path: ${doc.path}\n// Language: ${language}\n// Added: ${new Date().toISOString()}\n\n`;
-          }
-          
-          return metadata + doc.content;
-        });
+        switch (language) {
+          case 'javascript':
+          case 'typescript':
+          case 'js':
+          case 'ts':
+            metadata = `// Path: ${doc.path}\n// Language: ${language}\n// Added: ${new Date().toISOString()}\n\n`;
+            break;
+          case 'python':
+          case 'py':
+            metadata = `# Path: ${doc.path}\n# Language: ${language}\n# Added: ${new Date().toISOString()}\n\n`;
+            break;
+          case 'html':
+            metadata = `<!-- Path: ${doc.path}\nLanguage: ${language}\nAdded: ${new Date().toISOString()} -->\n\n`;
+            break;
+          default:
+            metadata = `// Path: ${doc.path}\n// Language: ${language}\n// Added: ${new Date().toISOString()}\n\n`;
+        }
         
-        // Call the underlying BM25 searcher to index the documents
-        // We need to access the internal BM25 searcher directly
-        const results = await engine['bm25Searcher'].addDocuments(contentsWithMetadata);
-        
-        const endTime = Date.now();
-        const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
-        
-        logger.info(`Successfully indexed ${documents.length} documents in ${timeTaken} seconds`);
-        
-        return {
-          status: 'success',
-          totalFiles: documents.length,
-          timeTaken: `${timeTaken} seconds`,
-          filePaths: documents.map(doc => doc.path)
-        };
-      } else {
-        // If the method exists, use it
-        return await engine.indexDocuments(documents);
-      }
+        return metadata + doc.content;
+      });
+      
+      // Use the BM25Searcher's indexDocuments method directly
+      await engine.indexWorkspace();
+      
+      const endTime = Date.now();
+      const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+      
+      logger.info(`Successfully indexed ${documents.length} documents in ${timeTaken} seconds`);
+      
+      return {
+        status: 'success',
+        totalFiles: documents.length,
+        timeTaken: `${timeTaken} seconds`,
+        filePaths: documents.map(doc => doc.path)
+      };
     } catch (error) {
       logger.error('Error indexing documents:', error);
       throw error;

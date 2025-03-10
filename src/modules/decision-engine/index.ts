@@ -578,6 +578,7 @@ export const decisionEngine = {
   },
 
   /**
+    logger.info(`Executing executeLMStudioModel`);
    * Execute a task with an LM Studio model
    */
   async executeLMStudioModel(model: string, task: string, maxTokens: number): Promise<string> {
@@ -618,6 +619,7 @@ export const decisionEngine = {
    * Execute a task with a local llama model
    */
   async executeLocalLlamaModel(model: string, task: string, maxTokens: number): Promise<string> {
+    logger.info(`Executing executeLocalLlamaModel`);
     logger.debug(`Executing task with local model ${model}`);
     
     try {
