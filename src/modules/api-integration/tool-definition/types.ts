@@ -1,4 +1,8 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { IToolDefinitionProvider } from '../types.js';
+
+// Re-export IToolDefinitionProvider for convenience
+export type { IToolDefinitionProvider };
 
 /**
  * Interface for a tool's input schema property definition
@@ -25,28 +29,6 @@ export interface IToolSchema {
 }
 
 /**
- * Interface for a tool definition
+ * Type alias for Tool from MCP SDK to ensure consistency
  */
-export interface ITool {
-  name: string;
-  description: string;
-  inputSchema: IToolSchema;
-}
-
-/**
- * Interface for the tool definition provider
- * Responsible for managing the list of available tools and their schemas
- */
-export interface IToolDefinitionProvider {
-  /**
-   * Initialize the tool definition provider
-   * @param server The MCP server instance to register tools with
-   */
-  initialize(server: Server): void;
-  
-  /**
-   * Get all available tools
-   * @returns Array of available tools
-   */
-  getAvailableTools(): ITool[];
-}
+export type ITool = Tool;
