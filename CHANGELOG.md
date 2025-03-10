@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.13.0](https://github.com/Heratiki/locallama-mcp/compare/v1.12.0...v1.13.0) (2025-03-10)
+
+
+### Features
+
+* streamline document indexing process and enhance logging in code search engine ([d2b6aa1](https://github.com/Heratiki/locallama-mcp/commit/d2b6aa1b867b11f36991aefccde824e6111fa79b))
+
 ## [1.12.0](https://github.com/Heratiki/locallama-mcp/compare/v1.11.0...v1.12.0) (2025-03-10)
 
 
