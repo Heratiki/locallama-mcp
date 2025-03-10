@@ -14,6 +14,12 @@ To refactor the `src/modules/api-integration/tools.ts` file into a modular archi
 *   Include a migration strategy that allows for incremental adoption.
 *   Consider performance implications of the modularization.
 *   Provide specific file/folder structure recommendations.
+*   Create well-defined interfaces between the new modules.
+*   Maintain backward compatibility with existing code that imports from this file.
+*   Implement proper export patterns to minimize changes required in dependent modules.
+*   Include a migration strategy that allows for incremental adoption.
+*   Consider performance implications of the modularization.
+*   Provide specific file/folder structure recommendations.
 *   Suggest appropriate naming conventions for the new modules.
 *   Prioritize maintainability and testability in the new design.
 
@@ -97,16 +103,20 @@ src/modules/api-integration/
 *   **Challenges:** N/A
 *   **Adjustments:** N/A
 
-### Phase 2: Move Tool Definition Logic
+### Phase 2: Move Tool Definition Logic (Completed)
 
 *   **Objective:** Move the tool definition logic (the `tools` array and the `ListToolsRequestSchema` handler) into the `tool-definition` module.
 *   **Deliverables:**
-    *   Move the `tools` array and the `ListToolsRequestSchema` handler from `src/modules/api-integration/tools.ts` to `src/modules/api-integration/tool-definition/index.ts`.
-    *   Implement the `IToolDefinitionProvider` interface in the `tool-definition` module.
-    *   Update the main export file (`src/modules/api-integration/index.ts`) to re-export the tool definition logic from the `tool-definition` module.
+    *   Move the `tools` array and the `ListToolsRequestSchema` handler from `src/modules/api-integration/tools.ts` to `src/modules/api-integration/tool-definition/index.ts`. ✓
+    *   Implement the `IToolDefinitionProvider` interface in the `tool-definition` module. ✓
+    *   Update the main export file (`src/modules/api-integration/index.ts`) to re-export the tool definition logic from the `tool-definition` module. ✓
 *   **Testing:** Add unit tests to verify that the tool definition logic is working correctly.
-*   **Challenges:** N/A
-*   **Adjustments:** N/A
+*   **Challenges:**
+    - TypeScript typing issues with the tool definitions required explicit type assertions using 'as const' to ensure type safety
+    - Needed to carefully maintain the full set of tool definitions while updating their type structures
+*   **Adjustments:**
+    - Modified the `ITool` and related interfaces to better match the actual tool schema requirements
+    - Used type assertions to ensure strict typing compliance
 
 ### Phase 3: Move Task Execution Logic
 

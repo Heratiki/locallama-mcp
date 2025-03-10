@@ -1,434 +1,483 @@
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { IToolDefinitionProvider } from '../types.js';
-import { isOpenRouterConfigured, isPythonAvailable, isPythonModuleInstalled } from '../tools.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { IToolDefinitionProvider, ITool } from './types.js';
+import { logger } from '../../../utils/logger.js';
+import { config } from '../../../config/index.js';
+import * as fs from 'fs';
+import { execSync } from 'child_process';
 
+/**
+ * Check if Python is installed and available
+ */
+function isPythonAvailable(): boolean {
+  try {
+    execSync('python --version', { stdio: 'pipe' });
+    return true;
+  } catch (error) {
+    try {
+      execSync('python3 --version', { stdio: 'pipe' });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+}
+
+/**
+ * Check if a Python module is installed
+ */
+function isPythonModuleInstalled(moduleName: string): boolean {
+  try {
+    execSync(`python -c "import ${moduleName}"`, { stdio: 'pipe' });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Check if OpenRouter API key is configured
+ */
+export function isOpenRouterConfigured(): boolean {
+  return !!config.openRouterApiKey;
+}
+
+/**
+ * Implementation of the tool definition provider
+ */
 class ToolDefinitionProvider implements IToolDefinitionProvider {
-  async getTools() {
+  initialize(server: Server): void {
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      logger.debug('Listing available tools');
+      return { tools: this.getAvailableTools() };
+    });
+  }
+
+  getAvailableTools(): ITool[] {
+    // Check if retriv-related tools should be included based on Python availability
     const pythonAvailable = isPythonAvailable();
     const retrivAvailable = pythonAvailable && isPythonModuleInstalled('retriv');
 
-    const tools = [
+    const tools: ITool[] = [
       {
         name: 'route_task',
         description: 'Route a coding task to either a local LLM or a paid API based on cost and complexity',
         inputSchema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             task: {
-              type: 'string',
-              description: 'The coding task to route',
+              type: 'string' as const,
+              description: 'The coding task to route'
             },
             context_length: {
-              type: 'number',
-              description: 'The length of the context in tokens',
+              type: 'number' as const,
+              description: 'The length of the context in tokens'
             },
             expected_output_length: {
-              type: 'number',
-              description: 'The expected length of the output in tokens',
+              type: 'number' as const,
+              description: 'The expected length of the output in tokens'
             },
             complexity: {
-              type: 'number',
-              description: 'The complexity of the task (0-1)',
+              type: 'number' as const,
+              description: 'The complexity of the task (0-1)'
             },
             priority: {
-              type: 'string',
+              type: 'string' as const,
               enum: ['speed', 'cost', 'quality'],
-              description: 'The priority for this task',
+              description: 'The priority for this task'
             },
             preemptive: {
-              type: 'boolean',
-              description: 'Whether to use preemptive routing (faster but less accurate)',
-            },
+              type: 'boolean' as const,
+              description: 'Whether to use preemptive routing (faster but less accurate)'
+            }
           },
-          required: ['task', 'context_length'],
-        },
+          required: ['task', 'context_length']
+        }
       },
       {
         name: 'retriv_init',
         description: 'Initialize and configure Retriv for code search and indexing',
         inputSchema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             directories: {
-              type: 'array',
+              type: 'array' as const,
               items: {
-                type: 'string'
+                type: 'string' as const
               },
-              description: 'Array of directories to index',
+              description: 'Array of directories to index'
             },
             exclude_patterns: {
-              type: 'array',
+              type: 'array' as const,
               items: {
-                type: 'string'
+                type: 'string' as const
               },
-              description: 'Array of glob patterns to exclude from indexing',
+              description: 'Array of glob patterns to exclude from indexing'
             },
             chunk_size: {
-              type: 'number',
-              description: 'Size of chunks for large files (in lines)',
+              type: 'number' as const,
+              description: 'Size of chunks for large files (in lines)'
             },
             force_reindex: {
-              type: 'boolean',
-              description: 'Whether to force reindexing of all files',
+              type: 'boolean' as const,
+              description: 'Whether to force reindexing of all files'
             },
             bm25_options: {
-              type: 'object',
-              description: 'Options for the BM25 algorithm',
+              type: 'object' as const,
+              description: 'Options for the BM25 algorithm'
             },
             install_dependencies: {
-              type: 'boolean',
-              description: 'Whether to automatically install required Python dependencies',
-            },
+              type: 'boolean' as const,
+              description: 'Whether to automatically install required Python dependencies'
+            }
           },
-          required: ['directories'],
-        },
+          required: ['directories']
+        }
       },
       {
         name: 'cancel_job',
         description: 'Cancel a running job',
         inputSchema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             job_id: {
-              type: 'string',
-              description: 'The ID of the job to cancel',
-            },
+              type: 'string' as const,
+              description: 'The ID of the job to cancel'
+            }
           },
-          required: ['job_id'],
-        },
+          required: ['job_id']
+        }
       },
       {
         name: 'preemptive_route_task',
         description: 'Quickly route a coding task without making API calls (faster but less accurate)',
         inputSchema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             task: {
-              type: 'string',
-              description: 'The coding task to route',
+              type: 'string' as const,
+              description: 'The coding task to route'
             },
             context_length: {
-              type: 'number', // Corrected type
-              description: 'The length of the context in tokens',
+              type: 'number' as const,
+              description: 'The length of the context in tokens'
             },
             expected_output_length: {
-              type: 'number', // Corrected type
-              description: 'The expected length of the output in tokens',
+              type: 'number' as const,
+              description: 'The expected length of the output in tokens'
             },
             complexity: {
-              type: 'number', // Corrected type
-              description: 'The complexity of the task (0-1)',
+              type: 'number' as const,
+              description: 'The complexity of the task (0-1)'
             },
             priority: {
-              type: 'string',
+              type: 'string' as const,
               enum: ['speed', 'cost', 'quality'],
-              description: 'The priority for this task',
-            },
+              description: 'The priority for this task'
+            }
           },
-          required: ['task', 'context_length'],
-        },
+          required: ['task', 'context_length']
+        }
       },
       {
         name: 'get_cost_estimate',
         description: 'Get an estimate of the cost for a task',
         inputSchema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             context_length: {
-              type: 'number', // Corrected type
-              description: 'The length of the context in tokens',
+              type: 'number' as const,
+              description: 'The length of the context in tokens'
             },
             expected_output_length: {
-              type: 'number', // Corrected type
-              description: 'The expected length of the output in tokens',
+              type: 'number' as const,
+              description: 'The expected length of the output in tokens'
             },
             model: {
-              type: 'string',
-              description: 'The model to use (optional)',
-            },
+              type: 'string' as const,
+              description: 'The model to use (optional)'
+            }
           },
-          required: ['context_length'],
-        },
+          required: ['context_length']
+        }
       },
       {
         name: 'benchmark_task',
         description: 'Benchmark the performance of local LLMs vs paid APIs for a specific task',
         inputSchema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             task_id: {
-              type: 'string',
-              description: 'A unique identifier for the task',
+              type: 'string' as const,
+              description: 'A unique identifier for the task'
             },
             task: {
-              type: 'string',
-              description: 'The coding task to benchmark',
+              type: 'string' as const,
+              description: 'The coding task to benchmark'
             },
             context_length: {
-              type: 'number', // Corrected type
-              description: 'The length of the context in tokens',
+              type: 'number' as const,
+              description: 'The length of the context in tokens'
             },
             expected_output_length: {
-              type: 'number', // Corrected type
-              description: 'The expected length of the output in tokens',
+              type: 'number' as const,
+              description: 'The expected length of the output in tokens'
             },
             complexity: {
-              type: 'number', // Corrected type
-              description: 'The complexity of the task (0-1)',
+              type: 'number' as const,
+              description: 'The complexity of the task (0-1)'
             },
             local_model: {
-              type: 'string',
-              description: 'The local model to use (optional)',
+              type: 'string' as const,
+              description: 'The local model to use (optional)'
             },
             paid_model: {
-              type: 'string',
-              description: 'The paid model to use (optional)',
+              type: 'string' as const,
+              description: 'The paid model to use (optional)'
             },
             runs_per_task: {
-              type: 'number',
-              description: 'Number of runs per task for more accurate results (optional)',
-            },
+              type: 'number' as const,
+              description: 'Number of runs per task for more accurate results (optional)'
+            }
           },
-          required: ['task_id', 'task', 'context_length'],
-        },
+          required: ['task_id', 'task', 'context_length']
+        }
       },
       {
         name: 'benchmark_tasks',
         description: 'Benchmark the performance of local LLMs vs paid APIs for multiple tasks',
         inputSchema: {
-          type: 'object',
+          type: 'object' as const,
           properties: {
             tasks: {
-              type: 'array',
+              type: 'array' as const,
               items: {
-                type: 'object',
+                type: 'object' as const,
                 properties: {
                   task_id: {
-                    type: 'string',
-                    description: 'A unique identifier for the task',
+                    type: 'string' as const,
+                    description: 'A unique identifier for the task'
                   },
                   task: {
-                    type: 'string',
-                    description: 'The coding task to benchmark',
+                    type: 'string' as const,
+                    description: 'The coding task to benchmark'
                   },
                   context_length: {
-                    type: 'number', // Corrected type
-                    description: 'The length of the context in tokens',
+                    type: 'number' as const,
+                    description: 'The length of the context in tokens'
                   },
                   expected_output_length: {
-                    type: 'number', // Corrected type
-                    description: 'The expected length of the output in tokens',
+                    type: 'number' as const,
+                    description: 'The expected length of the output in tokens'
                   },
                   complexity: {
-                    type: 'number', // Corrected type
-                    description: 'The complexity of the task (0-1)',
+                    type: 'number' as const,
+                    description: 'The complexity of the task (0-1)'
                   },
                   local_model: {
-                    type: 'string',
-                    description: 'The local model to use (optional)',
+                    type: 'string' as const,
+                    description: 'The local model to use (optional)'
                   },
                   paid_model: {
-                    type: 'string',
-                    description: 'The paid model to use (optional)',
-                  },
+                    type: 'string' as const,
+                    description: 'The paid model to use (optional)'
+                  }
                 },
-                required: ['task_id', 'task', 'context_length'],
+                required: ['task_id', 'task', 'context_length']
               },
-              description: 'Array of tasks to benchmark',
+              description: 'Array of tasks to benchmark'
             },
             runs_per_task: {
-              type: 'number',
-              description: 'Number of runs per task for more accurate results (optional)',
+              type: 'number' as const,
+              description: 'Number of runs per task for more accurate results (optional)'
             },
             parallel: {
-              type: 'boolean',
-              description: 'Whether to run tasks in parallel (optional)',
+              type: 'boolean' as const,
+              description: 'Whether to run tasks in parallel (optional)'
             },
             max_parallel_tasks: {
-              type: 'number',
-              description: 'Maximum number of parallel tasks (optional)',
-            },
+              type: 'number' as const,
+              description: 'Maximum number of parallel tasks (optional)'
+            }
           },
-          required: ['tasks'],
-        },
+          required: ['tasks']
+        }
       }
     ];
 
+    // Add OpenRouter-specific tools if API key is configured
     if (isOpenRouterConfigured()) {
       tools.push(
         {
           name: 'get_free_models',
           description: 'Get a list of free models available from OpenRouter',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               task: {
-                type: 'string',
-                description: 'The coding task to route',
+                type: 'string' as const,
+                description: 'The coding task to route'
               },
               context_length: {
-                type: 'number',
-                description: 'The length of the context in tokens',
+                type: 'number' as const,
+                description: 'The length of the context in tokens'
               },
               expected_output_length: {
-                type: 'number',
-                description: 'The expected length of the output in tokens',
+                type: 'number' as const,
+                description: 'The expected length of the output in tokens'
               },
               complexity: {
-                type: 'number',
-                description: 'The complexity of the task (0-1)',
+                type: 'number' as const,
+                description: 'The complexity of the task (0-1)'
               },
               priority: {
-                type: 'string',
+                type: 'string' as const,
                 enum: ['speed', 'cost', 'quality'],
-                description: 'The priority for this task',
+                description: 'The priority for this task'
               },
               preemptive: {
-                type: 'boolean',
-                description: 'Whether to force an update of models',
-              },
+                type: 'boolean' as const,
+                description: 'Whether to force an update of models'
+              }
             },
-            required: [],
-          },
+            required: []
+          }
         },
         {
           name: 'clear_openrouter_tracking',
           description: 'Clear OpenRouter tracking data and force an update',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               task: {
-                type: 'string',
-                description: 'Unused but required for type compatibility',
+                type: 'string' as const,
+                description: 'Unused but required for type compatibility'
               },
               context_length: {
-                type: 'number',
-                description: 'Unused but required for type compatibility',
+                type: 'number' as const,
+                description: 'Unused but required for type compatibility'
               },
               expected_output_length: {
-                type: 'number',
-                description: 'Unused but required for type compatibility',
+                type: 'number' as const,
+                description: 'Unused but required for type compatibility'
               },
               complexity: {
-                type: 'number',
-                description: 'Unused but required for type compatibility',
+                type: 'number' as const,
+                description: 'Unused but required for type compatibility'
               },
               priority: {
-                type: 'string',
+                type: 'string' as const,
                 enum: ['speed', 'cost', 'quality'],
-                description: 'Unused but required for type compatibility',
-              },
+                description: 'Unused but required for type compatibility'
+              }
             },
-            required: [],
-          },
+            required: []
+          }
         },
         {
           name: 'benchmark_free_models',
           description: 'Benchmark the performance of free models from OpenRouter',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               tasks: {
-                type: 'array',
+                type: 'array' as const,
                 items: {
-                  type: 'object',
+                  type: 'object' as const,
                   properties: {
                     task_id: {
-                      type: 'string',
-                      description: 'A unique identifier for the task',
+                      type: 'string' as const,
+                      description: 'A unique identifier for the task'
                     },
                     task: {
-                      type: 'string',
-                      description: 'The coding task to benchmark',
+                      type: 'string' as const,
+                      description: 'The coding task to benchmark'
                     },
                     context_length: {
-                      type: 'number',
-                      description: 'The length of the context in tokens',
+                      type: 'number' as const,
+                      description: 'The length of the context in tokens'
                     },
                     expected_output_length: {
-                      type: 'number',
-                      description: 'The expected length of the output in tokens',
+                      type: 'number' as const,
+                      description: 'The expected length of the output in tokens'
                     },
                     complexity: {
-                      type: 'number',
-                      description: 'The complexity of the task (0-1)',
+                      type: 'number' as const,
+                      description: 'The complexity of the task (0-1)'
                     },
                     local_model: {
-                      type: 'string',
-                      description: 'The local model to use (optional)',
+                      type: 'string' as const,
+                      description: 'The local model to use (optional)'
                     },
                     paid_model: {
-                      type: 'string',
-                      description: 'The paid model to use (optional)',
-                    },
+                      type: 'string' as const,
+                      description: 'The paid model to use (optional)'
+                    }
                   },
-                  required: ['task_id', 'task', 'context_length'],
+                  required: ['task_id', 'task', 'context_length']
                 },
-                description: 'Array of tasks to benchmark',
+                description: 'Array of tasks to benchmark'
               },
               runs_per_task: {
-                type: 'number',
-                description: 'Number of runs per task for more accurate results (optional)',
+                type: 'number' as const,
+                description: 'Number of runs per task for more accurate results (optional)'
               },
               parallel: {
-                type: 'boolean',
-                description: 'Whether to run tasks in parallel (optional)',
+                type: 'boolean' as const,
+                description: 'Whether to run tasks in parallel (optional)'
               },
               max_parallel_tasks: {
-                type: 'number',
-                description: 'Maximum number of parallel tasks (optional)',
-              },
+                type: 'number' as const,
+                description: 'Maximum number of parallel tasks (optional)'
+              }
             },
-            required: ['tasks'],
-          },
+            required: ['tasks']
+          }
         },
         {
           name: 'set_model_prompting_strategy',
           description: 'Update the prompting strategy for an OpenRouter model',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               task: {
-                type: 'string',
-                description: 'The ID of the model to update',
+                type: 'string' as const,
+                description: 'The ID of the model to update'
               },
               context_length: {
-                type: 'number',
-                description: 'Unused but required for type compatibility',
+                type: 'number' as const,
+                description: 'Unused but required for type compatibility'
               },
               expected_output_length: {
-                type: 'number',
-                description: 'The system prompt to use',
+                type: 'number' as const,
+                description: 'The system prompt to use'
               },
               priority: {
-                type: 'string',
+                type: 'string' as const,
                 enum: ['speed', 'cost', 'quality'],
-                description: 'The user prompt template to use',
+                description: 'The user prompt template to use'
               },
               complexity: {
-                type: 'number',
-                description: 'The assistant prompt template to use',
+                type: 'number' as const,
+                description: 'The assistant prompt template to use'
               },
               preemptive: {
-                type: 'boolean',
-                description: 'Whether to use chat format',
-              },
+                type: 'boolean' as const,
+                description: 'Whether to use chat format'
+              }
             },
-            required: ['task', 'context_length'],
-          },
+            required: ['task', 'context_length']
+          }
         }
       );
     }
 
     return tools;
   }
-
-  setupToolHandlers(server: Server) {
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return { tools: await this.getTools() };
-    });
-  }
 }
 
+// Export singleton instance
 export const toolDefinitionProvider = new ToolDefinitionProvider();
+
+// Export provider interface for type checking
+export type { IToolDefinitionProvider };
