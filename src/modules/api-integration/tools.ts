@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { decisionEngine } from '../decision-engine/index.js';
+import { decisionEngine, apiHandlers } from '../decision-engine/index.js';
 import { costMonitor } from '../cost-monitor/index.js';
 import { benchmarkModule } from '../benchmark/index.js';
 import { openRouterModule } from '../openrouter/index.js';
@@ -102,36 +102,38 @@ async function executeTask(model: string, task: string, jobId: string): Promise<
         logger.error(`Failed to execute task with OpenRouter: ${error}`);
         throw error;
       }
-      
-    } else if (model.startsWith('local:') || model.startsWith('ollama:') || model.startsWith('lm-studio:')) {
-      // Handle local model execution
-      // For local models, use the appropriate service based on the prefix
-      const modelProvider = model.split(':')[0];
-      const modelName = model.split(':').slice(1).join(':');
-      
+    } else {
+      // For all other model types (local, ollama, lm-studio), handle execution directly
       try {
-        // Update progress to 50% before local model execution
+        // Update progress to 50% before execution
         jobTracker.updateJobProgress(jobId, 50, 60000);
         
-        // Execute the task via the decision engine's local model handler
-        result = await decisionEngine.executeLocalTask({
-          task,
-          model: modelName,
-          provider: modelProvider,
-          maxTokens: 4096 // Default reasonable limit
-        });
+        // Extract provider and model name
+        const modelParts = model.split(':');
+        const provider = modelParts[0];
+        const modelName = modelParts.slice(1).join(':');
         
-        // Update progress to 75% after local execution
+        // Execute based on provider type
+        switch (provider) {
+          case 'ollama':
+            result = await executeOllamaModel(modelName, task);
+            break;
+          case 'lm-studio':
+            result = await executeLmStudioModel(modelName, task);
+            break;
+          case 'local':
+            result = await executeLocalModel(modelName, task);
+            break;
+          default:
+            throw new Error(`Unsupported model provider: ${provider}`);
+        }
+        
+        // Update progress to 75% after execution
         jobTracker.updateJobProgress(jobId, 75, 30000);
       } catch (error) {
-        logger.error(`Failed to execute task with local model: ${error}`);
+        logger.error(`Failed to execute task with model ${model}: ${error}`);
         throw error;
       }
-      
-    } else {
-      // Unknown model type, log error and throw exception
-      logger.error(`Unknown model type for execution: ${model}`);
-      throw new Error(`Unknown model type: ${model}`);
     }
     
     // Process and format result if needed
@@ -161,6 +163,108 @@ async function executeTask(model: string, task: string, jobId: string): Promise<
   } catch (error) {
     logger.error(`Error executing task for job ${jobId}:`, error);
     jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error during execution');
+    throw error;
+  }
+}
+
+/**
+ * Execute a task with an Ollama model
+ */
+async function executeOllamaModel(model: string, task: string): Promise<string> {
+  logger.info(`Executing task with Ollama model ${model}`);
+  
+  try {
+    // Get Ollama API endpoint from config or use default
+    const ollamaEndpoint = config.ollamaEndpoint || 'http://localhost:11434/api/generate';
+    
+    // Make a request to the Ollama API
+    const response = await fetch(`${ollamaEndpoint}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: task }
+        ],
+        stream: false,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama API error (${response.status}): ${errorText}`);
+    }
+    
+    const result = await response.json();
+    return result.message?.content || 'No response from Ollama';
+  } catch (error) {
+    logger.error(`Error executing task with Ollama model ${model}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Execute a task with an LM Studio model
+ */
+async function executeLmStudioModel(model: string, task: string): Promise<string> {
+  logger.info(`Executing task with LM Studio model ${model}`);
+  
+  try {
+    // Get LM Studio API endpoint from config or use default
+    const lmStudioEndpoint = config.lmStudioEndpoint || 'http://localhost:1234/v1';
+    
+    // Make a request to the LM Studio API
+    const response = await fetch(`${lmStudioEndpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: task }
+        ],
+        temperature: 0.7,
+        max_tokens: 4096,
+        stream: false
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`LM Studio API error (${response.status}): ${errorText}`);
+    }
+    
+    const result = await response.json();
+    return result.choices?.[0]?.message?.content || 'No response from LM Studio';
+  } catch (error) {
+    logger.error(`Error executing task with LM Studio model ${model}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Execute a task with a local model
+ */
+async function executeLocalModel(model: string, task: string): Promise<string> {
+  logger.info(`Executing task with local model ${model}`);
+  
+  try {
+    // For local models, we'll default to using the LM Studio endpoint if available,
+    // otherwise fall back to Ollama
+    if (config.lmStudioEndpoint) {
+      return await executeLmStudioModel(model, task);
+    } else if (config.ollamaEndpoint) {
+      return await executeOllamaModel(model, task);
+    } else {
+      throw new Error('No local model endpoint configured');
+    }
+  } catch (error) {
+    logger.error(`Error executing task with local model ${model}:`, error);
     throw error;
   }
 }
