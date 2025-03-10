@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.11.0](https://github.com/Heratiki/locallama-mcp/compare/v1.10.1...v1.11.0) (2025-03-10)
+
+
+### Features
+
+* add retriever type handling and options for code search engine ([c2c6992](https://github.com/Heratiki/locallama-mcp/commit/c2c699288854ff2b2e6cf6b144857db77506ffc5))
+* enhance Python configuration support and virtual environment detection ([62a580a](https://github.com/Heratiki/locallama-mcp/commit/62a580a5e56dae1d1ef0854f21d80bd8901084c0))
+
 ### [1.10.1](https://github.com/Heratiki/locallama-mcp/compare/v1.10.0...v1.10.1) (2025-03-09)
 
 ## [1.10.0](https://github.com/Heratiki/locallama-mcp/compare/v1.9.1...v1.10.0) (2025-03-09)
