@@ -10,6 +10,8 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs';
 import { logger } from '../../utils/logger.js';
+import { config } from '../../config/index.js';
+import { execSync } from 'child_process';
 
 // Create equivalents for __dirname and __filename in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +80,7 @@ export class BM25Searcher {
   private initPromise: Promise<void> | null = null;
   private bridgeReady: boolean = false;
   private retrieverType: string = 'sparse'; // Default retriever type
+  private pythonExecutable: string = 'python'; // Default Python executable
 
   constructor(options: BM25Options = {}) {
     this.options = {
@@ -85,6 +88,107 @@ export class BM25Searcher {
       b: options.b || 0.75,
       epsilon: options.epsilon || 0.25
     };
+    
+    // Check if custom Python path is provided in environment or config
+    if (process.env.RETRIV_PYTHON_PATH) {
+      this.pythonExecutable = process.env.RETRIV_PYTHON_PATH;
+      logger.info(`Using Python executable from RETRIV_PYTHON_PATH: ${this.pythonExecutable}`);
+    } else if (config.python?.path) {
+      this.pythonExecutable = config.python.path;
+      logger.info(`Using Python executable from config: ${this.pythonExecutable}`);
+    } else {
+      // Try to detect virtual environment automatically
+      try {
+        const virtualEnvPath = this.detectVirtualEnvironment();
+        if (virtualEnvPath) {
+          this.pythonExecutable = virtualEnvPath;
+          logger.info(`Automatically detected Python virtual environment: ${this.pythonExecutable}`);
+        } else {
+          // Check if we can find the retriv module using the default Python
+          try {
+            execSync(`${this.pythonExecutable} -c "import retriv"`, { stdio: 'pipe' });
+            logger.info(`Found retriv module using default Python: ${this.pythonExecutable}`);
+          } catch (err) {
+            logger.warn('Retriv module not found in default Python environment. Please set RETRIV_PYTHON_PATH or configure python.path in config.');
+          }
+        }
+      } catch (err) {
+        logger.debug('Failed to auto-detect Python virtual environment:', err);
+      }
+    }
+    
+    logger.info(`Using Python executable: ${this.pythonExecutable}`);
+  }
+
+  /**
+   * Try to detect Python virtual environment
+   * @returns Path to Python executable in virtual environment or null
+   */
+  private detectVirtualEnvironment(): string | null {
+    try {
+      // Common virtual environment locations to check
+      const possibleVenvPaths = [
+        // Check current working directory
+        path.join(process.cwd(), 'venv', 'bin', 'python'),
+        path.join(process.cwd(), 'env', 'bin', 'python'),
+        path.join(process.cwd(), '.venv', 'bin', 'python'),
+        // Check parent directory
+        path.join(process.cwd(), '..', 'venv', 'bin', 'python'),
+        path.join(process.cwd(), '..', 'env', 'bin', 'python'),
+        path.join(process.cwd(), '..', '.venv', 'bin', 'python'),
+        // Check home directory
+        path.join(process.env.HOME || '', 'venv', 'bin', 'python'),
+        path.join(process.env.HOME || '', 'env', 'bin', 'python'),
+        path.join(process.env.HOME || '', '.venv', 'bin', 'python')
+      ];
+      
+      // For Windows systems
+      if (process.platform === 'win32') {
+        possibleVenvPaths.push(
+          path.join(process.cwd(), 'venv', 'Scripts', 'python.exe'),
+          path.join(process.cwd(), 'env', 'Scripts', 'python.exe'),
+          path.join(process.cwd(), '.venv', 'Scripts', 'python.exe'),
+          path.join(process.cwd(), '..', 'venv', 'Scripts', 'python.exe'),
+          path.join(process.cwd(), '..', 'env', 'Scripts', 'python.exe'),
+          path.join(process.cwd(), '..', '.venv', 'Scripts', 'python.exe')
+        );
+      }
+      
+      // Check which paths exist and contain retriv
+      for (const venvPath of possibleVenvPaths) {
+        if (fs.existsSync(venvPath)) {
+          try {
+            // Check if this Python has retriv installed
+            execSync(`${venvPath} -c "import retriv"`, { stdio: 'pipe' });
+            return venvPath; // Found a working environment with retriv
+          } catch (err) {
+            // This environment doesn't have retriv, continue checking
+          }
+        }
+      }
+      
+      // Check if VIRTUAL_ENV is set
+      if (process.env.VIRTUAL_ENV) {
+        const venvPythonPath = path.join(
+          process.env.VIRTUAL_ENV,
+          process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+        );
+        
+        if (fs.existsSync(venvPythonPath)) {
+          try {
+            execSync(`${venvPythonPath} -c "import retriv"`, { stdio: 'pipe' });
+            return venvPythonPath;
+          } catch (err) {
+            // VIRTUAL_ENV is set but doesn't contain retriv
+          }
+        }
+      }
+      
+      return null; // No suitable virtual environment found
+    } catch (err) {
+      logger.error('Error while detecting virtual environment:', err);
+      return null;
+    }
   }
 
   /**
@@ -151,10 +255,10 @@ export class BM25Searcher {
         return;
       }
       
-      logger.info(`Initializing Python retriv bridge at ${scriptPath}`);
+      logger.info(`Initializing Python retriv bridge at ${scriptPath} using executor: ${this.pythonExecutable}`);
       
-      // Spawn a Python process
-      this.pythonProcess = spawn('python', [scriptPath]);
+      // Spawn a Python process using the configured Python executable
+      this.pythonProcess = spawn(this.pythonExecutable, [scriptPath]);
       
       // Buffer for collecting stdout data
       let stdoutBuffer = '';

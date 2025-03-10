@@ -33,6 +33,12 @@ interface ModelConfig {
   presencePenalty: number;
 }
 
+interface PythonConfig {
+  path?: string;
+  virtualEnv?: string;
+  detectVirtualEnv?: boolean;
+}
+
 export interface Config {
   // Server configuration
   server: ServerConfig;
@@ -67,6 +73,9 @@ export interface Config {
   
   // Paths
   rootDir: string;
+  
+  // Python configuration
+  python?: PythonConfig;
 }
 
 /**
@@ -141,6 +150,13 @@ export const config: Config = {
   cacheDir: process.env.CACHE_DIR || path.join(rootDir, '.cache'),
   maxCacheSize: parseInt(process.env.MAX_CACHE_SIZE || '1073741824', 10), // 1GB default
   
+  // Python configuration
+  python: {
+    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH,
+    virtualEnv: process.env.PYTHON_VENV_PATH,
+    detectVirtualEnv: parseBool(process.env.PYTHON_DETECT_VENV, true),
+  },
+  
   // Paths
   rootDir,
 };
@@ -204,6 +220,15 @@ export function validateConfig(): void {
   // Validate cache config
   if (config.maxCacheSize <= 0) {
     errors.push(`Invalid maxCacheSize: ${config.maxCacheSize}`);
+  }
+
+  // Validate Python path if provided
+  if (config.python?.path && typeof config.python.path === 'string') {
+    try {
+      // No need for extensive validation - the path will be checked when used
+    } catch (error) {
+      errors.push(`Invalid Python path: ${config.python.path}`);
+    }
   }
 
   if (errors.length > 0) {

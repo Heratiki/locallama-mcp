@@ -61,6 +61,39 @@ npm install
 npm run build
 ```
 
+### Python Setup for Retriv (Code Search)
+
+The code search functionality uses Retriv, a Python-based semantic search library. To use this feature:
+
+1. **Install Python**: Ensure Python 3.8+ is installed on your system.
+
+2. **Create a Virtual Environment** (recommended):
+   ```bash
+   # For Linux/macOS:
+   python3 -m venv venv
+   source venv/bin/activate
+
+   # For Windows:
+   python -m venv venv
+   venv\Scripts\activate
+   ```
+
+3. **Install Retriv and dependencies**:
+   ```bash
+   pip install retriv>=0.3.1 numpy>=1.22.0 scikit-learn>=1.0.2 scipy>=1.8.0
+   ```
+
+4. **Configure the server to use your virtual environment**:
+   Add these lines to your `.env` file:
+   ```
+   # Python Configuration
+   PYTHON_PATH=./venv/bin/python  # For Linux/macOS
+   # PYTHON_PATH=./venv/Scripts/python.exe  # For Windows
+   PYTHON_DETECT_VENV=true
+   ```
+
+> **Note**: You can also let the server install Retriv automatically by using the `retriv_init` tool with `install_dependencies` set to `true`.
+
 ## Configuration
 
 Copy the `.env.example` file to create your own `.env` file:
@@ -107,6 +140,11 @@ OPENROUTER_API_KEY=your_openrouter_api_key_here
 
 # Logging
 LOG_LEVEL=debug
+
+# Python Configuration
+PYTHON_PATH=./venv/bin/python  # For Linux/macOS
+# PYTHON_PATH=./venv/Scripts/python.exe  # For Windows
+PYTHON_DETECT_VENV=true
 ```
 
 ### Environment Variables Explained
@@ -135,6 +173,11 @@ LOG_LEVEL=debug
 
 - **API Keys**
   - `OPENROUTER_API_KEY`: Your OpenRouter API key for accessing various LLM services
+
+- **Python Configuration** (New)
+  - `PYTHON_PATH`: Path to your Python executable (set to virtual environment Python if available)
+  - `PYTHON_VENV_PATH`: Path to your Python virtual environment 
+  - `PYTHON_DETECT_VENV`: Enable automatic detection of Python virtual environments
 
 - **New Tools**
   - `clear_openrouter_tracking`: Clears OpenRouter tracking data and forces an update
@@ -304,10 +347,11 @@ Example usage:
 
 The server now implements a "Retriv First" strategy to prioritize existing code:
 
-1. **Code Indexing**: Use `retriv_init` to index your code repositories
-2. **Semantic Search**: When a task is submitted, Retriv searches for similar code
-3. **Code Reuse**: If similar code is found, it's returned immediately without generating new code
-4. **Fallback**: If no suitable code is found, the task is routed to the appropriate model
+1. **Set up Python environment**: Follow the Python setup instructions above
+2. **Code Indexing**: Use `retriv_init` to index your code repositories
+3. **Semantic Search**: When a task is submitted, Retriv searches for similar code
+4. **Code Reuse**: If similar code is found, it's returned immediately without generating new code
+5. **Fallback**: If no suitable code is found, the task is routed to the appropriate model
 
 Example usage:
 
@@ -315,6 +359,7 @@ Example usage:
 /use_mcp_tool locallama retriv_init {
   "directories": ["/path/to/your/code/repo"],
   "exclude_patterns": ["node_modules/**", "dist/**"],
+  "install_dependencies": true,
   "force_reindex": true
 }
 ```

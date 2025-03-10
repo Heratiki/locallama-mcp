@@ -16,12 +16,61 @@ import { v4 as uuidv4 } from 'uuid';
 import { loadUserPreferences } from '../user-preferences/index.js';
 import { codeSearchEngineManager, getCodeSearchEngine, indexDocuments } from '../cost-monitor/codeSearchEngine.js';
 import { BM25Options } from '../cost-monitor/bm25.js';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Check if OpenRouter API key is configured
  */
 export function isOpenRouterConfigured(): boolean {
   return !!config.openRouterApiKey;
+}
+
+/**
+ * Check if a Python module is installed
+ */
+function isPythonModuleInstalled(moduleName: string): boolean {
+  try {
+    const result = execSync(`python -c "import ${moduleName}"`, { stdio: 'pipe' });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Check if Python is installed and available
+ */
+function isPythonAvailable(): boolean {
+  try {
+    execSync('python --version', { stdio: 'pipe' });
+    return true;
+  } catch (error) {
+    try {
+      execSync('python3 --version', { stdio: 'pipe' });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+}
+
+/**
+ * Generate a requirements.txt file for Retriv dependencies
+ */
+function generateRequirementsTxt(): string {
+  const requirementsPath = path.join(process.cwd(), 'retriv-requirements.txt');
+  
+  const dependencies = [
+    'retriv>=0.3.1',
+    'numpy>=1.22.0',
+    'scikit-learn>=1.0.2',
+    'scipy>=1.8.0'
+  ];
+  
+  fs.writeFileSync(requirementsPath, dependencies.join('\n'));
+  return requirementsPath;
 }
 
 /**
@@ -34,6 +83,10 @@ export function setupToolHandlers(server: Server): void {
   // List available tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger.debug('Listing available tools');
+    
+    // Check if retriv-related tools should be included based on Python availability
+    const pythonAvailable = isPythonAvailable();
+    const retrivAvailable = pythonAvailable && isPythonModuleInstalled('retriv');
     
     const tools = [
       {
@@ -102,6 +155,10 @@ export function setupToolHandlers(server: Server): void {
             bm25_options: {
               type: 'object',
               description: 'Options for the BM25 algorithm',
+            },
+            install_dependencies: {
+              type: 'boolean',
+              description: 'Whether to automatically install required Python dependencies',
             },
           },
           required: ['directories'],
@@ -965,6 +1022,67 @@ export function setupToolHandlers(server: Server): void {
       
       case 'retriv_init': {
         try {
+          // Check if Python is available
+          if (!isPythonAvailable()) {
+            return {
+              content: [{ 
+                type: 'text', 
+                text: JSON.stringify({
+                  status: 'error',
+                  message: 'Python is not installed or not available in PATH. Python is required for Retriv functionality.',
+                  recommendation: 'Install Python 3.8 or newer and ensure it\'s available in your system PATH.'
+                }, null, 2) 
+              }],
+              isError: true,
+            };
+          }
+          
+          // Check if Retriv is installed
+          const retrivInstalled = isPythonModuleInstalled('retriv');
+          const installDependencies = args.install_dependencies === true;
+          
+          if (!retrivInstalled) {
+            if (installDependencies) {
+              logger.info('Installing Retriv Python package...');
+              try {
+                // Generate requirements file
+                const requirementsPath = generateRequirementsTxt();
+                
+                // Install dependencies
+                execSync(`pip install -r ${requirementsPath}`, { stdio: 'inherit' });
+                logger.info('Successfully installed Retriv and dependencies');
+                
+                // Clean up requirements file
+                fs.unlinkSync(requirementsPath);
+              } catch (error) {
+                return {
+                  content: [{ 
+                    type: 'text', 
+                    text: JSON.stringify({
+                      status: 'error',
+                      message: 'Failed to install Retriv Python package automatically.',
+                      error: error instanceof Error ? error.message : String(error),
+                      recommendation: 'Try installing manually with: pip install retriv>=0.3.1 numpy>=1.22.0 scikit-learn>=1.0.2 scipy>=1.8.0'
+                    }, null, 2) 
+                  }],
+                  isError: true,
+                };
+              }
+            } else {
+              return {
+                content: [{ 
+                  type: 'text', 
+                  text: JSON.stringify({
+                    status: 'error',
+                    message: 'The Retriv Python package is required but not installed.',
+                    recommendation: 'Use this tool again with install_dependencies set to true, or install manually with: pip install retriv>=0.3.1 numpy>=1.22.0 scikit-learn>=1.0.2 scipy>=1.8.0'
+                  }, null, 2) 
+                }],
+                isError: true,
+              };
+            }
+          }
+          
           // Validate arguments
           if (!args.directories || !Array.isArray(args.directories)) {
             return {
@@ -1049,13 +1167,25 @@ export function setupToolHandlers(server: Server): void {
           };
         } catch (error) {
           logger.error('Error initializing Retriv:', error);
+          
+          // Provide detailed error message with troubleshooting information
+          let errorMessage = `Error initializing Retriv: ${error instanceof Error ? error.message : String(error)}`;
+          let recommendation = '';
+          
+          if (errorMessage.includes("No module named 'retriv'")) {
+            recommendation = 'The Retriv Python module is missing. Run this tool again with install_dependencies set to true, or install manually with: pip install retriv>=0.3.1';
+          } else if (errorMessage.includes('numpy') || errorMessage.includes('scikit') || errorMessage.includes('scipy')) {
+            recommendation = 'Missing Python dependencies. Run this tool again with install_dependencies set to true, or install manually with: pip install numpy scikit-learn scipy';
+          }
+          
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
                   status: 'error',
-                  message: `Error initializing Retriv: ${error instanceof Error ? error.message : String(error)}`,
+                  message: errorMessage,
+                  recommendation: recommendation || 'Check if Python and all required dependencies are correctly installed.',
                   stack: error instanceof Error && error.stack ? error.stack : undefined,
                   directories_attempted: args.directories
                 }, null, 2),
