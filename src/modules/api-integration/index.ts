@@ -10,19 +10,19 @@ export * from './tool-definition/index.js';
 
 // Re-export from task-execution module
 // Will be uncommented as modules are implemented
-// export * from './task-execution/index.js';
+export * from './task-execution/index.js';
 
 // Re-export from retriv-integration module
-// export * from './retriv-integration/index.js';
+export * from './retriv-integration/index.js';
 
 // Re-export from openrouter-integration module
-// export * from './openrouter-integration/index.js';
+export * from './openrouter-integration/index.js';
 
 // Re-export from cost-estimation module
-// export * from './cost-estimation/index.js';
+export * from './cost-estimation/index.js';
 
 // Re-export from routing module
-// export * from './routing/index.js';
+export * from './routing/index.js';
 
 // Re-export specific items from tools.ts for backward compatibility
 import { setupToolHandlers as originalSetupToolHandlers } from './tools.js';

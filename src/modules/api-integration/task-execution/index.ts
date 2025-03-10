@@ -10,7 +10,7 @@ import { getCodeSearchEngine, indexDocuments } from '../../cost-monitor/codeSear
  * Task Executor class implementing the ITaskExecutor interface
  * Handles execution of tasks with different models
  */
-class TaskExecutor implements ITaskExecutor {
+export class TaskExecutor implements ITaskExecutor {
   /**
    * Execute a task using the selected model
    * This handles the actual execution of the task through the appropriate service
@@ -108,7 +108,7 @@ class TaskExecutor implements ITaskExecutor {
   /**
    * Execute a task with an Ollama model
    */
-  protected async executeOllamaModel(model: string, task: string): Promise<string> {
+  async executeOllamaModel(model: string, task: string): Promise<string> {
     logger.info(`Executing task with Ollama model ${model}`);
     
     try {
@@ -147,7 +147,7 @@ class TaskExecutor implements ITaskExecutor {
   /**
    * Execute a task with an LM Studio model
    */
-  protected async executeLmStudioModel(model: string, task: string): Promise<string> {
+  async executeLmStudioModel(model: string, task: string): Promise<string> {
     logger.info(`Executing task with LM Studio model ${model}`);
     
     try {
@@ -188,7 +188,7 @@ class TaskExecutor implements ITaskExecutor {
   /**
    * Execute a task with a local model
    */
-  protected async executeLocalModel(model: string, task: string): Promise<string> {
+  async executeLocalModel(model: string, task: string): Promise<string> {
     logger.info(`Executing task with local model ${model}`);
     
     try {

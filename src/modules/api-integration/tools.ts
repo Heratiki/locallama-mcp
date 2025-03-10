@@ -1,3 +1,13 @@
+/**
+ * @deprecated This file has been deprecated. Please migrate to the new modules:
+ * - Tool Definition: src/modules/api-integration/tool-definition/index.ts
+ * - Task Execution: src/modules/api-integration/task-execution/index.ts
+ * - Retriv Integration: src/modules/api-integration/retriv-integration/index.ts
+ * - OpenRouter Integration: src/modules/api-integration/openrouter-integration/index.ts
+ * - Cost Estimation: src/modules/api-integration/cost-estimation/index.ts
+ * - Routing: src/modules/api-integration/routing/index.ts
+ */
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   CallToolRequestSchema,
