@@ -1,4 +1,3 @@
-// filepath: /home/heratiki/Source/locallama-mcp/src/modules/api-integration/task-execution/index.ts
 import { logger } from '../../../utils/logger.js';
 import { config } from '../../../config/index.js';
 import { jobTracker } from '../../decision-engine/services/jobTracker.js';
@@ -26,7 +25,7 @@ export class TaskExecutor implements ITaskExecutor {
       
       // Determine the execution path based on model provider
       if (model.startsWith('openrouter:')) {
-        // Handle OpenRouter execution
+        // Handle OpenRouter execution via explicit prefix
         try {
           // Update progress to 50% before API call
           jobTracker.updateJobProgress(jobId, 50, 60000);
@@ -38,6 +37,21 @@ export class TaskExecutor implements ITaskExecutor {
           jobTracker.updateJobProgress(jobId, 75, 30000);
         } catch (error) {
           logger.error(`Failed to execute task with OpenRouter: ${error}`);
+          throw error;
+        }
+      } else if (model.includes('/')) {
+        // Handle OpenRouter models with provider/model format (e.g., google/gemini-exp-1206:free)
+        try {
+          // Update progress to 50% before API call
+          jobTracker.updateJobProgress(jobId, 50, 60000);
+          
+          // Execute the task via OpenRouter
+          result = await openRouterModule.executeTask(model, task);
+          
+          // Update progress to 75% after successful API call
+          jobTracker.updateJobProgress(jobId, 75, 30000);
+        } catch (error) {
+          logger.error(`Failed to execute task with OpenRouter model ${model}: ${error}`);
           throw error;
         }
       } else {
@@ -63,7 +77,7 @@ export class TaskExecutor implements ITaskExecutor {
               result = await this.executeLocalModel(modelName, task);
               break;
             default:
-              throw new Error(`Unsupported model provider: ${provider}`);
+              throw new Error(`Unsupported model provider: ${model}`);
           }
           
           // Update progress to 75% after execution
