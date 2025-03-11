@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.13.3](https://github.com/Heratiki/locallama-mcp/compare/v1.13.2...v1.13.3) (2025-03-11)
+
+
+### Bug Fixes
+
+* add cost monitor import to API integration routing module ([3de0817](https://github.com/Heratiki/locallama-mcp/commit/3de081740e7258c4b0ea15edda661559e1b4bd2e))
+
 ### [1.13.2](https://github.com/Heratiki/locallama-mcp/compare/v1.13.1...v1.13.2) (2025-03-11)
 
 ### [1.13.1](https://github.com/Heratiki/locallama-mcp/compare/v1.13.0...v1.13.1) (2025-03-11)
