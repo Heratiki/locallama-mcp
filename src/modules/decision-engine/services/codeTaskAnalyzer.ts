@@ -145,7 +145,7 @@ export const codeTaskAnalyzer = {
       
       // Process and validate subtasks
       const subtasks: CodeSubtask[] = subtasksRaw.map(subtask => ({
-        id: typeof subtask.id === 'string' ? subtask.id : uuidv4(),
+        id: typeof subtask.id === 'string' ? subtask.id : (typeof subtask.id === 'number' ? String(subtask.id) : uuidv4()),
         description: subtask.description,
         complexity: Math.min(Math.max(subtask.complexity || 0.5, 0), 1), // Ensure within 0-1
         estimatedTokens: subtask.estimatedTokens ||
@@ -208,6 +208,19 @@ export const codeTaskAnalyzer = {
 
     try {
       // Get detailed integration and domain factors
+      if (!task) {
+        logger.warn('Task is undefined within try block, returning default complexity.');
+        return {
+          overallComplexity: 0.5,
+          factors: {
+            algorithmic: 0.5,
+            integration: 0.5,
+            domainKnowledge: 0.5,
+            technical: 0.5
+          },
+          explanation: 'Task was undefined within try block, using default medium complexity.'
+        };
+      }
       const integrationFactors = await evaluateIntegrationFactors(task);
       const domainFactors = await evaluateDomainKnowledge(task);
       const technicalFactors = await evaluateTechnicalRequirements(task);

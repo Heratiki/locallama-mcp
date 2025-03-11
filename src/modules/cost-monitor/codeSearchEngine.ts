@@ -49,7 +49,8 @@ class CodeSearchEngineManager {
       await this.codeSearchEngine.initialize();
       
       this.initialized = true;
-      logger.info('Code search engine manager initialized successfully');
+      logger.info('Code search engine manager initialized successfully, indexing root directory');
+      await this.indexDirectory(config.rootDir);
     } catch (error) {
       logger.error('Failed to initialize code search engine manager', error);
       throw error;

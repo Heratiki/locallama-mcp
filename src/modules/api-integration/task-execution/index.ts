@@ -39,7 +39,7 @@ export class TaskExecutor implements ITaskExecutor {
           logger.error(`Failed to execute task with OpenRouter: ${error}`);
           throw error;
         }
-      } else if (model.includes('/')) {
+      } else if (model.startsWith('mistralai/') || model.includes('/')) {
         // Handle OpenRouter models with provider/model format (e.g., google/gemini-exp-1206:free)
         try {
           // Update progress to 50% before API call
