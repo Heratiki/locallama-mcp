@@ -145,10 +145,10 @@ export const codeTaskAnalyzer = {
       
       // Process and validate subtasks
       const subtasks: CodeSubtask[] = subtasksRaw.map(subtask => ({
-        id: subtask.id || uuidv4(),
+        id: typeof subtask.id === 'string' ? subtask.id : uuidv4(),
         description: subtask.description,
         complexity: Math.min(Math.max(subtask.complexity || 0.5, 0), 1), // Ensure within 0-1
-        estimatedTokens: subtask.estimatedTokens || 
+        estimatedTokens: subtask.estimatedTokens ||
           Math.round(500 + (subtask.complexity || 0.5) * 1500), // Estimate based on complexity if not provided
         dependencies: subtask.dependencies || [],
         codeType: subtask.codeType || 'other',
@@ -189,9 +189,23 @@ export const codeTaskAnalyzer = {
    * @param task The code task to analyze
    * @returns A complexity analysis result
    */
-  async analyzeComplexity(task: string): Promise<CodeComplexityResult> {
+  async analyzeComplexity(task: string | undefined): Promise<CodeComplexityResult> {
+    if (!task) {
+      logger.warn('Task is undefined, returning default complexity.');
+      return {
+        overallComplexity: 0.5,
+        factors: {
+          algorithmic: 0.5,
+          integration: 0.5,
+          domainKnowledge: 0.5,
+          technical: 0.5
+        },
+        explanation: 'Task was undefined, using default medium complexity.'
+      };
+    }
+
     logger.debug('Analyzing complexity of code task:', task);
-    
+
     try {
       // Get detailed integration and domain factors
       const integrationFactors = await evaluateIntegrationFactors(task);

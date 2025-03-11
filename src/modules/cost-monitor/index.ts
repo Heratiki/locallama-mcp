@@ -41,6 +41,12 @@ export interface CodeTaskOptimization {
  */
 export const costMonitor = {
   /**
+   * Cache for free models
+   */
+  freeModelsCache: [] as Model[],
+  lastUpdated: '',
+
+  /**
    * Token manager for tracking and optimizing token usage
    */
   tokenManager,
@@ -106,25 +112,38 @@ export const costMonitor = {
    */
   async getFreeModels(forceUpdate = false): Promise<Model[]> {
     logger.debug(`Getting free models (forceUpdate=${forceUpdate})`);
-    
+
+    const now = new Date();
+    const lastUpdated = this.lastUpdated ? new Date(this.lastUpdated) : null;
+    const hoursSinceLastUpdate = lastUpdated ? (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60) : Infinity;
+
     try {
       // Only try to get OpenRouter models if API key is configured
       if (config.openRouterApiKey) {
+        if (!forceUpdate && hoursSinceLastUpdate <= 1 && this.freeModelsCache.length > 0) {
+          logger.debug(`Using cached free models (updated ${hoursSinceLastUpdate.toFixed(1)} hours ago)`);
+          return this.freeModelsCache;
+        }
+
         // Initialize the OpenRouter module if needed
         if (Object.keys(openRouterModule.modelTracking.models).length === 0) {
           await openRouterModule.initialize(forceUpdate);
         }
-        
+
         // Get free models from OpenRouter with forceUpdate parameter
         const freeModels = await openRouterModule.getFreeModels(forceUpdate);
-        
+
         // If no free models were found and we didn't already force an update, try clearing tracking data
         if (freeModels.length === 0 && !forceUpdate) {
           logger.info('No free models found, clearing tracking data and forcing update...');
           await openRouterModule.clearTrackingData();
           return await openRouterModule.getFreeModels();
         }
-        
+
+        // Update the cache
+        this.freeModelsCache = freeModels;
+        this.lastUpdated = new Date().toISOString();
+
         // Log information about free models
         if (freeModels.length > 0) {
           logger.info(`Found ${freeModels.length} free models from OpenRouter`);
@@ -167,8 +186,8 @@ export const costMonitor = {
     } catch (error) {
       logger.warn('Failed to get free models from OpenRouter:', error);
     }
-    
-    return [];
+
+    return this.freeModelsCache;
   },
   
   /**

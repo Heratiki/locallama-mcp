@@ -393,7 +393,7 @@ export class BM25Searcher {
           this.bridgeReady = true;
           resolve();
         }
-      }, 10000); // 10 seconds timeout
+      }, 30000); // 30 seconds timeout
     });
 
     return this.initPromise;
