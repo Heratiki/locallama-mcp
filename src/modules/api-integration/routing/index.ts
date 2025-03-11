@@ -3,6 +3,7 @@ import { jobTracker } from '../../decision-engine/services/jobTracker.js';
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
+import { costMonitor } from '../../cost-monitor/index.js';
 import { IRouter, RouteTaskParams, RouteTaskResult, CancelJobResult } from './types.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
