@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.13.1](https://github.com/Heratiki/locallama-mcp/compare/v1.13.0...v1.13.1) (2025-03-11)
+
+
+### Bug Fixes
+
+* add local Llama endpoint to configuration and enhance task execution logging ([c21d3ba](https://github.com/Heratiki/locallama-mcp/commit/c21d3baa04b4a91dde555c24bba1f6fd259db1f1))
+
 ## [1.13.0](https://github.com/Heratiki/locallama-mcp/compare/v1.12.0...v1.13.0) (2025-03-10)
 
 
