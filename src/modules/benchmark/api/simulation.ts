@@ -14,6 +14,8 @@ export async function simulateOpenAiApi(
     completion_tokens: number;
   };
 }> {
+  logger.debug('Starting OpenAI API simulation', { task, timeout });
+  
   // Simulate API call delay
   await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
   
@@ -23,7 +25,13 @@ export async function simulateOpenAiApi(
   if (success) {
     // Estimate token counts
     const promptTokens = Math.ceil(task.length / 4);
-    const completionTokens = Math.ceil(promptTokens * 0.8); // Simulate response length
+    const completionTokens = Math.ceil(promptTokens * 0.8);
+    
+    logger.info('OpenAI API simulation successful', {
+      promptTokens,
+      completionTokens,
+      taskPreview: task.substring(0, 50)
+    });
     
     return {
       success: true,
@@ -34,6 +42,7 @@ export async function simulateOpenAiApi(
       },
     };
   } else {
+    logger.warn('OpenAI API simulation failed');
     return { success: false };
   }
 }
@@ -52,6 +61,8 @@ export async function simulateGenericApi(
     completion_tokens: number;
   };
 }> {
+  logger.debug('Starting generic API simulation', { task, timeout });
+  
   // Simulate API call delay
   await new Promise(resolve => setTimeout(resolve, Math.random() * 1500 + 1000));
   
@@ -61,7 +72,13 @@ export async function simulateGenericApi(
   if (success) {
     // Estimate token counts
     const promptTokens = Math.ceil(task.length / 4);
-    const completionTokens = Math.ceil(promptTokens * 0.7); // Simulate response length
+    const completionTokens = Math.ceil(promptTokens * 0.7);
+    
+    logger.info('Generic API simulation successful', {
+      promptTokens,
+      completionTokens,
+      taskPreview: task.substring(0, 50)
+    });
     
     return {
       success: true,
@@ -72,6 +89,7 @@ export async function simulateGenericApi(
       },
     };
   } else {
+    logger.warn('Generic API simulation failed');
     return { success: false };
   }
 }

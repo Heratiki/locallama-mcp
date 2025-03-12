@@ -2,6 +2,20 @@ import axios from 'axios';
 import { config } from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
 
+// Define interface for Ollama API response
+interface OllamaResponse {
+  model: string;
+  message: {
+    role: string;
+    content: string;
+  };
+  done: boolean;
+  total_duration?: number;
+  load_duration?: number;
+  prompt_eval_duration?: number;
+  eval_duration?: number;
+}
+
 /**
  * Call Ollama API
  */
@@ -21,7 +35,7 @@ export async function callOllamaApi(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
-    const response = await axios.post(
+    const response = await axios.post<OllamaResponse>(
       `${config.ollamaEndpoint}/chat`,
       {
         model: modelId,

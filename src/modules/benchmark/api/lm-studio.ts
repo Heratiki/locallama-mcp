@@ -2,6 +2,27 @@ import axios from 'axios';
 import { config } from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
 
+// Define the response structure
+interface LmStudioResponse {
+  choices: {
+    message: {
+      content: string;
+      role: string;
+    };
+    finish_reason?: string;
+    index: number;
+  }[];
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  created?: number;
+  id?: string;
+  model?: string;
+  object?: string;
+}
+
 /**
  * Call LM Studio API
  */
@@ -21,7 +42,7 @@ export async function callLmStudioApi(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
-    const response = await axios.post(
+    const response = await axios.post<LmStudioResponse>(
       `${config.lmStudioEndpoint}/chat/completions`,
       {
         model: modelId,
