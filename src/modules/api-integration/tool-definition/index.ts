@@ -312,6 +312,46 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
     if (retrivAvailable) {
       tools.push(
         {
+          name: 'retriv_init',
+          description: 'Initialize and configure Retriv for code search and indexing',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              directories: {
+                type: 'array' as const,
+                items: {
+                  type: 'string' as const
+                },
+                description: 'Array of directories to index'
+              },
+              exclude_patterns: {
+                type: 'array' as const,
+                items: {
+                  type: 'string' as const
+                },
+                description: 'Array of glob patterns to exclude from indexing'
+              },
+              chunk_size: {
+                type: 'number' as const,
+                description: 'Size of chunks for large files (in lines)'
+              },
+              force_reindex: {
+                type: 'boolean' as const,
+                description: 'Whether to force reindexing of all files'
+              },
+              bm25_options: {
+                type: 'object' as const,
+                description: 'Options for the BM25 algorithm'
+              },
+              install_dependencies: {
+                type: 'boolean' as const,
+                description: 'Whether to automatically install required Python dependencies'
+              }
+            },
+            required: ['directories']
+          }
+        },
+        {
           name: 'retriv_search',
           description: 'Search code using Retriv search engine',
           inputSchema: {
