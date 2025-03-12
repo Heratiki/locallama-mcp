@@ -182,7 +182,7 @@ export interface RetrivDocument {
   /**
    * Additional metadata
    */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RetrivSearchResult {
@@ -209,6 +209,6 @@ export interface RetrivSearchResult {
   /**
    * Additional metadata
    */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 

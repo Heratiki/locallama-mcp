@@ -7,6 +7,25 @@ import { Model } from '../../../types/index.js';
 import fs from 'fs/promises';
 import path from 'path';
 
+// Add this interface at the top of the file with other types
+interface ComprehensiveBenchmarkResults {
+  timestamp: string;
+  models: {
+    [modelId: string]: {
+      successRate: number;
+      qualityScore: number;
+      avgResponseTime: number;
+      benchmarkCount: number;
+      complexityScore: number;
+    };
+  };
+  summary?: {
+    totalModels: number;
+    averageSuccessRate: number;
+    averageQualityScore: number;
+  };
+}
+
 /**
  * Benchmark Service
  * Handles model benchmarking operations
@@ -465,7 +484,7 @@ export const benchmarkService = {
         // Read and parse the benchmark results
         const filePath = path.join(benchmarkDir, latestFile);
         const data = await fs.readFile(filePath, 'utf8');
-        const results = JSON.parse(data);
+        const results: ComprehensiveBenchmarkResults = JSON.parse(data) as ComprehensiveBenchmarkResults;
         
         logger.info('Updated model performance profiles from benchmark results');
       } catch (error) {

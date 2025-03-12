@@ -14,11 +14,11 @@ export class RetrivIntegration implements IRetrivIntegration {
     try {
       execSync('python --version', { stdio: 'pipe' });
       return true;
-    } catch (error) {
+    } catch {
       try {
         execSync('python3 --version', { stdio: 'pipe' });
         return true;
-      } catch (error) {
+      } catch {
         return false;
       }
     }
@@ -31,7 +31,7 @@ export class RetrivIntegration implements IRetrivIntegration {
     try {
       execSync(`python -c "import ${moduleName}"`, { stdio: 'pipe' });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -80,11 +80,14 @@ export class RetrivIntegration implements IRetrivIntegration {
       }
     }
     
-    // Initialize the code search engine
+    // Initialize the code search engine with BM25 options
     await codeSearchEngineManager.initialize({
       excludePatterns: params.excludePatterns,
       chunkSize: params.chunkSize,
-      bm25Options: params.bm25Options,
+      bm25Options: (params.bm25Options || {
+        k1: 1.5,
+        b: 0.75
+      }) as BM25Options,
     });
     
     // Index the specified directories
@@ -114,7 +117,7 @@ export class RetrivIntegration implements IRetrivIntegration {
         indexResults.push({
           directory,
           status: 'error' as const, // Fix status to use literal type
-          message: error instanceof Error ? error.message : String(error)
+          message: (error as Error).message
         });
         logger.error(`Error indexing directory ${directory}:`, error);
       }
@@ -160,7 +163,7 @@ export class RetrivIntegration implements IRetrivIntegration {
         metadata: {} // CodeSearchResult doesn't have metadata
       }));
     } catch (error) {
-      logger.error(`Error searching with Retriv: ${error}`);
+      logger.error(`Error searching with Retriv: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -173,7 +176,7 @@ export class RetrivIntegration implements IRetrivIntegration {
       await codeSearchEngineManager.indexDocuments(documents);
       logger.info(`Successfully indexed ${documents.length} documents in Retriv`);
     } catch (error) {
-      logger.error(`Error indexing documents in Retriv: ${error}`);
+      logger.error(`Error indexing documents in Retriv: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -185,7 +188,7 @@ export class RetrivIntegration implements IRetrivIntegration {
     try {
       return await codeSearchEngineManager.getDocumentCount();
     } catch (error) {
-      logger.error(`Error getting document count from Retriv: ${error}`);
+      logger.error(`Error getting document count from Retriv: ${(error as Error).message}`);
       throw error;
     }
   }
