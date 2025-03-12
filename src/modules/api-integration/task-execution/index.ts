@@ -3,7 +3,7 @@ import { config } from '../../../config/index.js';
 import { jobTracker } from '../../decision-engine/services/jobTracker.js';
 import { openRouterModule } from '../../openrouter/index.js';
 import { ITaskExecutor } from '../types.js';
-import { getCodeSearchEngine, indexDocuments } from '../../cost-monitor/codeSearchEngine.js';
+import { indexDocuments } from '../../cost-monitor/codeSearchEngine.js';
 
 /**
  * Task Executor class implementing the ITaskExecutor interface
@@ -21,7 +21,7 @@ export class TaskExecutor implements ITaskExecutor {
       // Update job progress to executing (25%)
       jobTracker.updateJobProgress(jobId, 25, 120000);
       
-      let result;
+      let result: string;
       
       // Determine the execution path based on model provider
       if (model.startsWith('openrouter:')) {
@@ -36,7 +36,7 @@ export class TaskExecutor implements ITaskExecutor {
           // Update progress to 75% after successful API call
           jobTracker.updateJobProgress(jobId, 75, 30000);
         } catch (error) {
-          logger.error(`Failed to execute task with OpenRouter: ${error}`);
+          logger.error(`Failed to execute task with OpenRouter: ${error instanceof Error ? error.message : String(error)}`);
           throw error;
         }
       /*
@@ -63,7 +63,7 @@ export class TaskExecutor implements ITaskExecutor {
           // Update progress to 75% after successful API call
           jobTracker.updateJobProgress(jobId, 75, 30000);
         } catch (error) {
-          logger.error(`Failed to execute task with OpenRouter model ${model}: ${error}`);
+          logger.error(`Failed to execute task with OpenRouter model ${model}: ${error instanceof Error ? error.message : String(error)}`);
           throw error;
         }
       } else {
@@ -95,7 +95,7 @@ export class TaskExecutor implements ITaskExecutor {
           // Update progress to 75% after execution
           jobTracker.updateJobProgress(jobId, 75, 30000);
         } catch (error) {
-          logger.error(`Failed to execute task with model ${model}: ${error}`);
+          logger.error(`Failed to execute task with model ${model}: ${error instanceof Error ? error.message : String(error)}`);
           throw error;
         }
       }
@@ -105,7 +105,7 @@ export class TaskExecutor implements ITaskExecutor {
       
       // Index the result in Retriv if possible
       try {
-        const codeSearchEngine = await getCodeSearchEngine();
+        // Use the indexDocuments function directly instead of a method on CodeSearchEngine
         await indexDocuments([
           { 
             content: formattedResult, 
@@ -115,7 +115,7 @@ export class TaskExecutor implements ITaskExecutor {
         ]);
         logger.info(`Successfully indexed result for job ${jobId} in Retriv`);
       } catch (error) {
-        logger.warn(`Failed to index result in Retriv: ${error}`);
+        logger.warn(`Failed to index result in Retriv: ${error instanceof Error ? error.message : String(error)}`);
         // Continue even if indexing fails
       }
       
@@ -162,7 +162,7 @@ export class TaskExecutor implements ITaskExecutor {
         throw new Error(`Ollama API error (${response.status}): ${errorText}`);
       }
       
-      const result = await response.json();
+      const result = await response.json() as { message?: { content?: string } };
       return result.message?.content || 'No response from Ollama';
     } catch (error) {
       logger.error(`Error executing task with Ollama model ${model}:`, error);
@@ -203,7 +203,7 @@ export class TaskExecutor implements ITaskExecutor {
         throw new Error(`LM Studio API error (${response.status}): ${errorText}`);
       }
       
-      const result = await response.json();
+      const result = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
       return result.choices?.[0]?.message?.content || 'No response from LM Studio';
     } catch (error) {
       logger.error(`Error executing task with LM Studio model ${model}:`, error);
