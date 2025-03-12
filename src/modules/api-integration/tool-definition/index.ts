@@ -3,7 +3,7 @@ import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { IToolDefinitionProvider, ITool } from './types.js';
 import { logger } from '../../../utils/logger.js';
 import { config } from '../../../config/index.js';
-import * as fs from 'fs';
+// import * as fs from 'fs';
 import { execSync } from 'child_process';
 
 /**
@@ -13,11 +13,13 @@ function isPythonAvailable(): boolean {
   try {
     execSync('python --version', { stdio: 'pipe' });
     return true;
-  } catch (error) {
+  } catch (error: unknown) {
+    logger.error(`Python not available: ${(error as Error).message}`);
     try {
       execSync('python3 --version', { stdio: 'pipe' });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
+      logger.error(`Python3 not available: ${(error as Error).message}`);
       return false;
     }
   }
@@ -30,7 +32,8 @@ function isPythonModuleInstalled(moduleName: string): boolean {
   try {
     execSync(`python -c "import ${moduleName}"`, { stdio: 'pipe' });
     return true;
-  } catch (error) {
+  } catch (error: unknown) {
+    logger.error(`Python module ${moduleName} not installed: ${(error as Error).message}`);
     return false;
   }
 }
@@ -47,7 +50,7 @@ export function isOpenRouterConfigured(): boolean {
  */
 class ToolDefinitionProvider implements IToolDefinitionProvider {
   initialize(server: Server): void {
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
+    server.setRequestHandler(ListToolsRequestSchema, () => {
       logger.debug('Listing available tools');
       return { tools: this.getAvailableTools() };
     });
@@ -305,6 +308,30 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       }
     ];
 
+    // Add retriv-specific tools if Python and retriv module are available
+    if (retrivAvailable) {
+      tools.push(
+        {
+          name: 'retriv_search',
+          description: 'Search code using Retriv search engine',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              query: {
+                type: 'string' as const,
+                description: 'Search query'
+              },
+              limit: {
+                type: 'number' as const,
+                description: 'Maximum number of results to return'
+              }
+            },
+            required: ['query']
+          }
+        }
+      );
+    }
+
     // Add OpenRouter-specific tools if API key is configured
     if (isOpenRouterConfigured()) {
       tools.push(
@@ -466,7 +493,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
                 description: 'Whether to use chat format'
               }
             },
-            required: ['task', 'context_length']
+            required: ['task', 'context_length', 'expected_output_length', 'priority', 'complexity', 'preemptive']
           }
         }
       );
