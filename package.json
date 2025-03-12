@@ -1,6 +1,6 @@
 {
   "name": "locallama-mcp",
-  "version": "1.13.3",
+  "version": "1.13.4",
   "description": "MCP Server for intelligently routing coding tasks between local LLMs and free or paid APIs",
   "main": "dist/index.js",
   "type": "module",

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.13.4](https://github.com/Heratiki/locallama-mcp/compare/v1.13.3...v1.13.4) (2025-03-12)
+
+
+### Bug Fixes
+
+* enhance configuration for code search and logging capabilities ([aeb2ac6](https://github.com/Heratiki/locallama-mcp/commit/aeb2ac6eb6ad2e3384e6a13998cfc70d033c85d7))
+* enhance cost monitor with caching and timeout adjustments ([61ca276](https://github.com/Heratiki/locallama-mcp/commit/61ca2760c687a7209fac97dd1f8e6a48b935f3ca))
+* enhance dependency mapping and task analysis with improved validation and error handling ([00c8db8](https://github.com/Heratiki/locallama-mcp/commit/00c8db81429a601e48c51310a757c66b33dadc86))
+* enhance task execution and code search engine initialization with improved logging and error handling ([08e9e7a](https://github.com/Heratiki/locallama-mcp/commit/08e9e7a86f2e390bc0812419f2b0331a77e4de0d))
+
 ### [1.13.3](https://github.com/Heratiki/locallama-mcp/compare/v1.13.2...v1.13.3) (2025-03-11)
 
 
