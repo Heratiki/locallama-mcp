@@ -15,6 +15,7 @@ export interface CodeSearchEngineOptions {
   textPreprocessingOptions?: TextPreprocessingOptions;
   denseRetrieverOptions?: DenseRetrieverOptions;
   hybridRetrieverOptions?: HybridRetrieverOptions;
+  directories?: string[];
 }
 
 import * as fs from 'fs';

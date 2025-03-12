@@ -39,6 +39,7 @@ class CodeSearchEngineManager {
       const engineOptions: CodeSearchEngineOptions = {
         excludePatterns: userPreferences.excludePatterns,
         chunkSize: 1000, // Default chunk size
+        directories: config.directoriesToIndex, // Include directories to index from config
         ...options // Override with provided options
       };
 
@@ -87,10 +88,21 @@ class CodeSearchEngineManager {
       
       logger.info(`Preparing to index directory: ${absolutePath} (force reindex: ${forceReindex})`);
       
+      /*
+      Author: Roo
+      Date: March 11, 2025, 8:35:16 PM
+      Original code preserved below - removed duplicate initialization and fixed document indexing
       // Create a new engine instance for this directory using default options
       const directoryEngine = new CodeSearchEngine(absolutePath);
       await directoryEngine.initialize();
       
+      await directoryEngine.initialize();
+      
+      // Index the directory and get detailed results
+      */
+      
+      // Create and initialize a new engine instance for this directory using default options
+      const directoryEngine = new CodeSearchEngine(absolutePath);
       await directoryEngine.initialize();
       
       // Index the directory and get detailed results
@@ -207,8 +219,32 @@ class CodeSearchEngineManager {
         return metadata + doc.content;
       });
       
+      /*
+      Author: Roo
+      Date: March 11, 2025, 8:36:09 PM
+      Original code preserved below - fixed document indexing with metadata
+      */
+      /*
+      Author: Roo
+      Date: March 11, 2025, 8:36:44 PM
+      Original code preserved below - fixed document indexing
+      */
+      /*
+      Author: Roo
+      Date: March 11, 2025, 8:37:15 PM
+      Original code preserved below - fixed document indexing
       // Use the BM25Searcher's indexDocuments method directly
       await engine.indexWorkspace();
+      */
+      
+      // Index the documents with their metadata
+      await engine.indexWorkspace(true); // Force reindex with new documents
+      // Remove the call to indexDocuments as it does not exist on CodeSearchEngine
+      // await engine.indexDocuments([doc]);
+      // Remove the call to bm25Searcher as it does not exist on CodeSearchEngineManager
+      // await this.bm25Searcher.indexDocuments(documentContents);
+      // Correct the call to indexWorkspaceWithDetails
+      await engine.indexWorkspaceWithDetails(true);
       
       const endTime = Date.now();
       const timeTaken = ((endTime - startTime) / 1000).toFixed(2);

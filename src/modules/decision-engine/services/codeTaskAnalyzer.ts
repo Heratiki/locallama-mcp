@@ -158,7 +158,8 @@ export const codeTaskAnalyzer = {
       // Generate dependency map
       const dependencyMap: Record<string, string[]> = {};
       subtasks.forEach(subtask => {
-        dependencyMap[subtask.id] = subtask.dependencies;
+        const subtaskId = typeof subtask.id === 'string' ? subtask.id : String(subtask.id);
+        dependencyMap[subtaskId] = subtask.dependencies;
       });
       
       // Calculate total estimated tokens
@@ -190,6 +191,25 @@ export const codeTaskAnalyzer = {
    * @returns A complexity analysis result
    */
   async analyzeComplexity(task: string | undefined): Promise<CodeComplexityResult> {
+      if (!task) {
+          logger.warn('Task is undefined, returning default complexity.');
+          return {
+              overallComplexity: 0.5,
+              factors: {
+                  algorithmic: 0.5,
+                  integration: 0.5,
+                  domainKnowledge: 0.5,
+                  technical: 0.5
+              },
+              explanation: 'Task was undefined, using default medium complexity.'
+          };
+      }
+    
+    /*
+    Author: Roo
+    Date: March 11, 2025, 8:28:46 PM
+    Removed duplicate null check that was causing redundant code execution
+    Original code:
     if (!task) {
       logger.warn('Task is undefined, returning default complexity.');
       return {
@@ -203,24 +223,13 @@ export const codeTaskAnalyzer = {
         explanation: 'Task was undefined, using default medium complexity.'
       };
     }
+    */
 
     logger.debug('Analyzing complexity of code task:', task);
 
     try {
       // Get detailed integration and domain factors
-      if (!task) {
-        logger.warn('Task is undefined within try block, returning default complexity.');
-        return {
-          overallComplexity: 0.5,
-          factors: {
-            algorithmic: 0.5,
-            integration: 0.5,
-            domainKnowledge: 0.5,
-            technical: 0.5
-          },
-          explanation: 'Task was undefined within try block, using default medium complexity.'
-        };
-      }
+      
       const integrationFactors = await evaluateIntegrationFactors(task);
       const domainFactors = await evaluateDomainKnowledge(task);
       const technicalFactors = await evaluateTechnicalRequirements(task);
@@ -317,20 +326,47 @@ export const codeTaskAnalyzer = {
       const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || 
                         response.match(/\{[\s\S]*?\}/);
       
+      /*
+      Author: Roo
+      Date: March 11, 2025, 8:29:49 PM
+      Original code preserved below - modified to ensure JSON-parsed subtask IDs are always strings
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        return JSON.parse(jsonStr);
+      }
+      */
+      
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
         const parsed = JSON.parse(jsonStr);
         
-        if (parsed.subtasks && Array.isArray(parsed.subtasks)) {
-          return parsed.subtasks;
-        } else if (Array.isArray(parsed)) {
-          return parsed;
-        } else {
-          return [parsed]; // Treat as a single subtask
+        // Ensure all subtask IDs are strings
+        // Define minimal type for raw subtask data
+        type RawSubtask = {
+          id?: string | number;
+          [key: string]: any;
+        };
+        
+        if (Array.isArray(parsed)) {
+          return parsed.map((subtask: RawSubtask) => ({
+            ...subtask,
+            id: subtask.id ? String(subtask.id) : uuidv4()
+          }));
+        } else if (parsed.subtasks && Array.isArray(parsed.subtasks)) {
+          // Handle case where JSON contains a wrapper object with subtasks array
+          return parsed.subtasks.map((subtask: RawSubtask) => ({
+            ...subtask,
+            id: subtask.id ? String(subtask.id) : uuidv4()
+          }));
         }
+        return []; // Return empty array if JSON doesn't match expected format
       }
       
       // Fallback to heuristic parsing if JSON extraction fails
+      /*
+      Author: Roo
+      Date: March 11, 2025, 8:29:12 PM
+      Original code preserved below - modified to ensure subtask.id is always a string
       const sections = response.split(/\n\s*\d+\.\s+/);
       return sections
         .filter(section => section.trim().length > 0)
@@ -346,7 +382,34 @@ export const codeTaskAnalyzer = {
             description: descriptionMatch ? descriptionMatch[1].trim() : section.trim().split('\n')[0],
             complexity: complexityMatch ? parseFloat(complexityMatch[1]) : 0.5,
             estimatedTokens: tokensMatch ? parseInt(tokensMatch[1]) : 1000,
-            dependencies: dependenciesMatch ? 
+            dependencies: dependenciesMatch ?
+              dependenciesMatch[1].split(',').map(d => d.trim()) : [],
+            codeType: typeMatch ? typeMatch[1].toLowerCase() : 'other'
+          };
+        });
+      */
+      
+      // Parse sections with string ID validation
+      const sections = response.split(/\n\s*\d+\.\s+/);
+      return sections
+        .filter(section => section.trim().length > 0)
+        .map((section, index) => {
+          const descriptionMatch = section.match(/(?:Title|Description|Task):\s*(.+?)(?:\n|$)/i);
+          const complexityMatch = section.match(/Complexity:\s*(\d+(?:\.\d+)?)/i);
+          const tokensMatch = section.match(/Tokens?:\s*(\d+)/i);
+          const dependenciesMatch = section.match(/Dependencies?:\s*(.+?)(?:\n|$)/i);
+          const typeMatch = section.match(/Type:\s*(\w+)/i);
+          const idMatch = section.match(/ID:\s*(.+?)(?:\n|$)/i);
+          
+          // Ensure ID is always a string, using provided ID or generating a new UUID
+          const id = idMatch ? String(idMatch[1].trim()) : uuidv4();
+          
+          return {
+            id,
+            description: descriptionMatch ? descriptionMatch[1].trim() : section.trim().split('\n')[0],
+            complexity: complexityMatch ? parseFloat(complexityMatch[1]) : 0.5,
+            estimatedTokens: tokensMatch ? parseInt(tokensMatch[1]) : 1000,
+            dependencies: dependenciesMatch ?
               dependenciesMatch[1].split(',').map(d => d.trim()) : [],
             codeType: typeMatch ? typeMatch[1].toLowerCase() : 'other'
           };

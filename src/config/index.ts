@@ -72,6 +72,10 @@ export interface Config {
   cacheDir: string;
   maxCacheSize: number;
   
+  // Code Search Configuration
+  directoriesToIndex?: string[]; // Directories to index for code search
+  codeSearchExcludePatterns?: string[]; // Patterns to exclude from indexing
+  
   // Paths
   rootDir: string;
   

@@ -39,8 +39,20 @@ export class TaskExecutor implements ITaskExecutor {
           logger.error(`Failed to execute task with OpenRouter: ${error}`);
           throw error;
         }
-      } else if (model.startsWith('mistralai/') || model.includes('/')) {
+      /*
+      Author: Roo
+      Date: March 11, 2025, 8:34:22 PM
+      Original code preserved below - improved model provider handling logic
+      } else if (model.startsWith('mistralai/') || model.includes('/') || model === 'mistralai/mistral-small-24b-instruct-2501') {
         // Handle OpenRouter models with provider/model format (e.g., google/gemini-exp-1206:free)
+      */
+      } else if (model.startsWith('mistralai/') ||
+                 model.startsWith('google/') ||
+                 model.startsWith('anthropic/') ||
+                 (model.includes('/') && !model.includes(':'))) {
+        // Handle OpenRouter models with provider/model format
+        // Explicitly support known providers and handle generic provider/model formats
+        // Skip if it contains ':' as that's likely a local provider format (e.g., 'ollama:llama2')
         try {
           // Update progress to 50% before API call
           jobTracker.updateJobProgress(jobId, 50, 60000);

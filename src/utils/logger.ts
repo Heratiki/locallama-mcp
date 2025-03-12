@@ -1,4 +1,6 @@
 import { config } from '../config/index.js';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Log levels
@@ -29,35 +31,71 @@ function getLogLevelFromString(level: string): LogLevel {
 }
 
 /**
+ * Ensure log directory exists
+ */
+function ensureLogDirectory(logFile: string) {
+  const logDir = path.dirname(logFile);
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+}
+
+/**
+ * Write message to log file if configured
+ */
+function writeToLogFile(message: string) {
+  if (config.logFile) {
+    ensureLogDirectory(config.logFile);
+    fs.appendFileSync(config.logFile, message + '\n');
+  }
+}
+
+/**
  * Current log level from configuration
  */
 const currentLogLevel = getLogLevelFromString(config.logLevel);
 
 /**
- * Simple logger utility
+ * Format log message with timestamp
+ */
+function formatLogMessage(level: string, message: string, args: any[]): string {
+  const timestamp = new Date().toISOString();
+  return `${timestamp} [${level}] ${message} ${args.length ? JSON.stringify(args) : ''}`;
+}
+
+/**
+ * Enhanced logger utility with file logging support
  */
 export const logger = {
   error: (message: string, ...args: any[]) => {
     if (currentLogLevel >= LogLevel.ERROR) {
-      console.error(`[ERROR] ${message}`, ...args);
+      const formattedMessage = formatLogMessage('ERROR', message, args);
+      console.error(formattedMessage);
+      writeToLogFile(formattedMessage);
     }
   },
   
   warn: (message: string, ...args: any[]) => {
     if (currentLogLevel >= LogLevel.WARN) {
-      console.warn(`[WARN] ${message}`, ...args);
+      const formattedMessage = formatLogMessage('WARN', message, args);
+      console.warn(formattedMessage);
+      writeToLogFile(formattedMessage);
     }
   },
   
   info: (message: string, ...args: any[]) => {
     if (currentLogLevel >= LogLevel.INFO) {
-      console.info(`[INFO] ${message}`, ...args);
+      const formattedMessage = formatLogMessage('INFO', message, args);
+      console.info(formattedMessage);
+      writeToLogFile(formattedMessage);
     }
   },
   
   debug: (message: string, ...args: any[]) => {
     if (currentLogLevel >= LogLevel.DEBUG) {
-      console.debug(`[DEBUG] ${message}`, ...args);
+      const formattedMessage = formatLogMessage('DEBUG', message, args);
+      console.debug(formattedMessage);
+      writeToLogFile(formattedMessage);
     }
   },
   
