@@ -90,7 +90,7 @@ export interface RouteTaskResult {
   /**
    * Additional details about the routing decision
    */
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export interface CancelJobResult {
