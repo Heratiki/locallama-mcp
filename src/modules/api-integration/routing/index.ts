@@ -3,7 +3,7 @@ import { jobTracker } from '../../decision-engine/services/jobTracker.js';
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
-import { costMonitor } from '../../cost-monitor/index.js';
+// import { costMonitor } from '../../cost-monitor/index.js'; TODO: Find out where this was intended to be used.
 import { IRouter, RouteTaskParams, RouteTaskResult, CancelJobResult } from './types.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
@@ -12,7 +12,7 @@ import { getCodeSearchEngine } from '../../cost-monitor/codeSearchEngine.js';
 
 export class Router implements IRouter {
   /**
-   * Route a coding task to either a local LLM or a paid API based on cost and complexity
+   * Route a coding task to either a local LLM, Free API LLM, or paid API LLM based on cost and complexity
    */
   async routeTask(params: RouteTaskParams): Promise<RouteTaskResult> {
     try {
@@ -69,7 +69,7 @@ export class Router implements IRouter {
       }
       
       // Retriv search
-      let retrivResults: any[] = [];
+      let retrivResults: unknown[] = [];
       if (!hasSubtasks && userPreferences.prioritizeRetrivSearch) {
         try {
           const codeSearchEngine = await getCodeSearchEngine();
@@ -110,9 +110,9 @@ export class Router implements IRouter {
       jobTracker.updateJobProgress(jobId, 0);
       
       // Execute task asynchronously
-      (async () => {
+      void (async () => {
         try {
-          const result = await taskExecutor.executeTask(decision.model, params.task, jobId);
+          await taskExecutor.executeTask(decision.model, params.task, jobId);
           logger.info(`Task execution completed successfully for job ${jobId}`);
         } catch (error) {
           logger.error(`Task execution failed for job ${jobId}:`, error);
@@ -204,7 +204,10 @@ export class Router implements IRouter {
       }
       
       // Cancel the job
-      jobTracker.cancelJob(jobId);
+      await new Promise<void>((resolve) => {
+        jobTracker.cancelJob(jobId);
+        resolve();
+      });
       
       return {
         success: true,
@@ -227,7 +230,7 @@ export class Router implements IRouter {
 /**
  * Helper function to generate a reason for routing decisions
  */
-function generateRoutingReason(decision: any): string {
+function generateRoutingReason(decision: { model: string; reason?: string }): string {
   // Check if the decision already has a reason property
   if (decision.reason) {
     return decision.reason;
@@ -238,7 +241,7 @@ function generateRoutingReason(decision: any): string {
     return 'Selected high-capability model based on task complexity';
   } else if (decision.model.includes('gpt-3.5')) {
     return 'Selected balanced model for cost-effectiveness';
-  } else if (decision.model.startsWith('ollama:')) {
+  } else if (decision.model.startsWith('lm-studio:')) {
     return 'Selected local model to minimize costs';
   } else if (decision.model.startsWith('openrouter:')) {
     return 'Selected API model for optimal quality';
@@ -250,7 +253,7 @@ function generateRoutingReason(decision: any): string {
 /**
  * Helper function to calculate estimated completion time
  */
-function calculateEstimatedTime(decision: any): number {
+function calculateEstimatedTime(decision: { model: string; estimatedTime?: number }): number {
   // Check if the decision already has an estimatedTime property
   if (decision.estimatedTime) {
     return decision.estimatedTime;
