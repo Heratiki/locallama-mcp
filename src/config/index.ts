@@ -184,8 +184,12 @@ export function validateConfig(): void {
     new URL(config.lmStudioEndpoint);
     new URL(config.ollamaEndpoint);
     new URL(config.localLlamaEndpoint); // Added local Llama endpoint validation
-  } catch (error) {
-    errors.push(`Invalid endpoint URL in configuration: ${error}`);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      errors.push(`Invalid endpoint URL in configuration: ${error.message}`);
+    } else {
+      errors.push(`Invalid endpoint URL in configuration: ${String(error)}`);
+    }
   }
 
   // Validate thresholds
@@ -232,9 +236,13 @@ export function validateConfig(): void {
   // Validate Python path if provided
   if (config.python?.path && typeof config.python.path === 'string') {
     try {
-      // No need for extensive validation - the path will be checked when used
-    } catch (error) {
-      errors.push(`Invalid Python path: ${config.python.path}`);
+      // Path validation will be done when used
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        errors.push(`Invalid Python path: ${error.message}`);
+      } else {
+        errors.push(`Invalid Python path: ${String(error)}`);
+      }
     }
   }
 

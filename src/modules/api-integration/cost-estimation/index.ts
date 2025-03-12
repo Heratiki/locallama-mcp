@@ -88,8 +88,8 @@ export class CostEstimator implements ICostEstimator {
         hasRestrictions: false, // Default since restriction property doesn't exist
         restrictions: undefined // Default since restriction property doesn't exist
       }));
-    } catch (error) {
-      logger.error(`Error getting free models: ${error}`);
+    } catch (error: unknown) {
+      logger.error(`Error getting free models: ${(error as Error).message}`);
       return [];
     }
   }
@@ -133,8 +133,8 @@ export class CostEstimator implements ICostEstimator {
                  modelId.includes('claude') ? 'anthropic' : 
                  modelId.includes('llama') ? 'meta' : 'unknown'
       };
-    } catch (error) {
-      logger.error(`Error getting cost info for model ${modelId}: ${error}`);
+    } catch (error: unknown) {
+      logger.error(`Error getting cost info for model ${modelId}: ${(error as Error).message}`);
       return null;
     }
   }

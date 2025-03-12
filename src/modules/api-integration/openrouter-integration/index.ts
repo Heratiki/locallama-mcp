@@ -1,7 +1,16 @@
 import { config } from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
-import { IOpenRouterIntegration, OpenRouterBenchmarkConfig, OpenRouterBenchmarkResult, OpenRouterModel, PromptingStrategy, ModelBenchmarkResult } from './types.js';
+import { 
+    IOpenRouterIntegration, 
+    OpenRouterBenchmarkConfig, 
+    OpenRouterBenchmarkResult, 
+    OpenRouterModel, 
+    PromptingStrategy,
+    // TODO: Will be used in future benchmarking implementation
+    // ModelBenchmarkResult 
+} from './types.js';
 import { openRouterModule } from '../../openrouter/index.js';
+import { benchmarkService } from '../../decision-engine/services/benchmarkService.js';
 
 export class OpenRouterIntegration implements IOpenRouterIntegration {
   /**
@@ -22,8 +31,8 @@ export class OpenRouterIntegration implements IOpenRouterIntegration {
     try {
       logger.info(`Executing task with OpenRouter model ${model}`);
       return await openRouterModule.executeTask(model, task);
-    } catch (error) {
-      logger.error(`Failed to execute task with OpenRouter model ${model}: ${error}`);
+    } catch (error: unknown) {
+      logger.error(`Failed to execute task with OpenRouter model ${model}: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -91,30 +100,14 @@ export class OpenRouterIntegration implements IOpenRouterIntegration {
   /**
    * Benchmark free models available from OpenRouter
    */
-  async benchmarkFreeModels(benchmarkConfig: OpenRouterBenchmarkConfig): Promise<OpenRouterBenchmarkResult> {
-    // Initialize OpenRouter module if needed
-    if (Object.keys(openRouterModule.modelTracking.models).length === 0) {
-      await openRouterModule.initialize();
-    }
+  async benchmarkFreeModels(_benchmarkConfig: OpenRouterBenchmarkConfig): Promise<OpenRouterBenchmarkResult> {
+    logger.info('Forwarding benchmark request to benchmarkService');
+    // TODO: Implement proper benchmarking using _benchmarkConfig
+    await benchmarkService.benchmarkFreeModels();
     
-    // Convert tasks to the correct format for benchmarking
-    const formattedTasks = benchmarkConfig.tasks.map(task => ({
-      taskId: task.taskId,
-      task: task.task,
-      contextLength: task.contextLength,
-      expectedOutputLength: task.expectedOutputLength || 0,
-      complexity: task.complexity || 0.5,
-      localModel: undefined,
-      paidModel: undefined,
-    }));
-    
-    // Instead of using benchmarkModels which doesn't exist, simulate it using available methods
-    // This is a placeholder implementation - in a real scenario, you'd properly implement this function
-    logger.info('Benchmarking free models');
-    
-    // Mock result since benchmarkModels doesn't exist
-    const mockBenchmarkResult: OpenRouterBenchmarkResult = {
-      results: {} as Record<string, ModelBenchmarkResult>,
+    // Return a simplified result since the full implementation is in benchmarkService
+    return {
+      results: {},
       summary: {
         bestQualityModel: 'unknown',
         bestSpeedModel: 'unknown',
@@ -122,32 +115,6 @@ export class OpenRouterIntegration implements IOpenRouterIntegration {
         modelsCount: 0
       }
     };
-    
-    try {
-      // Get free models
-      const freeModels = await this.getFreeModels(false);
-      
-      // For each model and task, we would run a benchmark
-      // This is just a simulation since benchmarkModels doesn't exist
-      for (const model of freeModels) {
-        mockBenchmarkResult.results[model.id] = {
-          averageTime: 0,
-          successRate: 0.5,
-          averageQuality: 0.5,
-          successfulTasks: 0,
-          totalTasks: benchmarkConfig.tasks.length
-        };
-      }
-      
-      mockBenchmarkResult.summary.modelsCount = freeModels.length;
-      mockBenchmarkResult.summary.bestQualityModel = freeModels[0]?.id || 'unknown';
-      mockBenchmarkResult.summary.bestSpeedModel = freeModels[0]?.id || 'unknown';
-      
-      return mockBenchmarkResult;
-    } catch (error) {
-      logger.error('Error benchmarking free models:', error);
-      return mockBenchmarkResult;
-    }
   }
 }
 
