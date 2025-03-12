@@ -46,12 +46,13 @@ export * from './routing/index.js';
 
 // For backward compatibility, re-export the setupToolHandlers and isOpenRouterConfigured functions
 import { toolDefinitionProvider } from './tool-definition/index.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
 /**
  * Set up tool handlers for the MCP Server
  * @deprecated Use the tool-definition module's toolDefinitionProvider instead
  */
-export function setupToolHandlers(server: any): void {
+export function setupToolHandlers(server: Server): void {
   return toolDefinitionProvider.initialize(server);
 }
 
