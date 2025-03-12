@@ -91,10 +91,11 @@ export class BM25Searcher {
     
     // Check if custom Python path is provided in environment or config
     if (process.env.RETRIV_PYTHON_PATH) {
-      this.pythonExecutable = process.env.RETRIV_PYTHON_PATH;
+      // Trim any extra whitespace that might cause errors
+      this.pythonExecutable = process.env.RETRIV_PYTHON_PATH.trim();
       logger.info(`Using Python executable from RETRIV_PYTHON_PATH: ${this.pythonExecutable}`);
     } else if (config.python?.path) {
-      this.pythonExecutable = config.python.path;
+      this.pythonExecutable = config.python.path.trim();
       logger.info(`Using Python executable from config: ${this.pythonExecutable}`);
     } else {
       // Try to detect virtual environment automatically
@@ -109,12 +110,48 @@ export class BM25Searcher {
             execSync(`${this.pythonExecutable} -c "import retriv"`, { stdio: 'pipe' });
             logger.info(`Found retriv module using default Python: ${this.pythonExecutable}`);
           } catch (err) {
-            logger.warn('Retriv module not found in default Python environment. Please set RETRIV_PYTHON_PATH or configure python.path in config.');
+            // Try common Python executable names
+            const pythonOptions = ['python3', 'python', 'py'];
+            let foundPython = false;
+            
+            for (const pythonCmd of pythonOptions) {
+              try {
+                execSync(`${pythonCmd} --version`, { stdio: 'pipe' });
+                this.pythonExecutable = pythonCmd;
+                logger.info(`Using available Python executable: ${pythonCmd}`);
+                foundPython = true;
+                break;
+              } catch (e) {
+                // This Python executable is not available
+              }
+            }
+            
+            if (!foundPython) {
+              logger.warn('Retriv module not found in default Python environment. Please set RETRIV_PYTHON_PATH or configure python.path in config.');
+            }
           }
         }
       } catch (err) {
         logger.debug('Failed to auto-detect Python virtual environment:', err);
       }
+    }
+    
+    // Verify that the Python executable file exists
+    if (this.pythonExecutable && this.pythonExecutable.includes('/')) {
+      try {
+        if (!fs.existsSync(this.pythonExecutable)) {
+          logger.warn(`Python executable not found at path: ${this.pythonExecutable}. Will try using default 'python' command.`);
+          this.pythonExecutable = 'python';
+        }
+      } catch (err) {
+        logger.warn(`Error checking Python executable path: ${err}. Will try using default 'python' command.`);
+        this.pythonExecutable = 'python';
+      }
+    }
+    
+    // If the Python path contains spaces, ensure it's properly quoted for spawn
+    if (this.pythonExecutable && this.pythonExecutable.includes(' ')) {
+      logger.info(`Python path contains spaces. Note that spawn() will handle this internally.`);
     }
     
     logger.info(`Using Python executable: ${this.pythonExecutable}`);

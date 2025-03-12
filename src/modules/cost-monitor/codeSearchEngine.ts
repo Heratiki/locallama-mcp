@@ -51,7 +51,20 @@ class CodeSearchEngineManager {
       
       this.initialized = true;
       logger.info('Code search engine manager initialized successfully, indexing root directory');
-      await this.indexDirectory(config.rootDir);
+      
+      // Make sure we index some initial directories if provided in config
+      if (config.directoriesToIndex && config.directoriesToIndex.length > 0) {
+        logger.info(`Indexing configured directories: ${config.directoriesToIndex.join(', ')}`);
+        try {
+          for (const dir of config.directoriesToIndex) {
+            await this.indexDirectory(dir);
+          }
+        } catch (error) {
+          logger.warn(`Error indexing configured directories: ${error}. Continuing with initialization anyway.`);
+        }
+      } else {
+        await this.indexDirectory(config.rootDir);
+      }
     } catch (error) {
       logger.error('Failed to initialize code search engine manager', error);
       throw error;
@@ -138,6 +151,14 @@ class CodeSearchEngineManager {
     try {
       logger.info(`Searching for: "${query}" (top ${topK} results)`);
       const engine = await this.getCodeSearchEngine();
+      
+      // Check document count first to provide clearer warning message
+      const count = await engine.getDocumentCount();
+      if (count === 0) {
+        logger.warn('No documents have been indexed yet. Consider indexing directories first.');
+        return [];
+      }
+      
       const results = await engine.search(query, topK);
       logger.info(`Found ${results.length} results for query: ${query}`);
       return results;
@@ -221,30 +242,44 @@ class CodeSearchEngineManager {
       
       /*
       Author: Roo
-      Date: March 11, 2025, 8:36:09 PM
-      Original code preserved below - fixed document indexing with metadata
-      */
-      /*
-      Author: Roo
-      Date: March 11, 2025, 8:36:44 PM
-      Original code preserved below - fixed document indexing
-      */
-      /*
-      Author: Roo
-      Date: March 11, 2025, 8:37:15 PM
-      Original code preserved below - fixed document indexing
+      Date: March 12, 2025, 9:45:22 PM
+      Original code preserved below - fixed document indexing with proper BM25Searcher API
       // Use the BM25Searcher's indexDocuments method directly
       await engine.indexWorkspace();
       */
       
-      // Index the documents with their metadata
-      await engine.indexWorkspace(true); // Force reindex with new documents
-      // Remove the call to indexDocuments as it does not exist on CodeSearchEngine
-      // await engine.indexDocuments([doc]);
-      // Remove the call to bm25Searcher as it does not exist on CodeSearchEngineManager
-      // await this.bm25Searcher.indexDocuments(documentContents);
-      // Correct the call to indexWorkspaceWithDetails
-      await engine.indexWorkspaceWithDetails(true);
+      // Create document objects for the engine to index
+      const codeDocuments = documents.map((doc, index) => ({
+        content: contentsWithMetadata[index],
+        path: doc.path,
+        language: doc.language || 'code'
+      }));
+      
+      // Access the underlying BM25Searcher and index the documents directly
+      // This is a workaround for the current API limitations
+      try {
+        // Get the private BM25Searcher instance using a type assertion
+        const bm25Searcher = (engine as any).bm25Searcher;
+        
+        if (bm25Searcher && typeof bm25Searcher.indexDocuments === 'function') {
+          await bm25Searcher.indexDocuments(contentsWithMetadata);
+          logger.info(`Successfully indexed ${documents.length} documents directly with BM25Searcher`);
+        } else {
+          // Fallback to the engine's indexWorkspace method
+          logger.info(`Using fallback method to index documents`);
+          
+          // Store the documents in the engine's documents array
+          // This is a workaround that depends on implementation details
+          (engine as any).documents = [...((engine as any).documents || []), ...codeDocuments];
+          
+          // Force a reindex to include the new documents
+          await engine.indexWorkspaceWithDetails(true);
+        }
+      } catch (error) {
+        logger.warn(`Error with direct indexing approach: ${error}, using fallback`);
+        // Fallback approach
+        await engine.indexWorkspaceWithDetails(true);
+      }
       
       const endTime = Date.now();
       const timeTaken = ((endTime - startTime) / 1000).toFixed(2);

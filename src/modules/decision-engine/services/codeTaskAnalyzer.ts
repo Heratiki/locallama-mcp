@@ -191,20 +191,6 @@ export const codeTaskAnalyzer = {
    * @returns A complexity analysis result
    */
   async analyzeComplexity(task: string | undefined): Promise<CodeComplexityResult> {
-      if (!task) {
-          logger.warn('Task is undefined, returning default complexity.');
-          return {
-              overallComplexity: 0.5,
-              factors: {
-                  algorithmic: 0.5,
-                  integration: 0.5,
-                  domainKnowledge: 0.5,
-                  technical: 0.5
-              },
-              explanation: 'Task was undefined, using default medium complexity.'
-          };
-      }
-    
     /*
     Author: Roo
     Date: March 11, 2025, 8:28:46 PM
@@ -224,6 +210,21 @@ export const codeTaskAnalyzer = {
       };
     }
     */
+
+    // Enhanced validation for undefined, null, or empty string task
+    if (!task || task.trim() === '') {
+      logger.warn('Task is undefined, null, or empty, returning default complexity.');
+      return {
+        overallComplexity: 0.5,
+        factors: {
+          algorithmic: 0.5,
+          integration: 0.5,
+          domainKnowledge: 0.5,
+          technical: 0.5
+        },
+        explanation: 'Task was undefined, null, or empty, using default medium complexity.'
+      };
+    }
 
     logger.debug('Analyzing complexity of code task:', task);
 
@@ -265,7 +266,7 @@ export const codeTaskAnalyzer = {
 
       if (!result.success || !result.text) {
         logger.error('Failed to analyze complexity:', result.error);
-        throw new Error('Failed to analyze complexity');
+        throw new Error('Failed to analyze complexity: API returned unsuccessful result');
       }
 
       const llmAnalysis = this.parseComplexityFromResponse(result.text);
@@ -275,7 +276,7 @@ export const codeTaskAnalyzer = {
         llmAnalysis.factors.domainKnowledge,
         avgDomainComplexity
       );
-
+      
       // Calculate overall technical requirements score
       const technicalRequirementsScore = Math.max(
         llmAnalysis.factors.technical,
@@ -309,7 +310,7 @@ export const codeTaskAnalyzer = {
           domainKnowledge: 0.5,
           technical: 0.5
         },
-        explanation: 'Failed to analyze complexity, using default medium complexity.'
+        explanation: `Failed to analyze complexity: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   },

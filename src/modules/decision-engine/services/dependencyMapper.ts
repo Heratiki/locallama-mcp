@@ -310,7 +310,9 @@ export const dependencyMapper = {
     visualization += '## Execution Order\n\n';
     
     orderedSubtasks.forEach((subtask, index) => {
-      visualization += `${index + 1}. ${subtask.description} (ID: ${subtask.id.slice(0, 8)}..., Complexity: ${subtask.complexity})\n`;
+      // Ensure subtask.id is a string before calling slice
+      const subtaskId = String(subtask.id);
+      visualization += `${index + 1}. ${subtask.description} (ID: ${subtaskId.slice(0, 8)}..., Complexity: ${subtask.complexity})\n`;
     });
     
     visualization += '\n## Dependency Graph\n\n```\n';
@@ -318,7 +320,8 @@ export const dependencyMapper = {
     // Create a simple ASCII dependency graph
     orderedSubtasks.forEach((subtask, index) => {
       const id = subtask.id;
-      const shortId = id.slice(0, 8);
+      // Ensure ID is a string before slicing
+      const shortId = String(id).slice(0, 8);
       const deps = dependencyMap[id] || [];
       
       visualization += `[${shortId}] ${subtask.description.slice(0, 40)}${subtask.description.length > 40 ? '...' : ''}\n`;
@@ -327,7 +330,8 @@ export const dependencyMapper = {
         deps.forEach(depId => {
           const depSubtask = subtaskMap.get(depId);
           if (depSubtask) {
-            const shortDepId = depId.slice(0, 8);
+            // Ensure dependency ID is a string before slicing
+            const shortDepId = String(depId).slice(0, 8);
             visualization += `  ├── depends on [${shortDepId}] ${depSubtask.description.slice(0, 30)}${depSubtask.description.length > 30 ? '...' : ''}\n`;
           }
         });
