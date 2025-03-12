@@ -44,7 +44,7 @@ interface CodeChunk {
   content: string;
   tokenCount: number;
   priority: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // Export interfaces
@@ -263,12 +263,13 @@ export const codeCache = {
         continue;
       }
       
-      // Count token overlap
-      const entryTokenSet = new Set(entry.tokens);
+      // Count token overlap using patternTokenSet
+      // const entryTokenSet = new Set(entry.tokens); // TODO: Figure out if this was ever needed and if not remove it.
       let overlap = 0;
       
-      for (const token of patternTokens) {
-        if (entryTokenSet.has(token)) {
+      // More efficient overlap calculation using the pre-built token set
+      for (const token of entry.tokens) {
+        if (patternTokenSet.has(token)) {
           overlap++;
         }
       }
@@ -318,12 +319,12 @@ export const codeCache = {
           continue;
         }
         
-        // Count token overlap
-        const entryTokenSet = new Set(entry.tokens);
+        // Count token overlap - use the same optimized approach with patternTokenSet
+        // const entryTokenSet = new Set(entry.tokens); // TODO: Figure out if this was ever needed and if not remove it.
         let overlap = 0;
         
-        for (const token of patternTokens) {
-          if (entryTokenSet.has(token)) {
+        for (const token of entry.tokens) {
+          if (patternTokenSet.has(token)) {
             overlap++;
           }
         }
