@@ -94,7 +94,7 @@ export function calculateRelevanceScore(task: string, response: string): number 
 export function calculateCompletenessScore(task: string, response: string): number {
   // Calculate completeness based on response length relative to task complexity
   const taskLower = task.toLowerCase();
-  const responseLower = response.toLowerCase();
+  // const responseLower = response.toLowerCase(); TODO: Figure out why this was created and never used.
   
   // Estimate task complexity by length and question type markers
   let taskComplexity = Math.min(task.length / 300, 1); // Normalize based on length
