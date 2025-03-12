@@ -3,7 +3,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { config } from './config/index.js';
 import { setupResourceHandlers } from './modules/api-integration/resources.js';
-import { setupToolHandlers } from './modules/api-integration/tools.js';
+import { toolDefinitionProvider } from './modules/api-integration/tool-definition/index.js';
 import { logger } from './utils/logger.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -42,7 +42,7 @@ class LocalLamaMcpServer {
 
     // Set up resource and tool handlers
     setupResourceHandlers(this.server);
-    setupToolHandlers(this.server);
+    toolDefinitionProvider.initialize(this.server);
     
     // Error handling
     this.server.onerror = (error) => logger.error('[MCP Error]', error);

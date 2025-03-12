@@ -1,4 +1,4 @@
-import { setupToolHandlers } from '../../../src/modules/api-integration/tools.js';
+import { toolDefinitionProvider } from '../../../src/modules/api-integration/tool-definition/index.js';
 import { decisionEngine } from '../../../src/modules/decision-engine/index.js';
 import { costMonitor } from '../../../src/modules/cost-monitor/index.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -45,7 +45,7 @@ describe('API Integration - Tools', () => {
     } as unknown as Server;
     
     // Set up tool handlers
-    setupToolHandlers(server);
+    toolDefinitionProvider.initialize(server);
     
     // Setup mock responses
     (decisionEngine.routeTask as jest.Mock).mockResolvedValue({

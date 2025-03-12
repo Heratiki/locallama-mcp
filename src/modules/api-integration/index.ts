@@ -44,19 +44,16 @@ export {
 // Re-export from routing module
 export * from './routing/index.js';
 
-// Re-export specific items from tools.ts for backward compatibility
-import { setupToolHandlers as originalSetupToolHandlers } from './tools.js';
+// For backward compatibility, re-export the setupToolHandlers and isOpenRouterConfigured functions
+import { toolDefinitionProvider } from './tool-definition/index.js';
 
 /**
  * Set up tool handlers for the MCP Server
  * @deprecated Use the tool-definition module's toolDefinitionProvider instead
  */
 export function setupToolHandlers(server: any): void {
-  // For now, use the original implementation
-  // This will be updated as modules are implemented
-  return originalSetupToolHandlers(server);
+  return toolDefinitionProvider.initialize(server);
 }
 
-// Only export isOpenRouterConfigured from tools.ts if it's needed by other modules
-// that haven't been migrated yet
-export { isOpenRouterConfigured as legacyIsOpenRouterConfigured } from './tools.js';
+// Re-export isOpenRouterConfigured for backward compatibility
+export { isOpenRouterConfigured } from './tool-definition/index.js';
