@@ -1,5 +1,6 @@
 import { logger } from '../../../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
+import { broadcastJobs, wss } from '../../websocket-server/ws-server.js';
 
 export interface Job {
   id: string;
@@ -41,6 +42,7 @@ class JobTracker {
       model
     });
     logger.debug(`Created new job ${id} for task: ${task}`);
+    broadcastJobs(wss);
     return id;
   }
 
@@ -57,6 +59,7 @@ class JobTracker {
         'Calculating...';
       this.activeJobs.set(id, job);
       logger.debug(`Updated job ${id} progress: ${job.progress}`);
+      broadcastJobs(wss);
     }
   }
 
@@ -71,6 +74,7 @@ class JobTracker {
       job.estimated_time_remaining = '0';
       this.activeJobs.set(id, job);
       logger.debug(`Completed job ${id}`);
+      broadcastJobs(wss);
     }
   }
 
@@ -84,6 +88,7 @@ class JobTracker {
       job.estimated_time_remaining = 'N/A';
       this.activeJobs.set(id, job);
       logger.debug(`Cancelled job ${id}`);
+      broadcastJobs(wss);
     }
   }
 
@@ -97,6 +102,7 @@ class JobTracker {
       job.estimated_time_remaining = 'N/A';
       this.activeJobs.set(id, job);
       logger.error(`Job ${id} failed: ${error || 'Unknown error'}`);
+      broadcastJobs(wss);
     }
   }
 
