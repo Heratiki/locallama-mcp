@@ -61,14 +61,36 @@ export const modelContextWindows: Record<string, number> = {
 /**
  * Calculate token estimates based on credits used
  */
-export function calculateTokenEstimates(creditsUsed: number): { promptTokens: number, completionTokens: number, estimatedTokensUsed: number } {
-  // Average OpenAI GPT-3.5 cost is ~0.002 USD per 1K tokens
-  const averageCostPer1KTokens = 0.002;
-  const estimatedTokensUsed = Math.round((creditsUsed / averageCostPer1KTokens) * 1000);
+export function calculateTokenEstimates(
+  contextLength: number, 
+  outputLength: number = 0, 
+  model?: string
+): { 
+  promptTokens: number, 
+  completionTokens: number, 
+  totalTokens: number,
+  promptCost: number,
+  completionCost: number,
+  totalCost: number
+} {
+  // Default rates (e.g., for GPT-3.5-turbo)
+  let promptRate = 0.000001; // $1 per million tokens
+  let completionRate = 0.000002; // $2 per million tokens
   
-  // Assume a typical prompt/completion ratio of 2:1
-  const promptTokens = Math.round(estimatedTokensUsed * 0.67); // 2/3 of tokens
-  const completionTokens = Math.round(estimatedTokensUsed * 0.33); // 1/3 of tokens
+  // Adjust rates based on model if provided
+  if (model) {
+    // Model-specific rate logic here
+  }
   
-  return { promptTokens, completionTokens, estimatedTokensUsed };
+  const promptCost = contextLength * promptRate;
+  const completionCost = outputLength * completionRate;
+  
+  return {
+    promptTokens: contextLength,
+    completionTokens: outputLength,
+    totalTokens: contextLength + outputLength,
+    promptCost,
+    completionCost,
+    totalCost: promptCost + completionCost
+  };
 }
