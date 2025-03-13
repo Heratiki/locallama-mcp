@@ -1,13 +1,13 @@
 class CacheOptimizer {
-  private cache: Map<string, any> = new Map();
+  private cache: Map<string, string> = new Map();
   private usagePatterns: Map<string, number> = new Map();
 
-  public addToCache(key: string, value: any): void {
+  public addToCache(key: string, value: string): void {
     this.cache.set(key, value);
     this.updateUsagePattern(key);
   }
 
-  public getFromCache(key: string): any {
+  public getFromCache(key: string): string | undefined {
     this.updateUsagePattern(key);
     return this.cache.get(key);
   }
@@ -26,7 +26,7 @@ class CacheOptimizer {
     });
   }
 
-  private loadFromSource(key: string): any {
+  private loadFromSource(key: string): string {
     // Simulate loading from a data source
     return `Data for ${key}`;
   }

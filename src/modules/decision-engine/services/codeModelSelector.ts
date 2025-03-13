@@ -1,7 +1,8 @@
 import { logger } from '../../../utils/logger.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { modelsDbService } from './modelsDb.js';
-import { modelPerformanceTracker } from './modelPerformance.js';
+// Import types only to avoid circular dependency
+import type { ModelPerformanceAnalysis } from '../types/index.js';
 import { CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
@@ -17,6 +18,12 @@ export const codeModelSelector = {
   scoreModelForSubtask,
   getFallbackModel,
   selectModelsForSubtasks,
+
+  // Set the modelPerformanceTracker reference dynamically to avoid circular dependency
+  _modelPerformanceTracker: null,
+  setModelPerformanceTracker(tracker: any) {
+    this._modelPerformanceTracker = tracker;
+  },
 
   // Internal helper methods
   calculateComplexityMatchScore(
@@ -200,7 +207,8 @@ export const codeModelSelector = {
     const idealAssignments = new Map<string, {model: Model, score: number}>();
 
     for (const subtask of subtasks) {
-      const perfAnalysis = modelPerformanceTracker.analyzePerformanceByComplexity(
+      // Use the injected reference to avoid circular dependency
+      const perfAnalysis = this._modelPerformanceTracker.analyzePerformanceByComplexity(
         Math.max(0, subtask.complexity - 0.1),
         Math.min(1, subtask.complexity + 0.1)
       );
@@ -245,7 +253,7 @@ export const codeModelSelector = {
             return true;
           })
           .map(async m => {
-            const perfAnalysis = modelPerformanceTracker.analyzePerformanceByComplexity(
+            const perfAnalysis = this._modelPerformanceTracker.analyzePerformanceByComplexity(
               Math.max(0, subtask.complexity - 0.1),
               Math.min(1, subtask.complexity + 0.1)
             );
@@ -303,7 +311,8 @@ async function findBestModelForSubtask(subtask: CodeSubtask): Promise<Model | nu
     }
     
     // Get performance analysis for this complexity range
-    const perfAnalysis = modelPerformanceTracker.analyzePerformanceByComplexity(
+    // Use the injected reference to avoid circular dependency
+    const perfAnalysis = codeModelSelector._modelPerformanceTracker.analyzePerformanceByComplexity(
       Math.max(0, subtask.complexity - 0.1),
       Math.min(1, subtask.complexity + 0.1)
     );
@@ -359,7 +368,8 @@ async function scoreModelForSubtask(
     bestPerformingModels: string[];
   }
 ): Promise<number> {
-  const modelStats = modelPerformanceTracker.getModelStats(model.id);
+  // Use the injected reference to avoid circular dependency
+  const modelStats = codeModelSelector._modelPerformanceTracker.getModelStats(model.id);
   let score = 0;
   
   // Task Complexity Match (30%)

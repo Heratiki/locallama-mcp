@@ -401,6 +401,9 @@ export const benchmarkService = {
     } catch (error) {
       logger.error('Error benchmarking free models:', error);
     }
+
+    // Update model performance profiles after benchmarking
+    await this.updateModelPerformanceProfiles();
   },
 
   /**
@@ -411,7 +414,7 @@ export const benchmarkService = {
     try {
       // Simplified evaluation for benchmarking
       let score = 0;
-      const responseLower = response.toLowerCase();
+      // const responseLower = response.toLowerCase(); // TODO: Check if this is used elsewhere in the codebase
 
       // Check if the response contains code
       const hasCode = response.includes('function') ||

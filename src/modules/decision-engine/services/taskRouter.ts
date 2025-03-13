@@ -14,14 +14,23 @@ interface RoutingStrategy {
   maximizeResourceEfficiency: boolean;
 }
 
+interface ModelLoadData {
+  activeTaskCount: number;
+  lastAssignmentTime: number;
+  estimatedCompletionTimes: number[];
+  processingPower: number;  // A score representing the model's capacity to handle tasks
+}
+
 /**
  * Enhanced service for smart task distribution and load balancing
  */
 class TaskRouter {
   private taskExecutor: TaskExecutor;
   private strategies: Record<string, RoutingStrategy>;
-  private _modelLoads: Map<string, { activeTaskCount: number; lastAssignmentTime: number }>;
-
+  private _modelLoads: Map<string, ModelLoadData>;
+  private _modelProcessingPower: Map<string, number> = new Map();
+  private _modelMemoryUsage: Map<string, number> = new Map();
+  
   constructor() {
     this.taskExecutor = new TaskExecutor(5); // Example with max 5 concurrent tasks
     this.strategies = {
@@ -65,43 +74,155 @@ class TaskRouter {
   }
 
   /**
-   * Get the current load for a specific model
+   * Get the current load for a specific model with dynamic decay
    */
   getModelLoad(modelId: string): number {
     const loadData = this._modelLoads.get(modelId);
     if (!loadData) return 0;
     
-    // Reduce load count for older tasks (assume they might be completed)
+    // Apply dynamic load decay based on estimated completion times
     const currentTime = Date.now();
-    const timeSinceLastAssignment = currentTime - loadData.lastAssignmentTime;
+    const newEstimatedCompletionTimes = [];
+    let completedTasks = 0;
     
-    // If it's been more than 2 minutes since last assignment, reduce the load
-    if (timeSinceLastAssignment > 120000 && loadData.activeTaskCount > 0) {
-      loadData.activeTaskCount = Math.max(0, loadData.activeTaskCount - 1);
-      loadData.lastAssignmentTime = currentTime;
+    for (const completionTime of loadData.estimatedCompletionTimes) {
+      if (currentTime > completionTime) {
+        completedTasks++;
+      } else {
+        newEstimatedCompletionTimes.push(completionTime);
+      }
+    }
+    
+    // Update load data with decayed values
+    if (completedTasks > 0) {
+      loadData.activeTaskCount = Math.max(0, loadData.activeTaskCount - completedTasks);
+      loadData.estimatedCompletionTimes = newEstimatedCompletionTimes;
       this._modelLoads.set(modelId, loadData);
+      
+      logger.debug(`Dynamic load decay for ${modelId}: Completed ${completedTasks} tasks, new load: ${loadData.activeTaskCount}`);
     }
     
     return loadData.activeTaskCount;
   }
   
   /**
-   * Update the load counter for a model
+   * Calculate estimated completion time for a task on a specific model
    */
-  updateModelLoad(modelId: string, increment: boolean = true): void {
-    const currentLoad = this._modelLoads.get(modelId) || {
+  private calculateEstimatedCompletionTime(
+    model: Model,
+    complexity: number,
+    tokenCount: number
+  ): number {
+    // Get any performance data we have for this model
+    const stats = modelPerformanceTracker.getModelStats(model.id);
+    
+    // Base time calculation using either historical data or heuristics
+    let baseTimeMs = 5000; // Default 5 seconds
+    
+    if (stats?.avgResponseTime) {
+      baseTimeMs = stats.avgResponseTime;
+    } else {
+      // Heuristic calculation based on model type and task size
+      if (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') {
+        baseTimeMs = 2000 + (tokenCount * 10); // Local models: base + 10ms per token
+      } else {
+        baseTimeMs = 1000 + (tokenCount * 5); // Remote models: base + 5ms per token
+      }
+    }
+    
+    // Adjust for complexity
+    const complexityMultiplier = 1 + (complexity * 2);
+    
+    // Calculate final estimated completion time
+    const estimatedTimeMs = baseTimeMs * complexityMultiplier;
+    
+    return Date.now() + estimatedTimeMs;
+  }
+  
+  /**
+   * Update the load counter for a model with better estimation
+   */
+  updateModelLoad(
+    model: Model, 
+    increment: boolean = true,
+    complexity: number = 0.5,
+    tokenCount: number = 500
+  ): void {
+    const modelId = model.id;
+    const loadData = this._modelLoads.get(modelId) || {
       activeTaskCount: 0,
-      lastAssignmentTime: Date.now()
+      lastAssignmentTime: Date.now(),
+      estimatedCompletionTimes: [],
+      processingPower: this._modelProcessingPower.get(modelId) || 1.0
     };
     
     if (increment) {
-      currentLoad.activeTaskCount += 1;
-    } else if (currentLoad.activeTaskCount > 0) {
-      currentLoad.activeTaskCount -= 1;
+      loadData.activeTaskCount += 1;
+      
+      // Add estimated completion time for this task
+      const completionTime = this.calculateEstimatedCompletionTime(model, complexity, tokenCount);
+      loadData.estimatedCompletionTimes.push(completionTime);
+      
+      // Update stats about model usage
+      this.trackModelUsage(model, complexity, tokenCount);
+    } else {
+      // Decrement task count if positive
+      if (loadData.activeTaskCount > 0) {
+        loadData.activeTaskCount -= 1;
+      }
+      
+      // Remove oldest completion time
+      if (loadData.estimatedCompletionTimes.length > 0) {
+        loadData.estimatedCompletionTimes.shift();
+      }
     }
     
-    currentLoad.lastAssignmentTime = Date.now();
-    this._modelLoads.set(modelId, currentLoad);
+    loadData.lastAssignmentTime = Date.now();
+    this._modelLoads.set(modelId, loadData);
+  }
+
+  /**
+   * Track model usage statistics for improved future routing
+   */
+  private trackModelUsage(model: Model, complexity: number, tokenCount: number): void {
+    try {
+      // Track processing power over time (simple moving average)
+      const currentPower = this._modelProcessingPower.get(model.id) || 1.0;
+      const stats = modelPerformanceTracker.getModelStats(model.id);
+      
+      // If we have response time data, use it to estimate processing power
+      if (stats?.avgResponseTime) {
+        // Faster response time = more processing power
+        const speedFactor = 5000 / Math.max(500, stats.avgResponseTime); 
+        const newPower = (currentPower * 0.7) + (speedFactor * 0.3);
+        this._modelProcessingPower.set(model.id, newPower);
+        
+        // Update the load data with this new processing power
+        const loadData = this._modelLoads.get(model.id);
+        if (loadData) {
+          loadData.processingPower = newPower;
+          this._modelLoads.set(model.id, loadData);
+        }
+      }
+      
+      // Also track memory usage if available
+      if (stats?.memoryFootprint) {
+        this._modelMemoryUsage.set(model.id, stats.memoryFootprint);
+      }
+    } catch (error) {
+      logger.warn("Error tracking model usage", error);
+    }
+  }
+
+  /**
+   * Get effective load accounting for model processing power
+   */
+  private getEffectiveLoad(modelId: string): number {
+    const loadData = this._modelLoads.get(modelId);
+    if (!loadData) return 0;
+    
+    // Factor in processing power - more powerful models can handle more load
+    return loadData.activeTaskCount / Math.max(0.5, loadData.processingPower);
   }
   
   /**
@@ -141,7 +262,7 @@ class TaskRouter {
       // Get best performing models based on strategy
       const models = modelPerformanceTracker.getBestPerformingModels(
         task.complexity,
-        5, // Get more candidates for load balancing
+        8, // Get more candidates for load balancing
         {
           prioritizeSpeed: strategy.prioritizeSpeed,
           prioritizeQuality: strategy.prioritizeQuality,
@@ -162,44 +283,87 @@ class TaskRouter {
           return this.fallbackModelSelection(await costMonitor.getAvailableModels(), task, strategy);
         }
         
-        // Apply load balancing - prefer models with lower current load
-        const balancedModels = suitableModels.map(model => ({
-          model,
-          currentLoad: this.getModelLoad(model.id)
-        }));
-        
-        // Sort by load (ascending), with a small preference for the first model in the list
-        balancedModels.sort((a, b) => {
-          // If load difference is significant, prioritize lower load
-          if (Math.abs(a.currentLoad - b.currentLoad) >= 2) {
-            return a.currentLoad - b.currentLoad;
+        // Apply load balancing with improved scoring system
+        const scoredModels = suitableModels.map(model => {
+          let score = 0;
+          
+          // Factor 1: Current load (lower is better)
+          const effectiveLoad = this.getEffectiveLoad(model.id);
+          score += Math.max(0, 5 - effectiveLoad) * 2;
+          
+          // Factor 2: Performance match for this task complexity
+          const stats = modelPerformanceTracker.getModelStats(model.id);
+          if (stats) {
+            // Quality match for task complexity
+            if (Math.abs(stats.complexityScore - task.complexity) < 0.2) {
+              score += 1.5;
+            }
+            
+            // Speed factor (normalized to 0-2 range)
+            const speedScore = stats.avgResponseTime ? Math.min(2, 10000 / stats.avgResponseTime) : 0;
+            score += speedScore;
           }
           
-          // For similar loads, keep original performance-based ordering
-          const aIndex = suitableModels.findIndex(m => m.id === a.model.id);
-          const bIndex = suitableModels.findIndex(m => m.id === b.model.id);
-          return aIndex - bIndex;
+          // Factor 3: Contextual boosts based on strategy
+          if (strategy.maximizeResourceEfficiency) {
+            // For resource efficiency, prefer smaller models/quantized models
+            if (model.id.toLowerCase().includes('q4') || model.id.toLowerCase().includes('q5')) {
+              score += 1.5;
+            } else if (model.id.toLowerCase().match(/1\.5b|1b|3b|mini|tiny/)) {
+              score += 1;
+            }
+          } else if (strategy.prioritizeSpeed && stats?.avgResponseTime) {
+            // For speed priority, heavily weight the response time
+            score += Math.min(3, 15000 / stats.avgResponseTime);
+          } else if (strategy.prioritizeQuality && stats?.qualityScore) {
+            // For quality priority, factor in quality score
+            score += stats.qualityScore * 3;
+          }
+          
+          return { model, score, effectiveLoad };
         });
         
-        // Use the best balanced model
-        const selectedModel = balancedModels[0].model;
-        logger.debug(`Selected model ${selectedModel.id} with load ${balancedModels[0].currentLoad} for task`);
+        // Sort by score (descending)
+        scoredModels.sort((a, b) => b.score - a.score);
         
-        // Update model load
-        this.updateModelLoad(selectedModel.id, true);
-        
-        // Register task completion callback if id is provided
-        if (task.id) {
-          setTimeout(() => {
-            this.updateModelLoad(selectedModel.id, false);
-            logger.debug(`Reduced load for ${selectedModel.id} after task ${task.id} completion`);
-          }, 60000); // Assume task completes in about a minute
+        // Select top model, but with a safety check to avoid overloaded models
+        let selectedModel: Model | null = null;
+        for (const candidate of scoredModels) {
+          // Skip if model is severely overloaded (effective load > 5)
+          if (candidate.effectiveLoad > 5) continue;
+          
+          selectedModel = candidate.model;
+          break;
         }
         
-        return selectedModel;
+        // If all models are overloaded, take the best scoring one anyway
+        if (!selectedModel && scoredModels.length > 0) {
+          selectedModel = scoredModels[0].model;
+        }
+        
+        if (selectedModel) {
+          logger.debug(`Selected model ${selectedModel.id} for task with effective load ${this.getEffectiveLoad(selectedModel.id)}`);
+          
+          // Update model load with better estimation
+          this.updateModelLoad(selectedModel, true, task.complexity, task.estimatedTokens);
+          
+          // Register task completion callback if id is provided
+          if (task.id) {
+            // Estimate task completion time
+            const completionTime = this.calculateEstimatedCompletionTime(selectedModel, task.complexity, task.estimatedTokens);
+            const estimatedDuration = completionTime - Date.now();
+            
+            setTimeout(() => {
+              this.updateModelLoad(selectedModel!, false);
+              logger.debug(`Reduced load for ${selectedModel!.id} after task ${task.id} completion`);
+            }, estimatedDuration); 
+          }
+          
+          return selectedModel;
+        }
       }
       
-      // Fallback to basic model selection if no performance data
+      // Fallback to basic model selection if no performance data or all models overloaded
       const availableModels = await costMonitor.getAvailableModels();
       return this.fallbackModelSelection(availableModels, task, strategy);
     } catch (error) {
@@ -208,6 +372,218 @@ class TaskRouter {
     }
   }
 
+  /**
+   * Advanced resource-optimized routing for multiple tasks
+   */
+  async resourceOptimizedRouting(
+    subtasks: CodeSubtask[],
+    globalPriority?: 'speed' | 'quality' | 'cost' | 'efficiency'
+  ): Promise<Map<string, Model>> {
+    const routingMap = new Map<string, Model>();
+    
+    try {
+      // Group similar subtasks by complexity and task type for better batch processing
+      const groups = new Map<string, CodeSubtask[]>();
+      subtasks.forEach(subtask => {
+        // Use more specific grouping criteria
+        const complexityBucket = Math.floor(subtask.complexity * 4) / 4; // 0.25 increment buckets
+        const key = `${subtask.recommendedModelSize}-${complexityBucket}-${subtask.codeType || 'general'}`;
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key)?.push(subtask);
+      });
+      
+      // Get available models
+      const availableModels = await costMonitor.getAvailableModels();
+      const freeModels = await costMonitor.getFreeModels();
+      const allModels = [...availableModels, ...freeModels];
+      
+      // Get resource efficiency report to make better decisions
+      const efficiencyReport = modelPerformanceTracker.getResourceEfficiencyReport();
+      
+      // Track models used for each group to distribute load
+      const usedModels = new Set<string>();
+      
+      // First pass - handle high complexity tasks with priority
+      const sortedGroups = Array.from(groups.entries())
+        .sort((a, b) => {
+          // Get representative complexity for each group
+          const complexityA = a[1][0].complexity;
+          const complexityB = b[1][0].complexity;
+          return complexityB - complexityA; // Sort by descending complexity
+        });
+      
+      // Process each group
+      for (const [groupKey, taskGroup] of sortedGroups) {
+        if (taskGroup.length === 0) continue;
+        
+        // Pick the most complex task as representative
+        const representative = taskGroup.reduce(
+          (max, task) => task.complexity > max.complexity ? task : max,
+          taskGroup[0]
+        );
+        
+        // Define strategy based on task characteristics and priority
+        const strategy = this.selectStrategy(representative.complexity, globalPriority);
+        
+        // Calculate combined token requirements for all tasks in the group
+        const totalTokens = taskGroup.reduce((sum, task) => sum + task.estimatedTokens, 0);
+        const maxIndividualTokens = Math.max(...taskGroup.map(task => task.estimatedTokens));
+        
+        // Determine if the group requires specialized capabilities
+        const requiresCodeCapability = taskGroup.some(task => 
+          task.codeType === 'function' || task.codeType === 'class' || task.codeType === 'method' || task.codeType === 'other' || task.codeType === 'module'
+        );
+        
+        // Get candidate models with specialized filtering
+        const candidateModels = modelPerformanceTracker.getBestPerformingModels(
+          representative.complexity,
+          10, // Get more candidates for better selection
+          {
+            prioritizeSpeed: strategy.prioritizeSpeed,
+            prioritizeQuality: strategy.prioritizeQuality,
+            requireLocalOnly: strategy.requireLocalOnly,
+            maximizeResourceEfficiency: true // Always consider resource efficiency
+          }
+        );
+        
+        // Apply token requirements filter
+        let modelsToConsider = candidateModels.length > 0 ? 
+          candidateModels : 
+          allModels;
+        
+        // Filter by token requirements and capability
+        modelsToConsider = modelsToConsider.filter(m => {
+          const meetsTokenReq = !m.contextWindow || m.contextWindow >= maxIndividualTokens;
+          
+          // Check for specialized capabilities if needed
+          if (requiresCodeCapability) {
+            return meetsTokenReq && m.id.toLowerCase().match(/code|coder|starcoder|deepseek|claude|gpt-4/);
+          }
+          
+          return meetsTokenReq;
+        });
+        
+        if (modelsToConsider.length === 0) {
+          logger.warn(`No suitable models for task group with ${maxIndividualTokens} tokens`);
+          continue;
+        }
+        
+        // Score models based on load, efficiency, and capability matching
+        const scoredModels = modelsToConsider.map(model => {
+          let score = 0;
+          
+          // Factor 1: Load balance (lower is better)
+          const effectiveLoad = this.getEffectiveLoad(model.id);
+          const loadScore = Math.max(0, 5 - effectiveLoad) * 2;
+          score += loadScore;
+          
+          // Factor 2: Resource efficiency
+          const isEfficientModel = efficiencyReport.mostEfficientModels.some(m => m.id === model.id);
+          if (isEfficientModel) {
+            score += 2.5;
+          } else if (
+            model.provider === 'local' || 
+            model.provider === 'lm-studio' || 
+            model.provider === 'ollama'
+          ) {
+            // Local models generally more efficient than remote
+            score += 1.5;
+          }
+          
+          // Factor 3: Model already used (avoid if possible to distribute load)
+          if (usedModels.has(model.id)) {
+            score -= 1;
+          }
+          
+          // Factor 4: Size appropriateness
+          const stats = modelPerformanceTracker.getModelStats(model.id);
+          if (stats) {
+            // Penalize oversized models for simple tasks
+            if (representative.complexity < COMPLEXITY_THRESHOLDS.MEDIUM) {
+              // Check if it's a large model by name
+              if (model.id.toLowerCase().match(/70b|40b|34b|claude-3-opus|gpt-4/)) {
+                score -= 1;
+              }
+            }
+            
+            // Bonus for specific task types
+            if ((representative.codeType === 'function' || representative.codeType === 'class' || representative.codeType === 'method' || representative.codeType === 'other' || representative.codeType === 'module') &&
+                model.id.toLowerCase().match(/code|coder|starcoder|deepseek/)) {
+              score += 1.5;
+            }
+          }
+          
+          // Factor 5: Memory efficiency
+          const memoryUsage = this._modelMemoryUsage.get(model.id);
+          if (memoryUsage && representative.complexity < COMPLEXITY_THRESHOLDS.MEDIUM) {
+            // For simple tasks, prefer models with lower memory usage
+            score += Math.max(0, 2 - (memoryUsage / 4)); // 0-2 points for memory efficiency
+          }
+          
+          return { model, score, effectiveLoad };
+        });
+        
+        // Sort by score (descending)
+        scoredModels.sort((a, b) => b.score - a.score);
+        
+        // Select the best model that isn't overloaded
+        let selectedModel: Model | null = null;
+        for (const candidate of scoredModels) {
+          // Skip if severely overloaded
+          if (candidate.effectiveLoad > 4) continue;
+          
+          selectedModel = candidate.model;
+          break;
+        }
+        
+        // Fallback to best scored model if all are overloaded
+        if (!selectedModel && scoredModels.length > 0) {
+          selectedModel = scoredModels[0].model;
+        }
+        
+        if (selectedModel) {
+          // Assign this model to all tasks in the group
+          for (const subtask of taskGroup) {
+            routingMap.set(subtask.id, selectedModel);
+          }
+          
+          // Mark this model as used
+          usedModels.add(selectedModel.id);
+          
+          // Update load tracking - use representative complexity
+          const avgComplexity = taskGroup.reduce((sum, t) => sum + t.complexity, 0) / taskGroup.length;
+          
+          // Update load with reasonable load increase that's proportional to group size but not linear
+          this.updateModelLoad(
+            selectedModel, 
+            true, 
+            avgComplexity, 
+            Math.min(maxIndividualTokens * 2, totalTokens)
+          );
+          
+          // Schedule load reduction based on estimated completion time
+          const estimatedCompletionTime = this.calculateEstimatedCompletionTime(
+            selectedModel, 
+            avgComplexity, 
+            totalTokens / taskGroup.length
+          );
+          const estimatedDuration = estimatedCompletionTime - Date.now();
+          
+          setTimeout(() => {
+            this.updateModelLoad(selectedModel!, false);
+            logger.debug(`Reduced load for ${selectedModel!.id} after task group completion`);
+          }, Math.max(30000, estimatedDuration)); // At least 30 seconds
+        }
+      }
+    } catch (error) {
+      logger.error('Error in resource-optimized routing:', error);
+    }
+    
+    return routingMap;
+  }
+  
   /**
    * Route multiple subtasks efficiently with enhanced load balancing
    */
@@ -219,22 +595,62 @@ class TaskRouter {
       batchSimilarTasks?: boolean;
     }
   ): Promise<Map<string, Model>> {
+    // Always use resource optimization if efficiency is the priority or option is set
+    if (globalPriority === 'efficiency' || options?.optimizeResources) {
+      return this.resourceOptimizedRouting(subtasks, globalPriority);
+    }
+    
     const routingMap = new Map<string, Model>();
     
     try {
-      // If resource optimization is requested, use more advanced allocation
-      if (globalPriority === 'efficiency' || options?.optimizeResources) {
-        return this.resourceOptimizedRouting(subtasks, globalPriority);
-      }
-      
       // Batch similar tasks if requested
       if (options?.batchSimilarTasks) {
-        return this.batchedTaskRouting(subtasks, globalPriority);
+        // Group similar subtasks
+        const groups = new Map<string, CodeSubtask[]>();
+        
+        subtasks.forEach(subtask => {
+          // Group by complexity bucket (rounded to nearest 0.1) and recommended model size
+          const complexityBucket = Math.round(subtask.complexity * 10) / 10;
+          const key = `${subtask.recommendedModelSize}-${complexityBucket}`;
+          if (!groups.has(key)) {
+            groups.set(key, []);
+          }
+          groups.get(key)?.push(subtask);
+        });
+        
+        // Process each group
+        for (const [_, taskGroup] of groups.entries()) {
+          if (taskGroup.length === 0) continue;
+          
+          // Get the most complex task as representative
+          const representative = taskGroup.reduce(
+            (max, task) => task.complexity > max.complexity ? task : max,
+            taskGroup[0]
+          );
+          
+          // Route the representative task
+          const model = await this.routeTask({
+            id: representative.id,
+            complexity: representative.complexity,
+            estimatedTokens: representative.estimatedTokens,
+            priority: globalPriority
+          });
+          
+          if (model) {
+            // Assign to all tasks in this group
+            for (const task of taskGroup) {
+              routingMap.set(task.id, model);
+            }
+          }
+        }
+        
+        return routingMap;
       }
       
-      // Standard routing - sort subtasks by complexity (descending) to handle complex tasks first
+      // Standard routing - sort subtasks by complexity (descending)
       const sortedSubtasks = [...subtasks].sort((a, b) => b.complexity - a.complexity);
       
+      // Process tasks in order of complexity
       for (const subtask of sortedSubtasks) {
         const model = await this.routeTask({
           id: subtask.id,
@@ -253,234 +669,21 @@ class TaskRouter {
     
     return routingMap;
   }
-  
-  /**
-   * Advanced resource-optimized routing for multiple tasks
-   */
-  async resourceOptimizedRouting(
-    subtasks: CodeSubtask[],
-    globalPriority?: 'speed' | 'quality' | 'cost' | 'efficiency'
-  ): Promise<Map<string, Model>> {
-    const routingMap = new Map<string, Model>();
-    
-    try {
-      // Group similar subtasks
-      const groups = new Map<string, CodeSubtask[]>();
-      subtasks.forEach(subtask => {
-        // Group by recommended model size and complexity range
-        const complexityBucket = Math.floor(subtask.complexity * 4) / 4; // 0.25 increment buckets
-        const key = `${subtask.recommendedModelSize}-${complexityBucket}`;
-        if (!groups.has(key)) {
-          groups.set(key, []);
-        }
-        groups.get(key)?.push(subtask);
-      });
-      
-      // Get available models
-      const availableModels = await costMonitor.getAvailableModels();
-      const freeModels = await costMonitor.getFreeModels();
-      const allModels = [...availableModels, ...freeModels];
-      
-      // Process each group
-      for (const [_, taskGroup] of groups.entries()) {
-        if (taskGroup.length === 0) continue;
-        
-        // Pick the most complex task as representative
-        const representative = taskGroup.reduce(
-          (max, task) => task.complexity > max.complexity ? task : max,
-          taskGroup[0]
-        );
-        
-        // Get resource efficiency report to make better decisions
-        const efficiencyReport = modelPerformanceTracker.getResourceEfficiencyReport();
-        
-        // Define strategy based on task characteristics and priority
-        const strategy = this.selectStrategy(representative.complexity, globalPriority);
-        
-        // Get candidate models
-        const candidateModels = modelPerformanceTracker.getBestPerformingModels(
-          representative.complexity,
-          5,
-          {
-            prioritizeSpeed: strategy.prioritizeSpeed,
-            prioritizeQuality: strategy.prioritizeQuality,
-            requireLocalOnly: strategy.requireLocalOnly,
-            maximizeResourceEfficiency: true // Always consider resource efficiency
-          }
-        );
-        
-        // If no candidates from performance data, use all available models
-        let modelsToConsider = candidateModels.length > 0 ? 
-          candidateModels : 
-          allModels.filter(m => !m.contextWindow || m.contextWindow >= representative.estimatedTokens);
-        
-        // Filter by token requirements
-        modelsToConsider = modelsToConsider.filter(
-          m => !m.contextWindow || m.contextWindow >= representative.estimatedTokens
-        );
-        
-        if (modelsToConsider.length === 0) {
-          logger.warn(`No suitable models for task group with ${representative.estimatedTokens} tokens`);
-          continue;
-        }
-        
-        // Score models based on load and efficiency
-        const scoredModels = modelsToConsider.map(model => {
-          let score = 0;
-          
-          // Lower load is better (0-5 scale, inverted)
-          const load = this.getModelLoad(model.id);
-          score += Math.max(0, 5 - load) * 0.4;
-          
-          // Check if it's among the most efficient models
-          const isEfficient = efficiencyReport.mostEfficientModels.some(m => m.id === model.id);
-          if (isEfficient) {
-            score += 2;
-          }
-          
-          // Local models get a slight boost for resource efficiency
-          if (model.provider === 'local' || 
-              model.provider === 'lm-studio' || 
-              model.provider === 'ollama') {
-            score += 1;
-          }
-          
-          return { model, score };
-        });
-        
-        // Select the best model
-        scoredModels.sort((a, b) => b.score - a.score);
-        
-        if (scoredModels.length > 0) {
-          const selectedModel = scoredModels[0].model;
-          
-          // Assign this model to all tasks in the group
-          for (const subtask of taskGroup) {
-            routingMap.set(subtask.id, selectedModel);
-          }
-          
-          // Update the load - increment by the number of tasks in the group
-          const currentLoad = this._modelLoads.get(selectedModel.id) || {
-            activeTaskCount: 0,
-            lastAssignmentTime: Date.now()
-          };
-          
-          currentLoad.activeTaskCount += Math.ceil(taskGroup.length / 2); // Increment by half the group size
-          currentLoad.lastAssignmentTime = Date.now();
-          this._modelLoads.set(selectedModel.id, currentLoad);
-          
-          // Schedule load reduction
-          setTimeout(() => {
-            this.updateModelLoad(selectedModel.id, false);
-            logger.debug(`Reduced load for ${selectedModel.id} after task group completion`);
-          }, 90000); // Longer timeout for a group
-        }
-      }
-    } catch (error) {
-      logger.error('Error in resource-optimized routing:', error);
-    }
-    
-    return routingMap;
-  }
-  
-  /**
-   * Batch similar tasks for efficient routing
-   */
-  async batchedTaskRouting(
-    subtasks: CodeSubtask[],
-    globalPriority?: 'speed' | 'quality' | 'cost' | 'efficiency'
-  ): Promise<Map<string, Model>> {
-    const routingMap = new Map<string, Model>();
-    
-    try {
-      // Organize tasks by complexity ranges
-      const complexityBuckets: {[key: string]: CodeSubtask[]} = {
-        simple: [],
-        medium: [],
-        complex: []
-      };
-      
-      for (const task of subtasks) {
-        if (task.complexity >= COMPLEXITY_THRESHOLDS.COMPLEX) {
-          complexityBuckets.complex.push(task);
-        } else if (task.complexity >= COMPLEXITY_THRESHOLDS.MEDIUM) {
-          complexityBuckets.medium.push(task);
-        } else {
-          complexityBuckets.simple.push(task);
-        }
-      }
-      
-      // Route each bucket using an appropriate model
-      for (const [complexity, tasks] of Object.entries(complexityBuckets)) {
-        if (tasks.length === 0) continue;
-        
-        // Select a priority based on complexity if none provided
-        let priority = globalPriority;
-        if (!priority) {
-          switch (complexity) {
-            case 'complex':
-              priority = 'quality';
-              break;
-            case 'medium':
-              priority = 'efficiency';
-              break;
-            case 'simple':
-              priority = 'speed';
-              break;
-          }
-        }
-        
-        // Find representative task (highest token count)
-        const representative = tasks.reduce(
-          (max, task) => task.estimatedTokens > max.estimatedTokens ? task : max,
-          tasks[0]
-        );
-        
-        // Route the representative task
-        const model = await this.routeTask({
-          complexity: representative.complexity,
-          estimatedTokens: representative.estimatedTokens,
-          priority
-        });
-        
-        if (model) {
-          // Assign to all tasks in this bucket
-          for (const task of tasks) {
-            routingMap.set(task.id, model);
-          }
-          
-          // Update load counter
-          const loadIncrement = Math.min(3, Math.ceil(tasks.length / 2));
-          const currentLoad = this._modelLoads.get(model.id) || {
-            activeTaskCount: 0,
-            lastAssignmentTime: Date.now()
-          };
-          currentLoad.activeTaskCount += loadIncrement;
-          currentLoad.lastAssignmentTime = Date.now();
-          this._modelLoads.set(model.id, currentLoad);
-          
-          // Schedule load reduction
-          setTimeout(() => {
-            const load = this._modelLoads.get(model.id);
-            if (load) {
-              load.activeTaskCount = Math.max(0, load.activeTaskCount - loadIncrement);
-              this._modelLoads.set(model.id, load);
-            }
-          }, 120000); // 2 minutes timeout for a batch
-        }
-      }
-    } catch (error) {
-      logger.error('Error in batched task routing:', error);
-    }
-    
-    return routingMap;
-  }
 
   /**
    * Update task completion status to help with load balancing
    */
   notifyTaskCompletion(modelId: string): void {
-    this.updateModelLoad(modelId, false);
+    // Find the model object to pass to updateModelLoad
+    const model = {
+      id: modelId,
+      name: modelId,
+      provider: 'unknown',
+      capabilities: { chat: true, completion: true },
+      costPerToken: { prompt: 0, completion: 0 }
+    };
+    
+    this.updateModelLoad(model, false);
     logger.debug(`Marked task as completed for model ${modelId}`);
   }
 
@@ -529,14 +732,51 @@ class TaskRouter {
       }, eligibleModels[0]);
     }
     
-    // Consider load balancing even in fallback selection
-    const balancedModels = eligibleModels.map(model => ({
-      model,
-      load: this.getModelLoad(model.id)
-    }));
+    // Consider load balancing with processing power
+    const scoredModels = eligibleModels.map(model => {
+      const load = this.getEffectiveLoad(model.id);
+      
+      // For size-appropriate scoring
+      let sizeScore = 0;
+      if (task.complexity < COMPLEXITY_THRESHOLDS.MEDIUM) {
+        // For simple tasks, prefer smaller models
+        if (model.id.toLowerCase().match(/1\.5b|1b|3b|mini|tiny/)) {
+          sizeScore = 2;
+        } else if (model.id.toLowerCase().match(/7b|8b|13b/)) {
+          sizeScore = 1;
+        }
+      } else {
+        // For complex tasks, prefer larger models
+        if (model.id.toLowerCase().match(/70b|40b|34b/)) {
+          sizeScore = 2;
+        } else if (model.id.toLowerCase().match(/7b|8b|13b/)) {
+          sizeScore = 1;
+        }
+      }
+      
+      return { model, score: (5 - load) + sizeScore };
+    });
     
-    balancedModels.sort((a, b) => a.load - b.load);
-    return balancedModels[0].model;
+    scoredModels.sort((a, b) => b.score - a.score);
+    return scoredModels[0].model;
+  }
+
+  /**
+   * Get all active model loads for monitoring
+   */
+  getModelLoads(): Record<string, { activeTaskCount: number, estimatedCompletions: number[] }> {
+    const result: Record<string, { activeTaskCount: number, estimatedCompletions: number[] }> = {};
+    
+    for (const [modelId, loadData] of this._modelLoads.entries()) {
+      if (loadData.activeTaskCount > 0) {
+        result[modelId] = {
+          activeTaskCount: loadData.activeTaskCount,
+          estimatedCompletions: loadData.estimatedCompletionTimes.map(time => time - Date.now())
+        };
+      }
+    }
+    
+    return result;
   }
 }
 

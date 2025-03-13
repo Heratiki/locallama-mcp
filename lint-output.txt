@@ -1,0 +1,595 @@
+/home/heratiki/Source/locallama-mcp/src/index.ts
+   4:10  warning  'config' is defined but never used                                      @typescript-eslint/no-unused-vars
+  17:7   error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  18:7   error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  18:29  error    Unsafe member access .version on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  33:9   error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  51:26  warning  Promise returned in function argument where a void return was expected  @typescript-eslint/no-misused-promises
+  72:20  warning  Unexpected console statement                                            no-console
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/index.ts
+  104:13  warning  'task' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  283:13  warning  'task' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/apiHandlers.ts
+   72:22  warning  Unexpected `await` of a non-Promise (non-"Thenable") value  @typescript-eslint/await-thenable
+  173:24  warning  Unexpected `await` of a non-Promise (non-"Thenable") value  @typescript-eslint/await-thenable
+  238:28  warning  Unexpected `await` of a non-Promise (non-"Thenable") value  @typescript-eslint/await-thenable
+  253:31  warning  Unexpected `await` of a non-Promise (non-"Thenable") value  @typescript-eslint/await-thenable
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/benchmarkService.ts
+  490:15  warning  'results' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/codeEvaluationService.ts
+  276:15  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  280:36  error  Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+  280:47  error  Unsafe member access .qualityScore on an `any` value                    @typescript-eslint/no-unsafe-member-access
+  281:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  281:35  error  Unsafe member access .explanation on an `any` value                     @typescript-eslint/no-unsafe-member-access
+  282:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  282:31  error  Unsafe member access .isValid on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  282:54  error  Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+  282:65  error  Unsafe member access .qualityScore on an `any` value                    @typescript-eslint/no-unsafe-member-access
+  283:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  283:35  error  Unsafe member access .suggestions on an `any` value                     @typescript-eslint/no-unsafe-member-access
+  284:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  284:44  error  Unsafe member access .implementationIssues on an `any` value            @typescript-eslint/no-unsafe-member-access
+  285:11  error  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  285:44  error  Unsafe member access .alternativeSolutions on an `any` value            @typescript-eslint/no-unsafe-member-access
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/codeModelSelector.ts
+    3:10  warning  'modelsDbService' is defined but never used                                                                                                                                                      @typescript-eslint/no-unused-vars
+    5:15  warning  'ModelPerformanceAnalysis' is defined but never used                                                                                                                                             @typescript-eslint/no-unused-vars
+   24:39  warning  Unexpected any. Specify a different type                                                                                                                                                         @typescript-eslint/no-explicit-any
+   25:5   error    Unsafe assignment of an `any` value                                                                                                                                                              @typescript-eslint/no-unsafe-assignment
+   32:17  warning  Unexpected any. Specify a different type                                                                                                                                                         @typescript-eslint/no-explicit-any
+   37:21  error    Unsafe member access .complexityScore on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+   38:40  error    Unsafe member access .complexityScore on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+   55:17  warning  Unexpected any. Specify a different type                                                                                                                                                         @typescript-eslint/no-explicit-any
+   56:19  warning  Unexpected any. Specify a different type                                                                                                                                                         @typescript-eslint/no-explicit-any
+   62:22  error    Unsafe member access .successRate on an `any` value                                                                                                                                              @typescript-eslint/no-unsafe-member-access
+   62:49  error    Unsafe member access .averageSuccessRate on an `any` value                                                                                                                                       @typescript-eslint/no-unsafe-member-access
+   67:22  error    Unsafe member access .qualityScore on an `any` value                                                                                                                                             @typescript-eslint/no-unsafe-member-access
+   67:50  error    Unsafe member access .averageQualityScore on an `any` value                                                                                                                                      @typescript-eslint/no-unsafe-member-access
+   72:11  error    Unsafe call of a(n) `any` typed value                                                                                                                                                            @typescript-eslint/no-unsafe-call
+   72:24  error    Unsafe member access .bestPerformingModels on an `any` value                                                                                                                                     @typescript-eslint/no-unsafe-member-access
+   91:17  warning  Unexpected any. Specify a different type                                                                                                                                                         @typescript-eslint/no-explicit-any
+   96:21  error    Unsafe member access .avgResponseTime on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+   97:44  error    Unsafe member access .avgResponseTime on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+  109:21  error    Unsafe member access .tokenEfficiency on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+  110:28  error    Unsafe argument of type `any` assigned to a parameter of type `number`                                                                                                                           @typescript-eslint/no-unsafe-argument
+  110:39  error    Unsafe member access .tokenEfficiency on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+  114:21  error    Unsafe member access .systemResourceUsage on an `any` value                                                                                                                                      @typescript-eslint/no-unsafe-member-access
+  116:43  error    Unsafe member access .systemResourceUsage on an `any` value                                                                                                                                      @typescript-eslint/no-unsafe-member-access
+  128:23  error    Unsafe member access .memoryFootprint on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+  128:53  error    Unsafe member access .memoryFootprint on an `any` value                                                                                                                                          @typescript-eslint/no-unsafe-member-access
+  211:13  error    Unsafe assignment of an error typed value                                                                                                                                                        @typescript-eslint/no-unsafe-assignment
+  211:28  error    Unsafe call of a(n) `error` type typed value                                                                                                                                                     @typescript-eslint/no-unsafe-call
+  220:66  error    Unsafe argument of type error typed assigned to a parameter of type `{ averageSuccessRate: number; averageQualityScore: number; averageResponseTime: number; bestPerformingModels: string[]; }`  @typescript-eslint/no-unsafe-argument
+  256:19  error    Unsafe assignment of an error typed value                                                                                                                                                        @typescript-eslint/no-unsafe-assignment
+  256:34  error    Unsafe call of a(n) `error` type typed value                                                                                                                                                     @typescript-eslint/no-unsafe-call
+  260:66  error    Unsafe argument of type error typed assigned to a parameter of type `{ averageSuccessRate: number; averageQualityScore: number; averageResponseTime: number; bestPerformingModels: string[]; }`  @typescript-eslint/no-unsafe-argument
+  315:11  error    Unsafe assignment of an error typed value                                                                                                                                                        @typescript-eslint/no-unsafe-assignment
+  315:26  error    Unsafe call of a(n) `error` type typed value                                                                                                                                                     @typescript-eslint/no-unsafe-call
+  323:84  error    Unsafe argument of type error typed assigned to a parameter of type `{ averageSuccessRate: number; averageQualityScore: number; averageResponseTime: number; bestPerformingModels: string[]; }`  @typescript-eslint/no-unsafe-argument
+  361:1   error    Async function 'scoreModelForSubtask' has no 'await' expression                                                                                                                                  @typescript-eslint/require-await
+  372:9   error    Unsafe assignment of an error typed value                                                                                                                                                        @typescript-eslint/no-unsafe-assignment
+  372:22  error    Unsafe call of a(n) `error` type typed value                                                                                                                                                     @typescript-eslint/no-unsafe-call
+  420:9   error    Unexpected lexical declaration in case block                                                                                                                                                     no-case-declarations
+  421:9   error    Unexpected lexical declaration in case block                                                                                                                                                     no-case-declarations
+  519:17  warning  '_' is assigned a value but never used                                                                                                                                                           @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/codeTaskAnalyzer.ts
+   76:11   warning  'promptOptions' is assigned a value but never used                        @typescript-eslint/no-unused-vars
+  148:9    error    Unsafe assignment of an `any` value                                       @typescript-eslint/no-unsafe-assignment
+  148:28   error    Unsafe member access .id on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  148:54   error    Unsafe member access .id on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  148:75   error    Unsafe member access .id on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  148:108  error    Unsafe member access .id on an `any` value                                @typescript-eslint/no-unsafe-member-access
+  149:9    error    Unsafe assignment of an `any` value                                       @typescript-eslint/no-unsafe-assignment
+  149:30   error    Unsafe member access .description on an `any` value                       @typescript-eslint/no-unsafe-member-access
+  150:39   error    Unsafe argument of type `any` assigned to a parameter of type `number`    @typescript-eslint/no-unsafe-argument
+  150:47   error    Unsafe member access .complexity on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  151:9    error    Unsafe assignment of an `any` value                                       @typescript-eslint/no-unsafe-assignment
+  151:34   error    Unsafe member access .estimatedTokens on an `any` value                   @typescript-eslint/no-unsafe-member-access
+  152:37   error    Unsafe member access .complexity on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  153:9    error    Unsafe assignment of an `any` value                                       @typescript-eslint/no-unsafe-assignment
+  153:31   error    Unsafe member access .dependencies on an `any` value                      @typescript-eslint/no-unsafe-member-access
+  154:9    error    Unsafe assignment of an `any` value                                       @typescript-eslint/no-unsafe-assignment
+  154:27   error    Unsafe member access .codeType on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  155:66   error    Unsafe argument of type `any` assigned to a parameter of type `number`    @typescript-eslint/no-unsafe-argument
+  155:74   error    Unsafe member access .complexity on an `any` value                        @typescript-eslint/no-unsafe-member-access
+  239:31   error    Unsafe return of a value of type `any`                                    @typescript-eslint/no-unsafe-return
+  242:31   error    Unsafe return of a value of type `any`                                    @typescript-eslint/no-unsafe-return
+  324:48   warning  Unexpected any. Specify a different type                                  @typescript-eslint/no-explicit-any
+  342:15   error    Unsafe assignment of an `any` value                                       @typescript-eslint/no-unsafe-assignment
+  348:26   warning  Unexpected any. Specify a different type                                  @typescript-eslint/no-explicit-any
+  356:27   error    Unsafe member access .subtasks on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  356:60   error    Unsafe member access .subtasks on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  358:11   error    Unsafe return of a value of type `any`                                    @typescript-eslint/no-unsafe-return
+  358:18   error    Unsafe call of a(n) `any` typed value                                     @typescript-eslint/no-unsafe-call
+  358:25   error    Unsafe member access .subtasks on an `any` value                          @typescript-eslint/no-unsafe-member-access
+  397:24   warning  'index' is defined but never used. Allowed unused args must match /^_/u   @typescript-eslint/no-unused-vars
+  446:9    error    Unsafe return of a value of type `any`                                    @typescript-eslint/no-unsafe-return
+  562:1    error    Async function 'evaluateIntegrationFactors' has no 'await' expression     @typescript-eslint/require-await
+  615:1    error    Async function 'evaluateDomainKnowledge' has no 'await' expression        @typescript-eslint/require-await
+  673:1    error    Async function 'evaluateTechnicalRequirements' has no 'await' expression  @typescript-eslint/require-await
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/codeTaskCoordinator.ts
+    1:8   warning  'path' is defined but never used                      @typescript-eslint/no-unused-vars
+  320:13  warning  'availableModels' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/codeValidator.ts
+   2:25  warning  'code' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   7:24  warning  'code' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  12:27  warning  'code' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  17:32  warning  'code' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/dependencyMapper.ts
+   78:11  warning  'topologicalOrder' is assigned a value but never used                    @typescript-eslint/no-unused-vars
+  152:9   warning  'remainingTasks' is never reassigned. Use 'const' instead                prefer-const
+  215:11  warning  'path' is assigned a value but never used                                @typescript-eslint/no-unused-vars
+  321:39  warning  'index' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/jobTracker.ts
+    2:16  warning  'uuidv4' is defined but never used                                                                                                                                  @typescript-eslint/no-unused-vars
+   45:5   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/jobTracker.ts
+    2:16  warning  'uuidv4' is defined but never used                                                                                                                                  @typescript-eslint/no-unused-vars
+   45:5   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   45:19  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+   62:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   62:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+   77:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   77:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+   91:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   91:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+  105:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  105:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/modelPerformance.ts
+    3:32  warning  'ModelsDatabase' is defined but never used                              @typescript-eslint/no-unused-vars
+    3:48  warning  'COMPLEXITY_THRESHOLDS' is defined but never used                       @typescript-eslint/no-unused-vars
+   15:73  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   45:26  warning  Unexpected `await` of a non-Promise (non-"Thenable") value              @typescript-eslint/await-thenable
+   50:11  warning  Unexpected `await` of a non-Promise (non-"Thenable") value              @typescript-eslint/await-thenable
+  109:40  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  109:45  error    Unsafe member access .resourceHistory on an `any` value                 @typescript-eslint/no-unsafe-member-access
+  185:40  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  185:45  error    Unsafe member access .resourceHistory on an `any` value                 @typescript-eslint/no-unsafe-member-access
+  189:9   warning  Unexpected `await` of a non-Promise (non-"Thenable") value              @typescript-eslint/await-thenable
+  199:3   error    Async method 'trackResourceUsage' has no 'await' expression             @typescript-eslint/require-await
+  262:35  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  342:38  warning  'data' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/modelSelector.ts
+  6:10  warning  'ModelsDatabase' is defined but never used        @typescript-eslint/no-unused-vars
+  6:26  warning  'ModelPerformanceData' is defined but never used  @typescript-eslint/no-unused-vars
+  7:10  warning  'modelProfiles' is defined but never used         @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/modelsDb.ts
+   1:8   warning  'path' is defined but never used                     @typescript-eslint/no-unused-vars
+   2:8   warning  'fs' is defined but never used                       @typescript-eslint/no-unused-vars
+   3:10  warning  'mkdir' is defined but never used                    @typescript-eslint/no-unused-vars
+   4:10  warning  'config' is defined but never used                   @typescript-eslint/no-unused-vars
+  29:3   error    Async method 'initialize' has no 'await' expression  @typescript-eslint/require-await
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/taskExecutor.ts
+  22:9  warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/taskRouter.ts
+  117:11  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  122:16  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  123:7   error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  123:26  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  187:41  warning  'complexity' is defined but never used. Allowed unused args must match /^_/u       @typescript-eslint/no-unused-vars
+  187:61  warning  'tokenCount' is defined but never used. Allowed unused args must match /^_/u       @typescript-eslint/no-unused-vars
+  191:13  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  194:18  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  196:50  error    Unsafe argument of type `any` assigned to a parameter of type `number`             @typescript-eslint/no-unsafe-argument
+  196:56  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  209:18  error    Unsafe member access .memoryFootprint on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  210:46  error    Unsafe argument of type `any` assigned to a parameter of type `number`             @typescript-eslint/no-unsafe-argument
+  210:52  error    Unsafe member access .memoryFootprint on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  295:17  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  298:32  error    Unsafe member access .complexityScore on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  303:38  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  303:82  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  315:57  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  317:48  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  318:59  error    Unsafe member access .qualityScore on an `any` value                               @typescript-eslint/no-unsafe-member-access
+  320:28  error    Unsafe member access .qualityScore on an `any` value                               @typescript-eslint/no-unsafe-member-access
+  357:36  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  358:48  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  418:19  warning  'groupKey' is assigned a value but never used                                      @typescript-eslint/no-unused-vars
+  501:17  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  575:34  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  576:46  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  622:21  warning  '_' is assigned a value but never used                                             @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/types/codeTask.ts
+  48:28  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/types/index.ts
+  2:10  warning  'Model' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/fallback-handler/index.ts
+   23:67  warning  Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+  147:15  error    Unsafe assignment of an `any` value                    @typescript-eslint/no-unsafe-assignment
+  147:44  error    Unsafe member access .choices on an `any` value        @typescript-eslint/no-unsafe-member-access
+  149:15  error    Unsafe assignment of an `any` value                    @typescript-eslint/no-unsafe-assignment
+  149:44  error    Unsafe member access .message on an `any` value        @typescript-eslint/no-unsafe-member-access
+  156:15  error    Unsafe assignment of an `any` value                    @typescript-eslint/no-unsafe-assignment
+  160:71  error    Invalid type "unknown" of template literal expression  @typescript-eslint/restrict-template-expressions
+  199:11  warning  'testPayload' is defined but never used                @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/new-module/newComponent.ts
+   2:17  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   3:32  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   5:24  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   7:22  error    Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+   7:27  error    Unsafe member access .id on an `any` value                              @typescript-eslint/no-unsafe-member-access
+  10:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  14:35  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+
+/home/heratiki/Source/locallama-mcp/src/modules/new-module/newModule.ts
+  10:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  14:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/heratiki/Source/locallama-mcp/src/modules/openrouter/index.ts
+   83:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   85:48  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+   93:16  warning  'error' is defined but never used                                       @typescript-eslint/no-unused-vars
+  108:16  warning  'error' is defined but never used                                       @typescript-eslint/no-unused-vars
+  281:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  283:60  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  288:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  290:44  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  306:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  308:71  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  313:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  315:44  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  616:52  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  616:77  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  619:11  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  619:31  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  620:11  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  620:32  error    Unsafe member access .usage on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  707:68  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  764:56  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  764:81  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  765:19  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  765:40  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  766:61  error    Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+  777:17  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  778:17  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  778:38  error    Unsafe member access .usage on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  807:11  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  967:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  968:82  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  976:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  978:44  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+
+/home/heratiki/Source/locallama-mcp/src/modules/user-preferences/index.ts
+   88:15  error  Unsafe assignment of an `any` value                       @typescript-eslint/no-unsafe-assignment
+   91:9   error  Unsafe assignment of an `any` value                       @typescript-eslint/no-unsafe-assignment
+  111:3   error  Async method 'savePreferences' has no 'await' expression  @typescript-eslint/require-await
+
+/home/heratiki/Source/locallama-mcp/src/modules/websocket-server/db.ts
+  13:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  13:20  error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  18:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  18:12  error  Unsafe member access .exec on an `error` typed value    @typescript-eslint/no-unsafe-member-access
+  30:3   error  Unsafe return of a value of type error                  @typescript-eslint/no-unsafe-return
+  34:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  35:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  35:12  error  Unsafe member access .run on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+  37:9   error  Unsafe member access .id on an `any` value              @typescript-eslint/no-unsafe-member-access
+  37:17  error  Unsafe member access .description on an `any` value     @typescript-eslint/no-unsafe-member-access
+  37:34  error  Unsafe member access .status on an `any` value          @typescript-eslint/no-unsafe-member-access
+  37:46  error  Unsafe member access .progress on an `any` value        @typescript-eslint/no-unsafe-member-access
+  37:60  error  Unsafe member access .parent_task_id on an `any` value  @typescript-eslint/no-unsafe-member-access
+  37:80  error  Unsafe member access .created_at on an `any` value      @typescript-eslint/no-unsafe-member-access
+  37:96  error  Unsafe member access .updated_at on an `any` value      @typescript-eslint/no-unsafe-member-access
+  42:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  43:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  43:12  error  Unsafe member access .run on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+  45:9   error  Unsafe member access .status on an `any` value          @typescript-eslint/no-unsafe-member-access
+  45:21  error  Unsafe member access .progress on an `any` value        @typescript-eslint/no-unsafe-member-access
+  45:35  error  Unsafe member access .updated_at on an `any` value      @typescript-eslint/no-unsafe-member-access
+  45:51  error  Unsafe member access .id on an `any` value              @typescript-eslint/no-unsafe-member-access
+  50:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  51:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  51:22  error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  51:25  error  Unsafe member access .all on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+  52:3   error  Unsafe return of a value of type error                  @typescript-eslint/no-unsafe-return
+  56:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  59:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  59:12  error  Unsafe member access .run on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+
+/home/heratiki/Source/locallama-mcp/src/modules/websocket-server/ws-server.ts
+   40:3   warning  Unexpected console statement                                                                                                                                        no-console
+   43:5   warning  Unexpected console statement                                                                                                                                        no-console
+   46:13  error    Unsafe assignment of an `any` value                                                                                                                                 @typescript-eslint/no-unsafe-assignment
+   46:31  error    'message' may use Object's default stringification format ('[object Object]') when stringified                                                                      @typescript-eslint/no-base-to-string
+   47:16  error    Unsafe member access .type on an `any` value                                                                                                                        @typescript-eslint/no-unsafe-member-access
+   48:9   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   48:19  error    Unsafe argument of type `any` assigned to a parameter of type `string`                                                                                              @typescript-eslint/no-unsafe-argument
+   48:24  error    Unsafe member access .jobId on an `any` value                                                                                                                       @typescript-eslint/no-unsafe-member-access
+   53:7   warning  Unexpected console statement                                                                                                                                        no-console
+   57:7   warning  Unexpected console statement                                                                                                                                        no-console
+   64:1   error    Async function 'startExpressServer' has no 'await' expression                                                                                                       @typescript-eslint/require-await
+   73:5   warning  Unexpected console statement                                                                                                                                        no-console
+   80:9   error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   80:22  error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   80:33  error    Unsafe member access .getActiveJobs on an `error` typed value                                                                                                       @typescript-eslint/no-unsafe-member-access
+   81:9   error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   82:21  error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   82:33  error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   91:1   error    Async function 'cancelJob' has no 'await' expression                                                                                                                @typescript-eslint/require-await
+   92:9   error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   92:15  error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   92:26  error    Unsafe member access .getJob on an `error` typed value                                                                                                              @typescript-eslint/no-unsafe-member-access
+   94:13  error    Unsafe member access .status on an `error` typed value                                                                                                              @typescript-eslint/no-unsafe-member-access
+   95:7   error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   95:18  error    Unsafe member access .removeJob on an `error` typed value                                                                                                           @typescript-eslint/no-unsafe-member-access
+   96:20  error    Unsafe member access .status on an `error` typed value                                                                                                              @typescript-eslint/no-unsafe-member-access
+   97:20  error    Unsafe argument of type error typed assigned to a parameter of type `number`                                                                                        @typescript-eslint/no-unsafe-argument
+   97:24  error    Unsafe member access .processId on an `error` typed value                                                                                                           @typescript-eslint/no-unsafe-member-access
+   99:5   error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   99:16  error    Unsafe member access .updateJobStatus on an `error` typed value                                                                                                     @typescript-eslint/no-unsafe-member-access
+  100:5   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  100:19  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+  106:1   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  108:9   warning  'wss' is assigned a value but never used                                                                                                                            @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/utils/logger.ts
+   61:65  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   70:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   73:7   warning  Unexpected console statement              no-console
+   78:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   81:7   warning  Unexpected console statement              no-console
+   86:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   89:7   warning  Unexpected console statement              no-console
+   94:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   97:7   warning  Unexpected console statement              no-console
+  105:52  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  108:31  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+  111:30  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+  114:30  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+  117:31  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+
+✖ 306 problems (206 errors, 100 warnings)
+  4 errors and 1 warning potentially fixable with the `--fix` option.
+
+  321:39  warning  'index' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/jobTracker.ts
+    2:16  warning  'uuidv4' is defined but never used                                                                                                                                  @typescript-eslint/no-unused-vars
+   45:5   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   45:19  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+   62:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   62:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+   77:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   77:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+   91:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   91:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+  105:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  105:21  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/modelPerformance.ts
+    3:32  warning  'ModelsDatabase' is defined but never used                              @typescript-eslint/no-unused-vars
+    3:48  warning  'COMPLEXITY_THRESHOLDS' is defined but never used                       @typescript-eslint/no-unused-vars
+   15:73  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   45:26  warning  Unexpected `await` of a non-Promise (non-"Thenable") value              @typescript-eslint/await-thenable
+   50:11  warning  Unexpected `await` of a non-Promise (non-"Thenable") value              @typescript-eslint/await-thenable
+  109:40  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  109:45  error    Unsafe member access .resourceHistory on an `any` value                 @typescript-eslint/no-unsafe-member-access
+  185:40  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  185:45  error    Unsafe member access .resourceHistory on an `any` value                 @typescript-eslint/no-unsafe-member-access
+  189:9   warning  Unexpected `await` of a non-Promise (non-"Thenable") value              @typescript-eslint/await-thenable
+  199:3   error    Async method 'trackResourceUsage' has no 'await' expression             @typescript-eslint/require-await
+  262:35  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  342:38  warning  'data' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/modelSelector.ts
+  6:10  warning  'ModelsDatabase' is defined but never used        @typescript-eslint/no-unused-vars
+  6:26  warning  'ModelPerformanceData' is defined but never used  @typescript-eslint/no-unused-vars
+  7:10  warning  'modelProfiles' is defined but never used         @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/modelsDb.ts
+   1:8   warning  'path' is defined but never used                     @typescript-eslint/no-unused-vars
+   2:8   warning  'fs' is defined but never used                       @typescript-eslint/no-unused-vars
+   3:10  warning  'mkdir' is defined but never used                    @typescript-eslint/no-unused-vars
+   4:10  warning  'config' is defined but never used                   @typescript-eslint/no-unused-vars
+  29:3   error    Async method 'initialize' has no 'await' expression  @typescript-eslint/require-await
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/taskExecutor.ts
+  22:9  warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/taskRouter.ts
+  117:11  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  122:16  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  123:7   error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  123:26  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  187:41  warning  'complexity' is defined but never used. Allowed unused args must match /^_/u       @typescript-eslint/no-unused-vars
+  187:61  warning  'tokenCount' is defined but never used. Allowed unused args must match /^_/u       @typescript-eslint/no-unused-vars
+  191:13  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  194:18  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  196:50  error    Unsafe argument of type `any` assigned to a parameter of type `number`             @typescript-eslint/no-unsafe-argument
+  196:56  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  209:18  error    Unsafe member access .memoryFootprint on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  210:46  error    Unsafe argument of type `any` assigned to a parameter of type `number`             @typescript-eslint/no-unsafe-argument
+  210:52  error    Unsafe member access .memoryFootprint on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  295:17  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  298:32  error    Unsafe member access .complexityScore on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  303:38  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  303:82  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  315:57  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  317:48  error    Unsafe member access .avgResponseTime on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  318:59  error    Unsafe member access .qualityScore on an `any` value                               @typescript-eslint/no-unsafe-member-access
+  320:28  error    Unsafe member access .qualityScore on an `any` value                               @typescript-eslint/no-unsafe-member-access
+  357:36  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  358:48  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  418:19  warning  'groupKey' is assigned a value but never used                                      @typescript-eslint/no-unused-vars
+  501:17  error    Unsafe assignment of an `any` value                                                @typescript-eslint/no-unsafe-assignment
+  575:34  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  576:46  error    This assertion is unnecessary since it does not change the type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  622:21  warning  '_' is assigned a value but never used                                             @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/types/codeTask.ts
+  48:28  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/heratiki/Source/locallama-mcp/src/modules/decision-engine/types/index.ts
+  2:10  warning  'Model' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/fallback-handler/index.ts
+   23:67  warning  Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+  147:15  error    Unsafe assignment of an `any` value                    @typescript-eslint/no-unsafe-assignment
+  147:44  error    Unsafe member access .choices on an `any` value        @typescript-eslint/no-unsafe-member-access
+  149:15  error    Unsafe assignment of an `any` value                    @typescript-eslint/no-unsafe-assignment
+  149:44  error    Unsafe member access .message on an `any` value        @typescript-eslint/no-unsafe-member-access
+  156:15  error    Unsafe assignment of an `any` value                    @typescript-eslint/no-unsafe-assignment
+  160:71  error    Invalid type "unknown" of template literal expression  @typescript-eslint/restrict-template-expressions
+  199:11  warning  'testPayload' is defined but never used                @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/modules/new-module/newComponent.ts
+   2:17  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   3:32  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   5:24  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   7:22  error    Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+   7:27  error    Unsafe member access .id on an `any` value                              @typescript-eslint/no-unsafe-member-access
+  10:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  14:35  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+
+/home/heratiki/Source/locallama-mcp/src/modules/new-module/newModule.ts
+  10:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  14:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/heratiki/Source/locallama-mcp/src/modules/openrouter/index.ts
+   83:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+   85:48  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+   93:16  warning  'error' is defined but never used                                       @typescript-eslint/no-unused-vars
+  108:16  warning  'error' is defined but never used                                       @typescript-eslint/no-unused-vars
+  281:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  283:60  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  288:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  290:44  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  306:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  308:71  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  313:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  315:44  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  616:52  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  616:77  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  619:11  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  619:31  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  620:11  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  620:32  error    Unsafe member access .usage on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  707:68  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  764:56  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  764:81  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  765:19  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  765:40  error    Unsafe member access .choices on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  766:61  error    Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+  777:17  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  778:17  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  778:38  error    Unsafe member access .usage on an `any` value                           @typescript-eslint/no-unsafe-member-access
+  807:11  error    Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+  967:23  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  968:82  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+  976:21  warning  Unexpected any. Specify a different type                                @typescript-eslint/no-explicit-any
+  978:44  error    Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+
+/home/heratiki/Source/locallama-mcp/src/modules/user-preferences/index.ts
+   88:15  error  Unsafe assignment of an `any` value                       @typescript-eslint/no-unsafe-assignment
+   91:9   error  Unsafe assignment of an `any` value                       @typescript-eslint/no-unsafe-assignment
+  111:3   error  Async method 'savePreferences' has no 'await' expression  @typescript-eslint/require-await
+
+/home/heratiki/Source/locallama-mcp/src/modules/websocket-server/db.ts
+  13:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  13:20  error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  18:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  18:12  error  Unsafe member access .exec on an `error` typed value    @typescript-eslint/no-unsafe-member-access
+  30:3   error  Unsafe return of a value of type error                  @typescript-eslint/no-unsafe-return
+  34:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  35:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  35:12  error  Unsafe member access .run on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+  37:9   error  Unsafe member access .id on an `any` value              @typescript-eslint/no-unsafe-member-access
+  37:17  error  Unsafe member access .description on an `any` value     @typescript-eslint/no-unsafe-member-access
+  37:34  error  Unsafe member access .status on an `any` value          @typescript-eslint/no-unsafe-member-access
+  37:46  error  Unsafe member access .progress on an `any` value        @typescript-eslint/no-unsafe-member-access
+  37:60  error  Unsafe member access .parent_task_id on an `any` value  @typescript-eslint/no-unsafe-member-access
+  37:80  error  Unsafe member access .created_at on an `any` value      @typescript-eslint/no-unsafe-member-access
+  37:96  error  Unsafe member access .updated_at on an `any` value      @typescript-eslint/no-unsafe-member-access
+  42:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  43:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  43:12  error  Unsafe member access .run on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+  45:9   error  Unsafe member access .status on an `any` value          @typescript-eslint/no-unsafe-member-access
+  45:21  error  Unsafe member access .progress on an `any` value        @typescript-eslint/no-unsafe-member-access
+  45:35  error  Unsafe member access .updated_at on an `any` value      @typescript-eslint/no-unsafe-member-access
+  45:51  error  Unsafe member access .id on an `any` value              @typescript-eslint/no-unsafe-member-access
+  50:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  51:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  51:22  error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  51:25  error  Unsafe member access .all on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+  52:3   error  Unsafe return of a value of type error                  @typescript-eslint/no-unsafe-return
+  56:9   error  Unsafe assignment of an error typed value               @typescript-eslint/no-unsafe-assignment
+  59:9   error  Unsafe call of a(n) `error` type typed value            @typescript-eslint/no-unsafe-call
+  59:12  error  Unsafe member access .run on an `error` typed value     @typescript-eslint/no-unsafe-member-access
+
+/home/heratiki/Source/locallama-mcp/src/modules/websocket-server/ws-server.ts
+   40:3   warning  Unexpected console statement                                                                                                                                        no-console
+   43:5   warning  Unexpected console statement                                                                                                                                        no-console
+   46:13  error    Unsafe assignment of an `any` value                                                                                                                                 @typescript-eslint/no-unsafe-assignment
+   46:31  error    'message' may use Object's default stringification format ('[object Object]') when stringified                                                                      @typescript-eslint/no-base-to-string
+   47:16  error    Unsafe member access .type on an `any` value                                                                                                                        @typescript-eslint/no-unsafe-member-access
+   48:9   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+   48:19  error    Unsafe argument of type `any` assigned to a parameter of type `string`                                                                                              @typescript-eslint/no-unsafe-argument
+   48:24  error    Unsafe member access .jobId on an `any` value                                                                                                                       @typescript-eslint/no-unsafe-member-access
+   53:7   warning  Unexpected console statement                                                                                                                                        no-console
+   57:7   warning  Unexpected console statement                                                                                                                                        no-console
+   64:1   error    Async function 'startExpressServer' has no 'await' expression                                                                                                       @typescript-eslint/require-await
+   73:5   warning  Unexpected console statement                                                                                                                                        no-console
+   80:9   error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   80:22  error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   80:33  error    Unsafe member access .getActiveJobs on an `error` typed value                                                                                                       @typescript-eslint/no-unsafe-member-access
+   81:9   error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   82:21  error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   82:33  error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   91:1   error    Async function 'cancelJob' has no 'await' expression                                                                                                                @typescript-eslint/require-await
+   92:9   error    Unsafe assignment of an error typed value                                                                                                                           @typescript-eslint/no-unsafe-assignment
+   92:15  error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   92:26  error    Unsafe member access .getJob on an `error` typed value                                                                                                              @typescript-eslint/no-unsafe-member-access
+   94:13  error    Unsafe member access .status on an `error` typed value                                                                                                              @typescript-eslint/no-unsafe-member-access
+   95:7   error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   95:18  error    Unsafe member access .removeJob on an `error` typed value                                                                                                           @typescript-eslint/no-unsafe-member-access
+   96:20  error    Unsafe member access .status on an `error` typed value                                                                                                              @typescript-eslint/no-unsafe-member-access
+   97:20  error    Unsafe argument of type error typed assigned to a parameter of type `number`                                                                                        @typescript-eslint/no-unsafe-argument
+   97:24  error    Unsafe member access .processId on an `error` typed value                                                                                                           @typescript-eslint/no-unsafe-member-access
+   99:5   error    Unsafe call of a(n) `error` type typed value                                                                                                                        @typescript-eslint/no-unsafe-call
+   99:16  error    Unsafe member access .updateJobStatus on an `error` typed value                                                                                                     @typescript-eslint/no-unsafe-member-access
+  100:5   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  100:19  error    Unsafe argument of type error typed assigned to a parameter of type `WebSocketServer`                                                                               @typescript-eslint/no-unsafe-argument
+  106:1   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+  108:9   warning  'wss' is assigned a value but never used                                                                                                                            @typescript-eslint/no-unused-vars
+
+/home/heratiki/Source/locallama-mcp/src/utils/logger.ts
+   61:65  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   70:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   73:7   warning  Unexpected console statement              no-console
+   78:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   81:7   warning  Unexpected console statement              no-console
+   86:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   89:7   warning  Unexpected console statement              no-console
+   94:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   97:7   warning  Unexpected console statement              no-console
+  105:52  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  108:31  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+  111:30  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+  114:30  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+  117:31  error    Unsafe spread of an `any[]` array type    @typescript-eslint/no-unsafe-argument
+
+✖ 306 problems (206 errors, 100 warnings)
+  4 errors and 1 warning potentially fixable with the `--fix` option.
+

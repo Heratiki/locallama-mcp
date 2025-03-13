@@ -15,6 +15,18 @@ export interface ModelPerformanceData {
   lastBenchmarked: string;
   benchmarkCount: number;
   isFree: boolean; // Whether this is a free model
+  resourceHistory?: Array<{ timestamp: number; tokenUsage: number; responseTime: number; success: boolean; cpuUsage?: number; memoryUsage?: number; }>;
+
+}
+
+// Interface for model performance analysis results
+export interface ModelPerformanceAnalysis {
+  averageSuccessRate: number;
+  averageQualityScore: number;
+  averageResponseTime: number;
+  averageTokenEfficiency: number;
+  averageResourceUsage: number;
+  bestPerformingModels: string[];
 }
 
 // Interface for models database

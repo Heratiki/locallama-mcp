@@ -1,10 +1,9 @@
 import { config } from '../../config/index.js';
 import { costMonitor } from '../cost-monitor/index.js';
 import { logger } from '../../utils/logger.js';
-import { Model, RoutingDecision, TaskRoutingParams, ModelPerformanceProfile } from '../../types/index.js';
-import { modelProfiles } from './utils/modelProfiles.js';
+import { Model, RoutingDecision, TaskRoutingParams, CostEstimate } from '../../types/index.js';
 import { modelSelector } from './services/modelSelector.js';
-import { codeEvaluationService } from './services/codeEvaluationService.js';
+// import { codeEvaluationService } from './services/codeEvaluationService.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
 import { benchmarkService } from './services/benchmarkService.js';
 import { modelsDbService } from './services/modelsDb.js';
 import { COMPLEXITY_THRESHOLDS, TOKEN_THRESHOLDS } from './types/index.js';
@@ -12,6 +11,30 @@ import { codeTaskCoordinator } from './services/codeTaskCoordinator.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from './types/codeTask.js';
 import { apiHandlers } from './services/apiHandlers.js';
 import { jobTracker } from './services/jobTracker.js';
+import { codeModelSelector } from './services/codeModelSelector.js';
+import { modelPerformanceTracker } from './services/modelPerformance.js';
+// import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
+/**
+ * Represents a single factor in the routing decision.
+ */
+interface Factor {
+  local?: number;
+  paid?: number;
+  wasFactor: boolean;
+  weight: number;
+}
+
+/**
+ * Represents all factors considered in the routing decision.
+ */
+interface Factors {
+  cost: Factor;
+  complexity: Factor;
+  tokenUsage: Factor;
+  priority: Factor;
+  contextWindow: Factor;
+  benchmarkPerformance?: Factor;
+}
 
 // Re-export the API handlers and job tracker for external use
 export { apiHandlers, jobTracker };
@@ -44,6 +67,9 @@ export const decisionEngine = {
       // Initialize models database
       await modelsDbService.initialize();
 
+      // Initialize module connections to resolve circular dependencies
+      modelPerformanceTracker.initialize(codeModelSelector);
+      
       // Start periodic job cleanup
       setInterval(() => {
         jobTracker.cleanupCompletedJobs();
@@ -336,8 +362,8 @@ export const decisionEngine = {
    */
   async calculateFullRoutingDecision(
     params: TaskRoutingParams,
-    factors: any,
-    costEstimate: any,
+    factors: Factors,
+    costEstimate: CostEstimate,
     hasFreeModels: boolean
   ): Promise<{ provider: 'local' | 'paid'; model: string; confidence: number; explanation: string; localScore: number; paidScore: number }> {
     const { complexity, contextLength, expectedOutputLength, priority } = params;
@@ -397,6 +423,24 @@ export const decisionEngine = {
     let confidence: number;
     let model: string;
 
+    // Check model availability and handle context window limitations
+    try {
+      // If using local models, check if any can handle the context window
+      const localModels = await costMonitor.getAvailableModels();
+      const maxLocalContextWindow = localModels.reduce((max, model) => 
+        Math.max(max, model.contextWindow || 0), 0);
+      
+      if (totalTokens > maxLocalContextWindow) {
+        // Local models can't handle this context size
+        paidScore += 0.3 * factors.contextWindow.weight;
+        factors.contextWindow.wasFactor = true;
+        explanation += `Context window factor: Local models max window (${maxLocalContextWindow}) is smaller than required tokens (${totalTokens}). `;
+      }
+    } catch (error) {
+      logger.warn('Error checking model context windows:', error);
+    }
+    
+    // Final decision logic with free models
     if (hasFreeModels && freeScore > localScore && freeScore > paidScore) {
       provider = 'paid';
       confidence = Math.min(Math.abs(freeScore - Math.max(localScore, paidScore)), 1.0);
@@ -404,7 +448,6 @@ export const decisionEngine = {
       model = bestFreeModel?.id || 'gpt-3.5-turbo';
       explanation += `Selected free model ${model} based on scoring. `;
     } else {
-      // FIX: Use the provider with the highest score
       provider = localScore > paidScore ? 'local' : 'paid';
       confidence = Math.min(Math.abs(localScore - paidScore), 1.0);
       model = await this.selectModelForProvider(provider, complexity, totalTokens);

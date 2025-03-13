@@ -1,8 +1,8 @@
 import { jobTracker } from './jobTracker.js';
+// import { taskRouter } from './taskRouter.js'; // TODO: Check and make sure this module is still used elsewhere in the codebase.
 import { decisionEngine } from '../index.js';
 import { logger } from '../../../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
-import { taskRouter } from './taskRouter.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { ModelPerformanceData } from '../../../types/index.js';
 
@@ -34,10 +34,10 @@ export const apiHandlers = {
     preemptive?: boolean;
   }) {
     const jobId = `job_${uuidv4()}`;
-    
+
     // Create job first
     jobTracker.createJob(jobId, params.task);
-    
+
     try {
       // Get initial routing decision
       const decision = await decisionEngine.routeTask({
@@ -114,7 +114,7 @@ export const apiHandlers = {
     }
   },
 
-  async getActiveJobs() {
+  getActiveJobs() {
     try {
       const jobs = jobTracker.getActiveJobs();
       return {
@@ -133,7 +133,7 @@ export const apiHandlers = {
     }
   },
 
-  async getJobProgress(jobId: string) {
+  getJobProgress(jobId: string) {
     try {
       const job = jobTracker.getJob(jobId);
       if (!job) {
@@ -154,7 +154,7 @@ export const apiHandlers = {
     }
   },
 
-  async cancelJob(jobId: string) {
+  cancelJob(jobId: string) {
     try {
       jobTracker.cancelJob(jobId);
       return {
@@ -171,7 +171,7 @@ export const apiHandlers = {
     try {
       const freeModels = await costMonitor.getFreeModels();
       const modelsDb = await costMonitor.getModelPerformanceData();
-      
+
       return {
         models: freeModels.map(model => {
           const perfData = modelsDb[model.id] as ModelPerformanceData;
@@ -245,7 +245,7 @@ export const apiHandlers = {
       // If we found similar tasks with high similarity, use them to optimize
       if (similarTasks.length > 0 && similarTasks[0].similarity > 0.85) {
         logger.info(`Found similar task with ${similarTasks[0].similarity.toFixed(2)} similarity score`);
-        
+
         // Update job progress
         jobTracker.updateJobProgress(jobId, 25, 120000);
 
@@ -286,7 +286,7 @@ export const apiHandlers = {
 
       // If no good matches found, proceed with normal routing
       logger.debug('No highly similar tasks found, proceeding with normal routing');
-      
+
       const decision = await decisionEngine.routeTask({
         task: params.task,
         contextLength: params.context_length,

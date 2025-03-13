@@ -1,6 +1,6 @@
 import { logger } from '../../../utils/logger.js';
 import { Model } from '../../../types/index.js';
-import { ModelPerformanceData, ModelsDatabase, COMPLEXITY_THRESHOLDS } from '../types/index.js';
+import { ModelPerformanceData, ModelsDatabase, COMPLEXITY_THRESHOLDS, ModelPerformanceAnalysis } from '../types/index.js';
 import { modelsDbService } from './modelsDb.js';
 import { openRouterModule } from '../../openrouter/index.js';
 
@@ -9,175 +9,189 @@ import { openRouterModule } from '../../openrouter/index.js';
  */
 export const modelPerformanceTracker = {
   /**
+   * Initialize the model performance tracker
+   * This must be called after all services are defined to avoid circular dependencies
+   */
+  initialize(codeModelSelector: { setModelPerformanceTracker: (tracker: any) => void }): void {
+    if (codeModelSelector) {
+      // Inject this tracker into codeModelSelector to avoid circular dependency
+      codeModelSelector.setModelPerformanceTracker(this);
+      logger.debug('Model performance tracker initialized and linked to code model selector');
+    } else {
+      logger.warn('Model performance tracker initialization failed - missing code model selector');
+    }
+  },
+
+  /**
    * Track a model's performance for a specific task with expanded metrics
    */
-  async trackPerformance(
-    model: Model,
-    taskComplexity: number,
-    response: { 
-      success: boolean; 
-      text?: string;
-      timeTaken: number;
-      tokenUsage: { prompt: number; completion: number; total: number; }
-      systemResources?: {
-        cpuUsage?: number; // Percentage of CPU used (0-100)
-        memoryUsage?: number; // Memory usage in MB
-        gpuMemoryUsage?: number; // GPU memory usage in MB, if applicable
-        duration?: number; // Total processing time in ms
+    async trackPerformance(
+      model: Model,
+      taskComplexity: number,
+      response: {
+        success: boolean;
+        text?: string;
+        timeTaken: number;
+        tokenUsage: { prompt: number; completion: number; total: number; }
+        systemResources?: {
+          cpuUsage?: number; // Percentage of CPU used (0-100)
+          memoryUsage?: number; // Memory usage in MB
+          gpuMemoryUsage?: number; // GPU memory usage in MB, if applicable
+          duration?: number; // Total processing time in ms
+        }
       }
-    }
-  ): Promise<void> {
-    try {
-      const modelsDb = modelsDbService.getDatabase();
-      const modelId = model.id;
-
-      // Calculate quality score if we have a response
-      const qualityScore = response.text ? 
-        openRouterModule.evaluateQuality(response.text, response.text) : 0;
-
-      // Calculate token efficiency (output quality per token)
-      const tokenEfficiency = response.tokenUsage.total > 0 ? 
-        qualityScore / Math.log2(response.tokenUsage.total + 1) : 0;
-        
-      // Calculate system resource efficiency score (normalized 0-1)
-      let systemResourceUsage = 0;
-      if (response.systemResources) {
-        // Normalize and combine resource metrics (lower is better)
-        const cpuScore = response.systemResources.cpuUsage ? 
-          response.systemResources.cpuUsage / 100 : 0;
-          
-        const memScore = response.systemResources.memoryUsage ? 
-          Math.min(1, response.systemResources.memoryUsage / 8192) : 0; // Normalize to 8GB max
-          
-        const gpuScore = response.systemResources.gpuMemoryUsage ? 
-          Math.min(1, response.systemResources.gpuMemoryUsage / 8192) : 0;
-          
-        // Calculate combined resource score (weighted average)
-        systemResourceUsage = (cpuScore * 0.3) + (memScore * 0.4) + (gpuScore * 0.3);
-      }
-      
-      // Calculate memory footprint (in GB) if available
-      const memoryFootprint = response.systemResources?.memoryUsage ? 
-        response.systemResources.memoryUsage / 1024 : undefined;
-
-      if (!modelsDb.models[modelId]) {
-        // Initialize new model data with expanded metrics
-        const newModelData = {
-          id: modelId,
-          name: model.name,
-          provider: model.provider,
-          lastSeen: new Date().toISOString(),
-          contextWindow: model.contextWindow || 4096,
-          successRate: response.success ? 1 : 0,
-          qualityScore,
-          avgResponseTime: response.timeTaken,
-          complexityScore: taskComplexity,
-          lastBenchmarked: new Date().toISOString(),
-          benchmarkCount: 1,
-          isFree: model.costPerToken.prompt === 0 && model.costPerToken.completion === 0,
-          tokenEfficiency,
-          systemResourceUsage,
-          memoryFootprint
-        } as unknown as ModelPerformanceData;
-        
-        // Set it in the database
-        modelsDb.models[modelId] = newModelData;
-        
-        // Add resource usage history
-        const resourceHistoryEntry = {
-          timestamp: new Date().getTime(), // Use number timestamp instead of string
-          tokenUsage: response.tokenUsage.total,
-          responseTime: response.timeTaken,
-          success: response.success
-        };
-        
-        // Need to cast to access non-standard properties
-        (modelsDb.models[modelId] as any).resourceHistory = [resourceHistoryEntry];
-      } else {
-        // Update existing model data with weighted averages for all metrics
-        const existingModel = modelsDb.models[modelId] as unknown as {
-          benchmarkCount: number;
-          successRate: number;
-          qualityScore: number;
-          avgResponseTime: number;
-          complexityScore: number;
-          tokenEfficiency?: number;
-          systemResourceUsage?: number;
-          memoryFootprint?: number;
-          resourceHistory?: Array<{
+    ): Promise<void> {
+      try {
+        const modelsDb = await modelsDbService.getDatabase();
+        const modelId = model.id;
+  
+        // Calculate quality score if we have a response
+        const qualityScore = response.text ?
+          await openRouterModule.evaluateQuality(response.text, response.text) : 0;
+  
+        // Calculate token efficiency (output quality per token)
+        const tokenEfficiency = response.tokenUsage.total > 0 ?
+          qualityScore / Math.log2(response.tokenUsage.total + 1) : 0;
+  
+        // Calculate system resource efficiency score (normalized 0-1)
+        let systemResourceUsage = 0;
+        if (response.systemResources) {
+          // Normalize and combine resource metrics (lower is better)
+          const cpuScore = response.systemResources.cpuUsage ?
+            response.systemResources.cpuUsage / 100 : 0;
+  
+          const memScore = response.systemResources.memoryUsage ?
+            Math.min(1, response.systemResources.memoryUsage / 8192) : 0; // Normalize to 8GB max
+  
+          const gpuScore = response.systemResources.gpuMemoryUsage ?
+            Math.min(1, response.systemResources.gpuMemoryUsage / 8192) : 0;
+  
+          // Calculate combined resource score (weighted average)
+          systemResourceUsage = (cpuScore * 0.3) + (memScore * 0.4) + (gpuScore * 0.3);
+        }
+  
+        // Calculate memory footprint (in GB) if available
+        const memoryFootprint = response.systemResources?.memoryUsage ?
+          response.systemResources.memoryUsage / 1024 : undefined;
+  
+        if (!modelsDb.models[modelId]) {
+          // Initialize new model data with expanded metrics
+          const newModelData = {
+            id: modelId,
+            name: model.name,
+            provider: model.provider,
+            lastSeen: new Date().toISOString(),
+            contextWindow: model.contextWindow || 4096,
+            successRate: response.success ? 1 : 0,
+            qualityScore,
+            avgResponseTime: response.timeTaken,
+            complexityScore: taskComplexity,
+            lastBenchmarked: new Date().toISOString(),
+            benchmarkCount: 1,
+            isFree: model.costPerToken.prompt === 0 && model.costPerToken.completion === 0,
+            tokenEfficiency,
+            systemResourceUsage,
+            memoryFootprint
+          } as unknown as ModelPerformanceData;
+  
+          // Set it in the database
+          modelsDb.models[modelId] = newModelData;
+  
+          // Add resource usage history
+          const resourceHistoryEntry = {
+            timestamp: Date.now(), // Use number timestamp instead of string
+            tokenUsage: response.tokenUsage.total,
+            responseTime: response.timeTaken,
+            success: response.success
+          };
+  
+          // Need to cast to access non-standard properties
+          (modelsDb.models[modelId] as any).resourceHistory = [resourceHistoryEntry];
+        } else {
+          // Update existing model data with weighted averages for all metrics
+          const existingModel = modelsDb.models[modelId] as unknown as {
+            benchmarkCount: number;
+            successRate: number;
+            qualityScore: number;
+            avgResponseTime: number;
+            complexityScore: number;
+            tokenEfficiency?: number;
+            systemResourceUsage?: number;
+            memoryFootprint?: number;
+            resourceHistory?: Array<{
+              timestamp: number;
+              tokenUsage: number;
+              responseTime: number;
+              success: boolean;
+            }>;
+          };
+  
+          const benchmarkCount = (existingModel.benchmarkCount || 0) + 1;
+          const weightedSuccessRate = ((existingModel.successRate || 0) *
+            (existingModel.benchmarkCount || 0) + (response.success ? 1 : 0)) / benchmarkCount;
+          const weightedQualityScore = ((existingModel.qualityScore || 0) *
+            (existingModel.benchmarkCount || 0) + qualityScore) / benchmarkCount;
+          const weightedResponseTime = ((existingModel.avgResponseTime || 0) *
+            (existingModel.benchmarkCount || 0) + response.timeTaken) / benchmarkCount;
+          const weightedComplexityScore = ((existingModel.complexityScore || 0) *
+            (existingModel.benchmarkCount || 0) + taskComplexity) / benchmarkCount;
+  
+          // Calculate weighted token efficiency and system resource usage
+          const weightedTokenEfficiency = ((existingModel.tokenEfficiency || 0) *
+            (existingModel.benchmarkCount || 0) + tokenEfficiency) / benchmarkCount;
+  
+          const weightedSystemResourceUsage = ((existingModel.systemResourceUsage || 0) *
+            (existingModel.benchmarkCount || 0) + systemResourceUsage) / benchmarkCount;
+  
+          const weightedMemoryFootprint = memoryFootprint !== undefined &&
+            existingModel.memoryFootprint !== undefined ?
+            ((existingModel.memoryFootprint || 0) *
+              (existingModel.benchmarkCount || 0) + memoryFootprint) / benchmarkCount :
+            memoryFootprint || existingModel.memoryFootprint;
+  
+          // Update the model data
+          const updatedModel = {
+            ...modelsDb.models[modelId],
+            lastSeen: new Date().toISOString(),
+            successRate: weightedSuccessRate,
+            qualityScore: weightedQualityScore,
+            avgResponseTime: weightedResponseTime,
+            complexityScore: weightedComplexityScore,
+            lastBenchmarked: new Date().toISOString(),
+            benchmarkCount,
+            tokenEfficiency: weightedTokenEfficiency,
+            systemResourceUsage: weightedSystemResourceUsage,
+            memoryFootprint: weightedMemoryFootprint,
+          } as unknown as ModelPerformanceData;
+  
+          modelsDb.models[modelId] = updatedModel;
+  
+          // Add to resource usage history (keep last 10 entries)
+          const history = (existingModel.resourceHistory || []) as Array<{
             timestamp: number;
             tokenUsage: number;
             responseTime: number;
             success: boolean;
           }>;
-        };
-        
-        const benchmarkCount = (existingModel.benchmarkCount || 0) + 1;
-        const weightedSuccessRate = ((existingModel.successRate || 0) * 
-          (existingModel.benchmarkCount || 0) + (response.success ? 1 : 0)) / benchmarkCount;
-        const weightedQualityScore = ((existingModel.qualityScore || 0) * 
-          (existingModel.benchmarkCount || 0) + qualityScore) / benchmarkCount;
-        const weightedResponseTime = ((existingModel.avgResponseTime || 0) * 
-          (existingModel.benchmarkCount || 0) + response.timeTaken) / benchmarkCount;
-        const weightedComplexityScore = ((existingModel.complexityScore || 0) * 
-          (existingModel.benchmarkCount || 0) + taskComplexity) / benchmarkCount;
-          
-        // Calculate weighted token efficiency and system resource usage
-        const weightedTokenEfficiency = ((existingModel.tokenEfficiency || 0) * 
-          (existingModel.benchmarkCount || 0) + tokenEfficiency) / benchmarkCount;
-          
-        const weightedSystemResourceUsage = ((existingModel.systemResourceUsage || 0) *
-          (existingModel.benchmarkCount || 0) + systemResourceUsage) / benchmarkCount;
-          
-        const weightedMemoryFootprint = memoryFootprint !== undefined && 
-          existingModel.memoryFootprint !== undefined ?
-          ((existingModel.memoryFootprint || 0) * 
-            (existingModel.benchmarkCount || 0) + memoryFootprint) / benchmarkCount :
-          memoryFootprint || existingModel.memoryFootprint;
-
-        // Update the model data
-        const updatedModel = {
-          ...modelsDb.models[modelId],
-          lastSeen: new Date().toISOString(),
-          successRate: weightedSuccessRate,
-          qualityScore: weightedQualityScore,
-          avgResponseTime: weightedResponseTime,
-          complexityScore: weightedComplexityScore,
-          lastBenchmarked: new Date().toISOString(),
-          benchmarkCount,
-          tokenEfficiency: weightedTokenEfficiency,
-          systemResourceUsage: weightedSystemResourceUsage,
-          memoryFootprint: weightedMemoryFootprint,
-        } as unknown as ModelPerformanceData;
-        
-        modelsDb.models[modelId] = updatedModel;
-        
-        // Add to resource usage history (keep last 10 entries)
-        const history = (existingModel.resourceHistory || []) as Array<{
-          timestamp: number;
-          tokenUsage: number;
-          responseTime: number;
-          success: boolean;
-        }>;
-        
-        history.push({
-          timestamp: new Date().getTime(), // Use number timestamp instead of string
-          tokenUsage: response.tokenUsage.total,
-          responseTime: response.timeTaken,
-          success: response.success
-        });
-        
-        // Keep only the last 10 entries
-        (modelsDb.models[modelId] as any).resourceHistory = history.slice(-10);
+  
+          history.push({
+            timestamp: Date.now(), // Use number timestamp instead of string
+            tokenUsage: response.tokenUsage.total,
+            responseTime: response.timeTaken,
+            success: response.success
+          });
+  
+          // Keep only the last 10 entries
+          (modelsDb.models[modelId] as any).resourceHistory = history.slice(-10);
+        }
+  
+        // Save the updated database - use updateModelData instead of save
+        await modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+        logger.debug(`Updated performance data for ${modelId}: Success=${response.success}, Quality=${qualityScore.toFixed(2)}, Time=${response.timeTaken}ms, TokenEff=${tokenEfficiency.toFixed(3)}`);
+      } catch (error) {
+        logger.error('Error tracking model performance:', error);
       }
-
-      // Save the updated database - use updateModelData instead of save
-      modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
-      logger.debug(`Updated performance data for ${modelId}: Success=${response.success}, Quality=${qualityScore.toFixed(2)}, Time=${response.timeTaken}ms, TokenEff=${tokenEfficiency.toFixed(3)}`);
-    } catch (error) {
-      logger.error('Error tracking model performance:', error);
-    }
-  },
+    },
 
   /**
    * Track system resource usage for a model
@@ -246,8 +260,13 @@ export const modelPerformanceTracker = {
    * Get performance statistics for a specific model
    */
   getModelStats(modelId: string): any {
-    const modelsDb = modelsDbService.getDatabase();
-    return modelsDb.models[modelId] || null;
+    try {
+      const modelsDb = modelsDbService.getDatabase();
+      return modelsDb.models[modelId] || null;
+    } catch (error) {
+      logger.error(`Error getting stats for model ${modelId}:`, error);
+      return null;
+    }
   },
 
   /**
@@ -354,14 +373,7 @@ export const modelPerformanceTracker = {
   analyzePerformanceByComplexity(
     minComplexity: number,
     maxComplexity: number
-  ): {
-    averageSuccessRate: number;
-    averageQualityScore: number;
-    averageResponseTime: number;
-    averageTokenEfficiency: number;
-    averageResourceUsage: number;
-    bestPerformingModels: string[];
-  } {
+  ): ModelPerformanceAnalysis {
     try {
       const modelsDb = modelsDbService.getDatabase();
       const relevantModels = Object.values(modelsDb.models).filter(model => {
@@ -453,7 +465,7 @@ export const modelPerformanceTracker = {
    * Get resource usage history for a specific model
    */
   getResourceHistory(modelId: string): {
-    timestamp: number; // Changed to number to match the corrected type
+    timestamp: number;
     tokenUsage: number;
     responseTime: number;
     success: boolean;
