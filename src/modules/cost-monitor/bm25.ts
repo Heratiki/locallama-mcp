@@ -24,6 +24,26 @@ export interface BM25Options {
   epsilon?: number;
 }
 
+// Add missing type definitions
+export interface TextPreprocessingOptions {
+  stemming?: boolean;
+  removeStopwords?: boolean;
+  lowercase?: boolean;
+}
+
+export interface DenseRetrieverOptions {
+  modelName?: string;
+  batchSize?: number;
+  deviceId?: string;
+}
+
+export interface HybridRetrieverOptions {
+  weightSparse?: number;
+  weightDense?: number;
+  denseOptions?: DenseRetrieverOptions;
+  textOptions?: TextPreprocessingOptions;
+}
+
 interface SearchResultItem {
   index: number;
   score: number;
@@ -61,8 +81,12 @@ export interface IndexingResult {
   filePaths: string[];
 }
 
+// Update RetrieverInitOptions to include all needed properties
 export interface RetrieverInitOptions {
   retrieverType?: string;
+  textPreprocessingOptions?: TextPreprocessingOptions;
+  denseRetrieverOptions?: DenseRetrieverOptions;
+  hybridRetrieverOptions?: HybridRetrieverOptions;
 }
 
 interface LogData {
@@ -270,7 +294,7 @@ export class BM25Searcher {
       } else if (response.status === 'success') {
         logger.debug(`Received success response from Python bridge: ${response.message || 'No message'}`);
       }
-    } catch (err) {
+    } catch {
       // This is likely just a debug or info message, not JSON
       logger.debug(`Unhandled stdout line: ${line}`);
     }

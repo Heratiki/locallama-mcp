@@ -123,7 +123,7 @@ export class CodeSearchEngine {
       const codeFiles = await this.findCodeFiles();
       this.indexingStatus.totalFiles = codeFiles.length;
       
-      const newOrUpdatedFiles = forceReindex ? codeFiles : this.filterNewOrUpdatedFiles(codeFiles);
+      const newOrUpdatedFiles = forceReindex ? codeFiles : await this.filterNewOrUpdatedFiles(codeFiles);
 
       if (newOrUpdatedFiles.length === 0) {
         logger.info('No new or updated files to index');
@@ -164,12 +164,10 @@ export class CodeSearchEngine {
   /**
    * Index specific directory or directories 
    * @param directories Array of directory paths to index
-   * @param forceReindex Whether to force reindexing even if files have been indexed before
    * @returns Detailed information about the indexing process
    */
   public async indexDirectories(
-    directories: string[],
-    forceReindex: boolean = false
+    directories: string[]
   ): Promise<{
     status: string;
     totalFiles: number;
@@ -179,8 +177,6 @@ export class CodeSearchEngine {
     if (!this.initialized) {
       await this.initialize();
     }
-    
-    const startTime = Date.now();
     
     try {
       this.indexingStatus.indexing = true;
@@ -227,7 +223,7 @@ export class CodeSearchEngine {
       await this.initialize();
     }
     
-    const startTime = Date.now();
+    const indexStart = Date.now();
     const indexedFiles: string[] = [];
     
     try {
@@ -240,19 +236,19 @@ export class CodeSearchEngine {
       
       logger.info(`Found ${codeFiles.length} code files in workspace`);
       
-      const newOrUpdatedFiles = forceReindex ? codeFiles : this.filterNewOrUpdatedFiles(codeFiles);
+      const newOrUpdatedFiles = forceReindex ? codeFiles : await this.filterNewOrUpdatedFiles(codeFiles);
       
       if (newOrUpdatedFiles.length === 0) {
         logger.info('No new or updated files to index');
         this.indexingStatus.indexing = false;
         
         const endTime = Date.now();
-        const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+        const elapsedTime = ((endTime - indexStart) / 1000).toFixed(2);
         
         return {
           status: 'success',
           totalFiles: 0,
-          timeTaken: `${timeTaken} seconds`,
+          timeTaken: `${elapsedTime} seconds`,
           filePaths: []
         };
       }
@@ -289,23 +285,17 @@ export class CodeSearchEngine {
       logger.info(`Indexed ${this.documents.length} code documents successfully`);
       this.indexingStatus.indexing = false;
       this.indexingStatus.error = undefined;
-      
-      const endTime = Date.now();
-      const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
-      
+
       return {
         status: 'success',
         totalFiles: newOrUpdatedFiles.length,
-        timeTaken: indexResult.timeTaken || `${timeTaken} seconds`,
+        timeTaken: indexResult.timeTaken || `${((Date.now() - indexStart) / 1000).toFixed(2)} seconds`,
         filePaths: indexedFiles
       };
     } catch (error) {
       logger.error('Failed to index workspace', error);
       this.indexingStatus.error = error instanceof Error ? error.message : 'Unknown error';
       this.indexingStatus.indexing = false;
-      
-      const endTime = Date.now();
-      const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
       
       throw error;
     }
@@ -366,7 +356,7 @@ export class CodeSearchEngine {
    * @returns Array of file paths
    */
   private findCodeFiles(): Promise<string[]> {
-    return new Promise((resolve, reject) => {
+    return new Promise<string[]>((resolve, reject) => {
       // Define patterns for code files
       const codeFilePatterns = [
         '**/*.ts', '**/*.js', '**/*.tsx', '**/*.jsx',
@@ -389,8 +379,8 @@ export class CodeSearchEngine {
         .then(files => {
           resolve(files);
         })
-        .catch(err => {
-          reject(err);
+        .catch(error => {
+          reject(new Error(`Failed to find code files: ${String(error)}`));
         });
     });
   }
@@ -400,25 +390,40 @@ export class CodeSearchEngine {
    * @param filePaths Array of file paths
    * @returns Array of file paths that need to be indexed
    */
-  private filterNewOrUpdatedFiles(filePaths: string[]): string[] {
-    return filePaths.filter(filePath => {
-      // If the file hasn't been indexed before, include it
-      if (!this.indexedPaths.has(filePath)) {
-        return true;
-      }
-
-      try {
-        // Check if the file has been modified since last indexing
-        const stats = fs.statSync(filePath);
-        const indexedDoc = this.documents.find(doc => doc.path === filePath);
-        
-        // If we can't find the document or the file has been modified, include it
-        return !indexedDoc || stats.mtimeMs > Date.now() - 60000; // Simple check if modified in the last minute
-      } catch (error) {
-        // If there's an error checking the file, assume it needs to be indexed
-        return true;
-      }
-    });
+  private async filterNewOrUpdatedFiles(filePaths: string[]): Promise<string[]> {
+    const newFiles: string[] = [];
+    
+    // Process files in chunks to avoid blocking the event loop
+    const chunkSize = 100;
+    for (let i = 0; i < filePaths.length; i += chunkSize) {
+      const chunk = filePaths.slice(i, i + chunkSize);
+      
+      // Process each chunk of files
+      await Promise.all(chunk.map(async (filePath) => {
+        try {
+          // If the file hasn't been indexed before, include it
+          if (!this.indexedPaths.has(filePath)) {
+            newFiles.push(filePath);
+            return;
+          }
+          
+          // Check if the file has been modified since last indexing
+          const stats = await fs.promises.stat(filePath);
+          const indexedDoc = this.documents.find(doc => doc.path === filePath);
+          
+          // If we can't find the document or the file has been modified, include it
+          if (!indexedDoc || stats.mtimeMs > Date.now() - 60000) {
+            newFiles.push(filePath);
+          }
+        } catch (err) {
+          // If there's an error checking the file, assume it needs to be indexed
+          logger.warn(`Error checking file ${filePath}:`, err);
+          newFiles.push(filePath);
+        }
+      }));
+    }
+    
+    return newFiles;
   }
 
   /**
@@ -428,42 +433,50 @@ export class CodeSearchEngine {
    */
   private async readCodeFiles(filePaths: string[]): Promise<CodeDocument[]> {
     const documents: CodeDocument[] = [];
+    const readPromises: Promise<void>[] = [];
 
     for (const filePath of filePaths) {
-      try {
-        // Read the file content
-        const content = fs.readFileSync(filePath, 'utf-8');
+      const promise = new Promise<void>((resolve) => {
+        try {
+          // Read the file content
+          const content = fs.readFileSync(filePath, 'utf-8');
 
-        // Determine the language from the file extension
-        const ext = path.extname(filePath).toLowerCase();
-        const language = this.getLanguageFromExtension(ext);
+          // Determine the language from the file extension
+          const ext = path.extname(filePath).toLowerCase();
+          const language = this.getLanguageFromExtension(ext);
 
-        // Create a document for the whole file
-        documents.push({
-          content,
-          path: filePath,
-          language
-        });
-
-        // Chunk large files into smaller documents
-        const chunkSize = this.options.chunkSize || 1000; // Define chunk size (number of lines)
-        const lines = content.split('\n');
-        for (let i = 0; i < lines.length; i += chunkSize) {
-          const chunkContent = lines.slice(i, i + chunkSize).join('\n');
+          // Create a document for the whole file
           documents.push({
-            content: chunkContent,
+            content,
             path: filePath,
-            language,
-            startLine: i + 1,
-            endLine: Math.min(i + chunkSize, lines.length)
+            language
           });
+
+          // Chunk large files into smaller documents
+          const chunkSize = this.options.chunkSize || 1000; // Define chunk size (number of lines)
+          const lines = content.split('\n');
+          for (let i = 0; i < lines.length; i += chunkSize) {
+            const chunkContent = lines.slice(i, i + chunkSize).join('\n');
+            documents.push({
+              content: chunkContent,
+              path: filePath,
+              language,
+              startLine: i + 1,
+              endLine: Math.min(i + chunkSize, lines.length)
+            });
+          }
+          resolve();
+        } catch (err) {
+          logger.warn(`Failed to read file ${filePath}`, err);
+          resolve(); // Continue with the next file even if this one fails
         }
-      } catch (error) {
-        logger.warn(`Failed to read file ${filePath}`, error);
-        // Continue with the next file
-      }
+      });
+
+      readPromises.push(promise);
     }
 
+    // Wait for all files to be processed
+    await Promise.all(readPromises);
     return documents;
   }
 
@@ -520,13 +533,19 @@ export class CodeSearchEngine {
     // Set the appropriate options based on the retriever type
     switch (retrieverType) {
       case 'sparse':
-        this.textPreprocessingOptions = options as TextPreprocessingOptions;
+        if (options) {
+          this.textPreprocessingOptions = options as TextPreprocessingOptions;
+        }
         break;
       case 'dense':
-        this.denseRetrieverOptions = options as DenseRetrieverOptions;
+        if (options) {
+          this.denseRetrieverOptions = options as DenseRetrieverOptions;
+        }
         break;
       case 'hybrid':
-        this.hybridRetrieverOptions = options as HybridRetrieverOptions;
+        if (options) {
+          this.hybridRetrieverOptions = options as HybridRetrieverOptions;
+        }
         break;
     }
     
