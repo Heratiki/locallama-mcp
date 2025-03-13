@@ -6,6 +6,33 @@ import { openRouterModule } from '../openrouter/index.js';
 import { calculateTokenEstimates, modelContextWindows } from './utils.js';
 import { RetrieverType } from './codeSearch.js';
 
+// Define response types
+interface OpenRouterCreditsResponse {
+  used: number;
+  remaining: number;
+}
+
+interface LMStudioModel {
+  id: string;
+  name?: string;
+  context_length?: number;
+  contextWindow?: number;
+  parameters?: Record<string, unknown>;
+}
+
+interface OllamaModel {
+  name: string;
+  parameters?: {
+    context_length?: number;
+    context_window?: number;
+    [key: string]: unknown;
+  };
+}
+
+interface OllamaResponse {
+  models: OllamaModel[];
+}
+
 /**
  * Helper method to get OpenRouter API usage
  * Extracted to a separate method for better error handling
@@ -27,7 +54,7 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
   
   try {
     // Query OpenRouter for usage statistics
-    const response = await axios.get('https://openrouter.ai/api/v1/auth/credits', {
+    const response = await axios.get<OpenRouterCreditsResponse>('https://openrouter.ai/api/v1/auth/credits', {
       headers: {
         'Authorization': `Bearer ${config.openRouterApiKey}`,
         'HTTP-Referer': 'https://locallama-mcp.local', // Required by OpenRouter
@@ -38,11 +65,8 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
     if (response.data) {
       logger.debug('Successfully retrieved OpenRouter usage data');
       
-      // Extract credits information
-      const creditsData = response.data;
-      const creditsUsed = creditsData.used || 0;
-      const creditsRemaining = creditsData.remaining || 0;
-      const totalCredits = creditsUsed + creditsRemaining;
+      const creditsUsed = response.data.used || 0;
+      const creditsRemaining = response.data.remaining || 0;
       
       const { promptTokens, completionTokens, estimatedTokensUsed } = calculateTokenEstimates(creditsUsed);
       
@@ -54,9 +78,10 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
           total: estimatedTokensUsed,
         },
         cost: {
-          prompt: creditsUsed * 0.67, // 2/3 of cost
-          completion: creditsUsed * 0.33, // 1/3 of cost
+          prompt: creditsUsed * 0.67,
+          completion: creditsUsed * 0.33,
           total: creditsUsed,
+          remaining: creditsRemaining // Adding remaining credits to the cost tracking
         },
         timestamp: new Date().toISOString(),
       };
@@ -80,20 +105,12 @@ export async function getAvailableModels(): Promise<Model[]> {
   
   // Try to get models from LM Studio
   try {
-    const lmStudioResponse = await axios.get(`${config.lmStudioEndpoint}/models`, {
+    const lmStudioResponse = await axios.get<{ data: LMStudioModel[] }>(`${config.lmStudioEndpoint}/models`, {
       timeout: 5000 // 5 second timeout
     });
     
-    if (lmStudioResponse.data && Array.isArray(lmStudioResponse.data.data)) {
+    if (lmStudioResponse.data?.data) {
       // Define an interface for the LM Studio model response
-      interface LMStudioModel {
-        id: string;
-        name?: string;
-        context_length?: number;
-        contextWindow?: number;
-        [key: string]: any; // For any other properties
-      }
-      
       const lmStudioModels = lmStudioResponse.data.data.map((model: LMStudioModel) => {
         // Try to determine context window size
         let contextWindow = 4096; // Default fallback
@@ -106,12 +123,11 @@ export async function getAvailableModels(): Promise<Model[]> {
         } else {
           // Fallback to known context window sizes
           const modelId = model.id.toLowerCase();
-          for (const [key, value] of Object.entries(modelContextWindows)) {
+          Object.entries(modelContextWindows).forEach(([key, value]) => {
             if (modelId.includes(key.toLowerCase())) {
-              contextWindow = value as number;
-              break;
+              contextWindow = value;
             }
-          }
+          });
         }
         
         return {
@@ -138,30 +154,23 @@ export async function getAvailableModels(): Promise<Model[]> {
   
   // Try to get models from Ollama
   try {
-    const ollamaResponse = await axios.get(`${config.ollamaEndpoint}/tags`, {
+    const ollamaResponse = await axios.get<OllamaResponse>(`${config.ollamaEndpoint}/tags`, {
       timeout: 5000 // 5 second timeout
     });
     
-    if (ollamaResponse.data && Array.isArray(ollamaResponse.data.models)) {
+    if (ollamaResponse.data?.models) {
       // Define an interface for the Ollama model response
-      interface OllamaModel {
-        name: string;
-        [key: string]: any; // For any other properties
-      }
-      
-      // First, create basic model objects
-      const ollamaModels = ollamaResponse.data.models.map((model: OllamaModel) => {
+      const ollamaModels = ollamaResponse.data.models.map((model: OllamaModel): Model => {
         // Start with default context window
         let contextWindow = 4096; // Default fallback
         
         // Check if we have a known context window size for this model
         const modelName = model.name.toLowerCase();
-        for (const [key, value] of Object.entries(modelContextWindows)) {
+        Object.entries(modelContextWindows).forEach(([key, value]) => {
           if (modelName.includes(key.toLowerCase())) {
-            contextWindow = value as number;
-            break;
+            contextWindow = value;
           }
-        }
+        });
         
         return {
           id: model.name,
@@ -181,43 +190,41 @@ export async function getAvailableModels(): Promise<Model[]> {
       
       // Then, try to get detailed model info using Promise.all
       try {
-        const modelDetailPromises = ollamaModels.map(async (model: Model) => {
-          try {
-            const response = await axios.get(`${config.ollamaEndpoint}/show`, {
-              params: { name: model.id },
-              timeout: 3000 // 3 second timeout for each model
-            });
-            
-            if (response.data && response.data.parameters) {
-              // Some Ollama models expose context_length or context_window
-              const ctxLength = response.data.parameters.context_length ||
+        const detailedModels = await Promise.all(
+          ollamaModels.map(async (model: Model) => {
+            try {
+              const response = await axios.get<{ parameters?: { context_length?: number; context_window?: number } }>(
+                `${config.ollamaEndpoint}/show`,
+                {
+                  params: { name: model.id },
+                  timeout: 3000 // 3 second timeout for each model
+                }
+              );
+              
+              if (response.data?.parameters) {
+                // Some Ollama models expose context_length or context_window
+                const ctxLength = response.data.parameters.context_length ?? 
                                 response.data.parameters.context_window;
                 
-              if (ctxLength && typeof ctxLength === 'number') {
-                logger.debug(`Updated context window for Ollama model ${model.id}: ${ctxLength}`);
-                model.contextWindow = ctxLength;
+                if (typeof ctxLength === 'number') {
+                  logger.debug(`Updated context window for Ollama model ${model.id}: ${ctxLength}`);
+                  model.contextWindow = ctxLength;
+                }
               }
+            } catch {
+              logger.debug(`Failed to get detailed info for Ollama model ${model.id}`);
             }
-          } catch (detailError) {
-            logger.debug(`Failed to get detailed info for Ollama model ${model.id}`);
-          }
-          return model;
-        });
-        
-        // Wait for all model detail requests to complete (or fail)
-        const updatedOllamaModels = await Promise.allSettled(modelDetailPromises);
+            return model;
+          })
+        );
         
         // Process the results
-        const confirmedModels = updatedOllamaModels
-          .filter((result): result is PromiseFulfilledResult<Model> => result.status === 'fulfilled')
-          .map(result => result.value);
-        
+        const confirmedModels = models.concat(detailedModels);
         models.push(...confirmedModels);
-        logger.debug(`Found ${confirmedModels.length} models from Ollama`);
+        logger.debug(`Found ${detailedModels.length} models from Ollama`);
       } catch (batchError) {
         // If batch processing fails, just use the basic models
         logger.warn('Failed to get detailed info for Ollama models:', batchError);
-        models.push(...ollamaModels);
       }
     }
   } catch (error) {

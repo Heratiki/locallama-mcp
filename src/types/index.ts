@@ -23,6 +23,8 @@ export interface ApiUsage {
     completion: number;
     /** Total cost */
     total: number;
+    /** Remaining credits */
+    remaining?: number;
   };
   
   /** Timestamp of the usage data */
