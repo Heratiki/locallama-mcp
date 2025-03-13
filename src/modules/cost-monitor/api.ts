@@ -68,14 +68,15 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
       const creditsUsed = response.data.used || 0;
       const creditsRemaining = response.data.remaining || 0;
       
-      const { promptTokens, completionTokens, estimatedTokensUsed } = calculateTokenEstimates(creditsUsed);
+      // Fix: Use the correct parameter structure for calculateTokenEstimates
+      const tokenEstimate = calculateTokenEstimates(creditsUsed, creditsUsed * 0.5);
       
       return {
         api: 'openrouter',
         tokenUsage: {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: estimatedTokensUsed,
+          prompt: tokenEstimate.promptTokens,
+          completion: tokenEstimate.completionTokens,
+          total: tokenEstimate.totalTokens,
         },
         cost: {
           prompt: creditsUsed * 0.67,

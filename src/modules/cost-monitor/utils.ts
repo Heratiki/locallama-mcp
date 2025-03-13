@@ -60,9 +60,12 @@ export const modelContextWindows: Record<string, number> = {
 
 /**
  * Calculate token estimates based on credits used
+ * This function supports both old and new parameter patterns:
+ * 1. Single parameter: creditsUsed (number) - for backward compatibility
+ * 2. Three parameters: contextLength, outputLength, model - for detailed estimates
  */
 export function calculateTokenEstimates(
-  contextLength: number, 
+  contextLengthOrCredits: number, 
   outputLength: number = 0, 
   model?: string
 ): { 
@@ -71,24 +74,53 @@ export function calculateTokenEstimates(
   totalTokens: number,
   promptCost: number,
   completionCost: number,
-  totalCost: number
+  totalCost: number,
+  estimatedTokensUsed?: number // Added for backward compatibility
 } {
   // Default rates (e.g., for GPT-3.5-turbo)
   let promptRate = 0.000001; // $1 per million tokens
   let completionRate = 0.000002; // $2 per million tokens
   
+  // Handle old usage pattern (single creditsUsed parameter)
+  if (arguments.length === 1) {
+    const creditsUsed = contextLengthOrCredits;
+    // Estimate tokens based on credits (assuming $1 per million tokens on average)
+    const estimatedTokensUsed = creditsUsed * 1000000;
+    // Assume 2:1 ratio of prompt:completion tokens
+    const promptTokens = Math.round(estimatedTokensUsed * 0.67);
+    const completionTokens = Math.round(estimatedTokensUsed * 0.33);
+    
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      promptCost: creditsUsed * 0.67,
+      completionCost: creditsUsed * 0.33,
+      totalCost: creditsUsed,
+      estimatedTokensUsed // Include for backward compatibility
+    };
+  }
+  
+  // Handle new usage pattern (contextLength, outputLength, model)
   // Adjust rates based on model if provided
   if (model) {
     // Model-specific rate logic here
+    if (model.includes('gpt-4')) {
+      promptRate = 0.00003; // $30 per million tokens
+      completionRate = 0.00006; // $60 per million tokens
+    } else if (model.includes('claude-3')) {
+      promptRate = 0.000015; // $15 per million tokens
+      completionRate = 0.00007; // $70 per million tokens
+    }
   }
   
-  const promptCost = contextLength * promptRate;
+  const promptCost = contextLengthOrCredits * promptRate;
   const completionCost = outputLength * completionRate;
   
   return {
-    promptTokens: contextLength,
+    promptTokens: contextLengthOrCredits,
     completionTokens: outputLength,
-    totalTokens: contextLength + outputLength,
+    totalTokens: contextLengthOrCredits + outputLength,
     promptCost,
     completionCost,
     totalCost: promptCost + completionCost

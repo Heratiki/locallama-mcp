@@ -100,7 +100,7 @@ export class TokenUsage {
   /**
    * Convert to a plain object for serialization
    */
-  toObject(): Record<string, any> {
+  toObject(): Record<string, unknown> {
     return {
       completionTokens: this.completionTokens,
       promptTokens: this.promptTokens,
@@ -178,7 +178,7 @@ export const tokenManager: {
       const encoding = getEncoding(model as TiktokenEncoding);
       this.encoderCache.set(model, encoding);
       return encoding;
-    } catch (error) {
+    } catch {
       // Fallback to cl100k_base for unknown models
       logger.warn(`Unknown model for tokenization: ${model}, falling back to cl100k_base`);
       const encoding = getEncoding('cl100k_base');
@@ -452,7 +452,7 @@ export const tokenManager: {
       { pattern: /\bfunction\s*\*|\byield\s+/g, weight: 0.08 }, // Generators
       { pattern: /\bnew\s+[A-Z][a-zA-Z0-9]*/g, weight: 0.04 }, // Object instantiation
       { pattern: /\.map\s*\(|\.filter\s*\(|\.reduce\s*\(/g, weight: 0.05 }, // Functional patterns
-      { pattern: /\<[^>]+\>/g, weight: 0.04 } // Generic types
+      { pattern: /<[^>]+>/g, weight: 0.04 } // Generic types
     ];
 
     // Adjust complexity based on detected patterns
@@ -486,7 +486,7 @@ export const tokenManager: {
     }
 
     // Check for function
-    if (/\bfunction\s+\w+|\bconst\s+\w+\s*=\s*(?:\async\s*)?\([^)]*\)\s*=>/i.test(code)) {
+    if (/\bfunction\s+\w+|\bconst\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/i.test(code)) {
       return 'function';
     }
 

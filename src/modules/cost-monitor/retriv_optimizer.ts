@@ -1,12 +1,22 @@
-class RetrivOptimizer {
-  private index: Map<string, any> = new Map();
+/**
+ * Interface for indexable items in RetrivOptimizer
+ */
+interface IndexedItem {
+  content: string;
+  path?: string;
+  score?: number;
+  metadata?: Record<string, unknown>;
+}
 
-  public addToIndex(key: string, value: any): void {
+class RetrivOptimizer {
+  private index: Map<string, IndexedItem> = new Map();
+
+  public addToIndex(key: string, value: IndexedItem): void {
     this.index.set(key, value);
   }
 
-  public searchIndex(query: string): any[] {
-    const results: any[] = [];
+  public searchIndex(query: string): IndexedItem[] {
+    const results: IndexedItem[] = [];
     this.index.forEach((value, key) => {
       if (key.includes(query)) {
         results.push(value);
@@ -20,4 +30,4 @@ class RetrivOptimizer {
   }
 }
 
-export default RetrivOptimizer;
+export { RetrivOptimizer, IndexedItem };

@@ -227,6 +227,9 @@ export const costMonitor = {
     const { contextLength, outputLength = 0, model } = params;
     logger.debug(`Estimating cost for task with context length ${contextLength} and output length ${outputLength}`);
     
+    // Use calculateTokenEstimates for paid APIs
+    const estimates = calculateTokenEstimates(contextLength, outputLength, model);
+    
     // For local models, the cost is always 0
     const localCost = {
       prompt: 0,
@@ -235,23 +238,29 @@ export const costMonitor = {
       currency: 'USD',
     };
     
-    // For paid APIs, calculate the cost based on token counts
-    // These are example rates for GPT-3.5-turbo
-    let promptCost = contextLength * 0.000001;
-    let completionCost = outputLength * 0.000002;
+    let paidCost = {
+      prompt: estimates.promptCost,
+      completion: estimates.completionCost,
+      total: estimates.totalCost,
+      currency: 'USD',
+    };
     
     // If a specific model was requested, try to get its actual cost
     if (model) {
       // Check if it's an OpenRouter model
       if (config.openRouterApiKey && openRouterModule.modelTracking.models[model]) {
         const openRouterModel = openRouterModule.modelTracking.models[model];
-        promptCost = contextLength * openRouterModel.costPerToken.prompt;
-        completionCost = outputLength * openRouterModel.costPerToken.completion;
+        paidCost.prompt = contextLength * openRouterModel.costPerToken.prompt;
+        paidCost.completion = outputLength * openRouterModel.costPerToken.completion;
         
         // If it's a free model, set costs to 0
         if (openRouterModel.isFree) {
-          promptCost = 0;
-          completionCost = 0;
+          paidCost = {
+            prompt: 0,
+            completion: 0,
+            total: 0,
+            currency: 'USD',
+          };
         }
       }
     } else {
@@ -261,18 +270,15 @@ export const costMonitor = {
         if (freeModels.length > 0) {
           // We have free models available, so we can set the paid cost to 0
           // This will make the recommendation favor the free models
-          promptCost = 0;
-          completionCost = 0;
+          paidCost = {
+            prompt: 0,
+            completion: 0,
+            total: 0,
+            currency: 'USD',
+          };
         }
       }
     }
-    
-    const paidCost = {
-      prompt: promptCost,
-      completion: completionCost,
-      total: promptCost + completionCost,
-      currency: 'USD',
-    };
     
     return {
       local: {
@@ -286,9 +292,9 @@ export const costMonitor = {
       paid: {
         cost: paidCost,
         tokenCount: {
-          prompt: contextLength,
-          completion: outputLength,
-          total: contextLength + outputLength,
+          prompt: estimates.promptTokens,
+          completion: estimates.completionTokens,
+          total: estimates.totalTokens,
         },
       },
       recommendation: paidCost.total > config.costThreshold ? 'local' : 'paid',
@@ -521,10 +527,10 @@ export const costMonitor = {
   /**
    * Create a new code search engine for semantic search
    * @param workspaceRoot Root directory of the workspace to index
-   * @param options Options for the code search engine
+   * @param _options Options for the code search engine
    * @returns A new CodeSearchEngine instance
    */
-  createCodeSearchEngine(workspaceRoot: string, options?: { excludePatterns?: string[] }): CodeSearchEngine {
+  createCodeSearchEngine(workspaceRoot: string, _options?: { excludePatterns?: string[] }): CodeSearchEngine {
     logger.info(`Creating code search engine for workspace: ${workspaceRoot}`);
     const codeSearchOptions = {
       chunkSize: 500,
@@ -540,10 +546,10 @@ export const costMonitor = {
   /**
    * Get model performance data
    */
-  async getModelPerformanceData(): Promise<Record<string, ModelPerformanceData>> {
+  getModelPerformanceData(): Record<string, ModelPerformanceData> {
     try {
-      // Add await to fix the "no await" issue
-      const modelsDb = await modelsDbService.getDatabase();
+      // Get database directly since it's not an async operation
+      const modelsDb = modelsDbService.getDatabase();
       return modelsDb.models as unknown as Record<string, ModelPerformanceData>;
     } catch (error) {
       logger.error('Failed to get model performance data:', error);
@@ -572,7 +578,7 @@ export const costMonitor = {
     qualityScore: number;
   }> {
     const localModels = await this.getAvailableModels();
-    const performanceData = await this.getModelPerformanceData();
+    const performanceData = this.getModelPerformanceData();
 
     // Filter to local models with sufficient context window
     const suitableModels = localModels.filter(model => 
@@ -645,7 +651,7 @@ export const costMonitor = {
     qualityScore: number;
   } | null> {
     const freeModels = await this.getFreeModels();
-    const performanceData = await this.getModelPerformanceData();
+    const performanceData = this.getModelPerformanceData();
 
     // Filter to models that can handle the context
     const suitableModels = freeModels.filter(model => 
