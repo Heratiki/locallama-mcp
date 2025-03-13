@@ -1,6 +1,6 @@
-# LocaLLama MCP Server
+# LocaLLama MCP Server (Testing Branch)
 
-An MCP Server that works with Roo Code or Cline.Bot (Currently Untested with Claude Desktop or CoPilot MCP VS Code Extension) to optimize costs by intelligently routing coding tasks between local LLMs and paid APIs.
+An MCP Server that works with Roo Code or Cline.Bot (Currently Untested with Claude Desktop or CoPilot MCP VS Code Extension) to optimize costs by intelligently routing coding tasks between local LLMs and paid APIs. Lot's of broken implementation in this.
 
 ## Overview
 
