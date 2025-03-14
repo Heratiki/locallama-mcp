@@ -1,12 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
-
 // Load environment variables from .env file
 dotenv.config();
-
 // Determine root directory in a way that works with both runtime and tests
 const rootDir = process.cwd();
-
 /**
  * Type definitions for the configuration
  */
@@ -18,13 +15,11 @@ interface BenchmarkConfig {
   saveResults: boolean;
   resultsPath: string;
 }
-
 interface ServerConfig {
   port: number;
   host: string;
   apiPrefix: string;
 }
-
 interface ModelConfig {
   temperature: number;
   maxTokens: number;
@@ -32,13 +27,11 @@ interface ModelConfig {
   frequencyPenalty: number;
   presencePenalty: number;
 }
-
 interface PythonConfig {
   path?: string;
   virtualEnv?: string;
   detectVirtualEnv?: boolean;
 }
-
 export interface Config {
   // Server configuration
   server: ServerConfig;
@@ -82,7 +75,6 @@ export interface Config {
   // Python configuration
   python?: PythonConfig;
 }
-
 /**
  * Helper function to parse boolean environment variables
  */
@@ -90,7 +82,6 @@ function parseBool(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) return defaultValue;
   return value.toLowerCase() === 'true';
 }
-
 /**
  * Helper function to parse number with validation
  */
@@ -102,7 +93,6 @@ function parseNumber(value: string | undefined, defaultValue: number, min?: numb
   if (max !== undefined && num > max) return max;
   return num;
 }
-
 /**
  * Configuration for the LocalLama MCP Server
  */
@@ -113,7 +103,6 @@ export const config: Config = {
     host: process.env.HOST || '0.0.0.0',
     apiPrefix: process.env.API_PREFIX || '/api',
   },
-
   // Local LLM endpoints
   lmStudioEndpoint: process.env.LM_STUDIO_ENDPOINT || 'http://localhost:1234/v1',
   ollamaEndpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api',
@@ -166,45 +155,35 @@ export const config: Config = {
   // Paths
   rootDir,
 };
-
 /**
  * Validate that the configuration is valid
  * @throws {Error} If the configuration is invalid
  */
 export function validateConfig(): void {
   const errors: string[] = [];
-
   // Validate server config
   if (config.server.port < 0 || config.server.port > 65535) {
     errors.push(`Invalid port number: ${config.server.port}`);
   }
-
   // Validate URLs
   try {
     new URL(config.lmStudioEndpoint);
     new URL(config.ollamaEndpoint);
     new URL(config.localLlamaEndpoint); // Added local Llama endpoint validation
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      errors.push(`Invalid endpoint URL in configuration: ${error.message}`);
-    } else {
-      errors.push(`Invalid endpoint URL in configuration: ${String(error)}`);
-    }
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    errors.push(`Invalid endpoint URL in configuration: ${errorMessage}`);
   }
-
   // Validate thresholds
   if (config.tokenThreshold <= 0) {
     errors.push(`Invalid token threshold: ${config.tokenThreshold}`);
   }
-
   if (config.costThreshold <= 0) {
     errors.push(`Invalid cost threshold: ${config.costThreshold}`);
   }
-
   if (config.qualityThreshold <= 0 || config.qualityThreshold > 1) {
     errors.push(`Invalid quality threshold: ${config.qualityThreshold}`);
   }
-
   // Validate model config
   const { temperature, topP, maxTokens } = config.defaultModelConfig;
   if (temperature < 0 || temperature > 2) {
@@ -216,7 +195,6 @@ export function validateConfig(): void {
   if (maxTokens <= 0) {
     errors.push(`Invalid maxTokens: ${maxTokens}`);
   }
-
   // Validate benchmark config
   if (config.benchmark.runsPerTask <= 0) {
     errors.push(`Invalid runsPerTask: ${config.benchmark.runsPerTask}`);
@@ -227,25 +205,19 @@ export function validateConfig(): void {
   if (config.benchmark.taskTimeout <= 0) {
     errors.push(`Invalid taskTimeout: ${config.benchmark.taskTimeout}`);
   }
-
   // Validate cache config
   if (config.maxCacheSize <= 0) {
     errors.push(`Invalid maxCacheSize: ${config.maxCacheSize}`);
   }
-
   // Validate Python path if provided
   if (config.python?.path && typeof config.python.path === 'string') {
     try {
       // Path validation will be done when used
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        errors.push(`Invalid Python path: ${error.message}`);
-      } else {
-        errors.push(`Invalid Python path: ${String(error)}`);
-      }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errors.push(`Invalid Python path: ${errorMessage}`);
     }
   }
-
   if (errors.length > 0) {
     throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);
   }
