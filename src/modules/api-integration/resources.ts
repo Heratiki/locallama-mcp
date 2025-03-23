@@ -43,11 +43,8 @@ function isOpenRouterConfigured(): boolean {
  */
 export function setupResourceHandlers(server: Server): void {
   // List available static resources
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  server.setRequestHandler(ListResourcesRequestSchema, () => {
     logger.debug('Listing available resources');
-    
-    // Add dummy await to satisfy linter
-    await Promise.resolve();
     
     const resources = [
       {
@@ -98,11 +95,8 @@ export function setupResourceHandlers(server: Server): void {
   });
 
   // List available resource templates
-  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, () => {
     logger.debug('Listing available resource templates');
-    
-    // Add dummy await to satisfy linter
-    await Promise.resolve();
     
     const resourceTemplates = [
       {
@@ -154,7 +148,7 @@ export function setupResourceHandlers(server: Server): void {
             mimeType: 'application/json',
             text: JSON.stringify({
               status: 'running',
-              version: version,
+              version,
               uptime: process.uptime(),
               timestamp: new Date().toISOString(),
             }, null, 2),
@@ -176,10 +170,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get available models:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get available models: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get available models: ${errorMessage}`
         );
       }
     }
@@ -211,10 +206,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get OpenRouter models:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get OpenRouter models: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get OpenRouter models: ${errorMessage}`
         );
       }
     }
@@ -245,10 +241,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get OpenRouter free models:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get OpenRouter free models: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get OpenRouter free models: ${errorMessage}`
         );
       }
     }
@@ -293,10 +290,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get OpenRouter status:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get OpenRouter status: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get OpenRouter status: ${errorMessage}`
         );
       }
     }
@@ -317,10 +315,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get usage for API ${api}:`, error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get usage for API ${api}: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get usage for API ${api}: ${errorMessage}`
         );
       }
     }
@@ -363,10 +362,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get OpenRouter model details:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get OpenRouter model details: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get OpenRouter model details: ${errorMessage}`
         );
       }
     }
@@ -423,10 +423,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get OpenRouter prompting strategy:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get OpenRouter prompting strategy: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get OpenRouter prompting strategy: ${errorMessage}`
         );
       }
     }
@@ -449,10 +450,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get active jobs:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get active jobs: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get active jobs: ${errorMessage}`
         );
       }
     }
@@ -490,10 +492,11 @@ export function setupResourceHandlers(server: Server): void {
           ],
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to get job progress:', error);
         throw new McpError(
           ErrorCode.InternalError,
-          `Failed to get job progress: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to get job progress: ${errorMessage}`
         );
       }
     }
