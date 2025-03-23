@@ -33,7 +33,7 @@ function getLogLevelFromString(level: string): LogLevel {
 /**
  * Ensure log directory exists
  */
-function ensureLogDirectory(logFile: string) {
+function ensureLogDirectory(logFile: string): void {
   const logDir = path.dirname(logFile);
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
@@ -43,7 +43,7 @@ function ensureLogDirectory(logFile: string) {
 /**
  * Write message to log file if configured
  */
-function writeToLogFile(message: string) {
+function writeToLogFile(message: string): void {
   if (config.logFile) {
     ensureLogDirectory(config.logFile);
     fs.appendFileSync(config.logFile, message + '\n');
@@ -56,9 +56,14 @@ function writeToLogFile(message: string) {
 const currentLogLevel = getLogLevelFromString(config.logLevel);
 
 /**
+ * Type for log arguments - using unknown is safer than any
+ */
+type LogArgs = unknown[];
+
+/**
  * Format log message with timestamp
  */
-function formatLogMessage(level: string, message: string, args: any[]): string {
+function formatLogMessage(level: string, message: string, args: LogArgs): string {
   const timestamp = new Date().toISOString();
   return `${timestamp} [${level}] ${message} ${args.length ? JSON.stringify(args) : ''}`;
 }
@@ -67,33 +72,38 @@ function formatLogMessage(level: string, message: string, args: any[]): string {
  * Enhanced logger utility with file logging support
  */
 export const logger = {
-  error: (message: string, ...args: any[]) => {
+  // Using unknown[] instead of any[] for better type safety
+  error: (message: string, ...args: LogArgs): void => {
     if (currentLogLevel >= LogLevel.ERROR) {
       const formattedMessage = formatLogMessage('ERROR', message, args);
+      // eslint-disable-next-line no-console
       console.error(formattedMessage);
       writeToLogFile(formattedMessage);
     }
   },
   
-  warn: (message: string, ...args: any[]) => {
+  warn: (message: string, ...args: LogArgs): void => {
     if (currentLogLevel >= LogLevel.WARN) {
       const formattedMessage = formatLogMessage('WARN', message, args);
+      // eslint-disable-next-line no-console
       console.warn(formattedMessage);
       writeToLogFile(formattedMessage);
     }
   },
   
-  info: (message: string, ...args: any[]) => {
+  info: (message: string, ...args: LogArgs): void => {
     if (currentLogLevel >= LogLevel.INFO) {
       const formattedMessage = formatLogMessage('INFO', message, args);
+      // eslint-disable-next-line no-console
       console.info(formattedMessage);
       writeToLogFile(formattedMessage);
     }
   },
   
-  debug: (message: string, ...args: any[]) => {
+  debug: (message: string, ...args: LogArgs): void => {
     if (currentLogLevel >= LogLevel.DEBUG) {
       const formattedMessage = formatLogMessage('DEBUG', message, args);
+      // eslint-disable-next-line no-console
       console.debug(formattedMessage);
       writeToLogFile(formattedMessage);
     }
@@ -102,7 +112,7 @@ export const logger = {
   /**
    * Log a message with a specific log level
    */
-  log: (level: LogLevel, message: string, ...args: any[]) => {
+  log: (level: LogLevel, message: string, ...args: LogArgs): void => {
     switch (level) {
       case LogLevel.ERROR:
         logger.error(message, ...args);
