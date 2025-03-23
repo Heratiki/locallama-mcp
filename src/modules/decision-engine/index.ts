@@ -101,7 +101,7 @@ export const decisionEngine = {
    * It's useful for quick decisions at task initialization
    */
   async preemptiveRouting(params: TaskRoutingParams): Promise<RoutingDecision> {
-    const { task, contextLength, expectedOutputLength, complexity, priority } = params;
+    const { contextLength, expectedOutputLength, complexity, priority } = params;
     
     logger.debug('Preemptive routing with parameters:', params);
     
@@ -280,7 +280,7 @@ export const decisionEngine = {
    * This is the full decision process that considers all factors
    */
   async routeTask(params: TaskRoutingParams): Promise<RoutingDecision> {
-    const { task, contextLength, expectedOutputLength, complexity, priority } = params;
+    const { contextLength, expectedOutputLength, complexity, priority } = params;
     
     logger.debug('Routing task with parameters:', params);
     

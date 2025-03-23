@@ -66,11 +66,11 @@ export const apiHandlers = {
     }
   },
 
-  async getRealtimeIndexStatus(): Promise<IndexStatus> {
+  getRealtimeIndexStatus(): Promise<IndexStatus> {
     try {
       // Provide workspace root to createCodeSearchEngine
-      const status = await costMonitor.createCodeSearchEngine('./').getIndexStatus();
-      return {
+      const status = costMonitor.createCodeSearchEngine('./').getIndexStatus();
+      return Promise.resolve({
         inProgress: status.indexing,
         filesIndexed: status.filesIndexed,
         totalFiles: status.totalFiles,
@@ -78,17 +78,17 @@ export const apiHandlers = {
         progress: Math.round((status.filesIndexed / Math.max(1, status.totalFiles)) * 100),
         lastUpdate: status.lastUpdate,
         error: status.error
-      };
+      });
     } catch (error) {
       logger.error('Error getting index status:', error);
-      return {
+      return Promise.resolve({
         inProgress: false,
         filesIndexed: 0,
         totalFiles: 0,
         progress: 0,
         lastUpdate: Date.now(),
         error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      });
     }
   },
 
@@ -102,12 +102,15 @@ export const apiHandlers = {
         contextLength: params.context_length,
         outputLength: params.expected_output_length
       });
-
-      return {
-        local_model: '$0 (Free)',
-        openrouter_free: await costMonitor.hasFreeModels() ? '$0 (Limited)' : 'Not Available',
-        openrouter_paid: `$${estimate.paid.cost.total.toFixed(2)}`
-      };
+      
+      // Store hasFreeModels result to get a boolean value
+            const hasFreeModels = await costMonitor.hasFreeModels();
+            
+            return {
+              local_model: '$0 (Free)',
+              openrouter_free: hasFreeModels ? '$0 (Limited)' : 'Not Available',
+              openrouter_paid: `$${estimate.paid.cost.total.toFixed(2)}`
+            };
     } catch (error) {
       logger.error('Error getting cost estimate:', error);
       throw error;
@@ -170,7 +173,7 @@ export const apiHandlers = {
   async getFreeModels() {
     try {
       const freeModels = await costMonitor.getFreeModels();
-      const modelsDb = await costMonitor.getModelPerformanceData();
+      const modelsDb = costMonitor.getModelPerformanceData();
 
       return {
         models: freeModels.map(model => {
@@ -178,7 +181,7 @@ export const apiHandlers = {
           return {
             name: model.id,
             accuracy: perfData ? `${Math.round(perfData.qualityScore * 100)}%` : 'Unknown',
-            speed: apiHandlers.getSpeedLabel(perfData?.avgResponseTime)
+            speed: this.getSpeedLabel(perfData?.avgResponseTime)
           };
         })
       };
@@ -198,22 +201,37 @@ export const apiHandlers = {
       const localEstimate = await costMonitor.estimateLocalPerformance(params);
       const openrouterEstimate = await costMonitor.estimateOpenRouterPerformance(params);
       const freeEstimate = await costMonitor.estimateFreeModelPerformance(params);
-
+      
+      // Calculate values without awaiting non-promises
+      const localResponseTimeSec = Math.round(localEstimate.avgResponseTime / 1000);
+      const localAccuracyPercent = Math.round(localEstimate.qualityScore * 100);
+      
+      let freeResponseTimeSec = 0;
+      let freeAccuracyPercent = 0;
+      
+      if (freeEstimate) {
+        freeResponseTimeSec = Math.round(freeEstimate.avgResponseTime / 1000);
+        freeAccuracyPercent = Math.round(freeEstimate.qualityScore * 100);
+      }
+      
+      const paidResponseTimeSec = Math.round(openrouterEstimate.avgResponseTime / 1000);
+      const paidAccuracyPercent = Math.round(openrouterEstimate.qualityScore * 100);
+      
       return {
         local: {
-          speed: `${Math.round(localEstimate.avgResponseTime / 1000)} sec`,
+          speed: `${localResponseTimeSec} sec`,
           cost: '$0',
-          accuracy: `${Math.round(localEstimate.qualityScore * 100)}%`
+          accuracy: `${localAccuracyPercent}%`
         },
         openrouter_free: freeEstimate ? {
-          speed: `${Math.round(freeEstimate.avgResponseTime / 1000)} sec`,
+          speed: `${freeResponseTimeSec} sec`,
           cost: '$0',
-          accuracy: `${Math.round(freeEstimate.qualityScore * 100)}%`
+          accuracy: `${freeAccuracyPercent}%`
         } : null,
         openrouter_paid: {
-          speed: `${Math.round(openrouterEstimate.avgResponseTime / 1000)} sec`,
+          speed: `${paidResponseTimeSec} sec`,
           cost: `$${openrouterEstimate.cost.toFixed(2)}`,
-          accuracy: `${Math.round(openrouterEstimate.qualityScore * 100)}%`
+          accuracy: `${paidAccuracyPercent}%`
         }
       };
     } catch (error) {
@@ -235,7 +253,7 @@ export const apiHandlers = {
 
     try {
       // First check Retriv index for similar tasks
-      const similarTasks = await costMonitor.findSimilarCode(
+      const similarTasks = costMonitor.findSimilarCode(
         params.task,
         'coding_task',
         undefined,
@@ -250,7 +268,7 @@ export const apiHandlers = {
         jobTracker.updateJobProgress(jobId, 25, 120000);
 
         // Use the similar task to optimize the current one
-        const optimizedTask = await costMonitor.optimizeCodeTask(
+        const optimizedTask = costMonitor.optimizeCodeTask(
           params.task,
           similarTasks[0].code,
           16384 // Assuming 16k context window
