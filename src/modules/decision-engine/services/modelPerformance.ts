@@ -7,6 +7,10 @@ import { openRouterModule } from '../../openrouter/index.js';
 /**
  * Enhanced service for tracking and analyzing model performance with resource monitoring
  */
+interface ModelPerformanceTracker {
+  // Add methods as needed based on usage in codeModelSelector
+}
+
 export const modelPerformanceTracker = {
   /**
    * Initialize the model performance tracker
