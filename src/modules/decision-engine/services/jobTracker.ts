@@ -1,6 +1,9 @@
 import { logger } from '../../../utils/logger.js';
-import { v4 as uuidv4 } from 'uuid';
-import { broadcastJobs, wss } from '../../websocket-server/ws-server.js';
+import { WebSocketServer } from 'ws';
+import { broadcastJobs } from '../../websocket-server/ws-server.js';
+
+// Get the WebSocket server instance
+const wss: WebSocketServer = new WebSocketServer({ port: 8080 });
 
 export interface Job {
   id: string;
@@ -31,7 +34,7 @@ class JobTracker {
   /**
    * Create a new job in the system
    */
-  createJob(id: string, task: string, model?: string): string {
+  async createJob(id: string, task: string, model?: string): Promise<string> {
     this.activeJobs.set(id, {
       id,
       task,
@@ -42,14 +45,14 @@ class JobTracker {
       model
     });
     logger.debug(`Created new job ${id} for task: ${task}`);
-    broadcastJobs(wss);
+    await broadcastJobs(wss);
     return id;
   }
 
   /**
    * Update the progress of an existing job
    */
-  updateJobProgress(id: string, progress: number, estimatedTimeRemaining?: number): void {
+  async updateJobProgress(id: string, progress: number, estimatedTimeRemaining?: number): Promise<void> {
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = 'In Progress';
@@ -59,14 +62,14 @@ class JobTracker {
         'Calculating...';
       this.activeJobs.set(id, job);
       logger.debug(`Updated job ${id} progress: ${job.progress}`);
-      broadcastJobs(wss);
+      await broadcastJobs(wss);
     }
   }
 
   /**
    * Mark a job as completed
    */
-  completeJob(id: string): void {
+  async completeJob(id: string): Promise<void> {
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = 'Completed';
@@ -74,35 +77,35 @@ class JobTracker {
       job.estimated_time_remaining = '0';
       this.activeJobs.set(id, job);
       logger.debug(`Completed job ${id}`);
-      broadcastJobs(wss);
+      await broadcastJobs(wss);
     }
   }
 
   /**
    * Cancel an active job
    */
-  cancelJob(id: string): void {
+  async cancelJob(id: string): Promise<void> {
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = 'Cancelled';
       job.estimated_time_remaining = 'N/A';
       this.activeJobs.set(id, job);
       logger.debug(`Cancelled job ${id}`);
-      broadcastJobs(wss);
+      await broadcastJobs(wss);
     }
   }
 
   /**
    * Mark a job as failed with optional error message
    */
-  failJob(id: string, error?: string): void {
+  async failJob(id: string, error?: string): Promise<void> {
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = 'Failed';
       job.estimated_time_remaining = 'N/A';
       this.activeJobs.set(id, job);
       logger.error(`Job ${id} failed: ${error || 'Unknown error'}`);
-      broadcastJobs(wss);
+      await broadcastJobs(wss);
     }
   }
 

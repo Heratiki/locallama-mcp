@@ -74,9 +74,6 @@ export const dependencyMapper = {
    * @returns An optimally ordered list of subtasks
    */
   getOptimizedExecutionOrder(decomposedTask: DecomposedCodeTask): CodeSubtask[] {
-    // First, get the basic topological order
-    const topologicalOrder = this.sortByExecutionOrder(decomposedTask);
-    
     // Find the critical path
     const criticalPath = this.findCriticalPath(decomposedTask);
     const criticalPathIds = new Set(criticalPath.map(task => task.id));
@@ -216,7 +213,7 @@ export const dependencyMapper = {
     const circularDependencies: string[][] = [];
     
     // DFS to detect cycles
-    const detectCycle = (current: string, path: string[] = []): boolean => {
+    const detectCycle = (current: string): boolean => {
       if (path.includes(current)) {
         // Cycle detected, extract the cycle
         const cycleStart = path.indexOf(current);
@@ -230,7 +227,7 @@ export const dependencyMapper = {
       path.push(current);
       
       for (const dependency of updatedDependencyMap[current] || []) {
-        if (detectCycle(dependency, [...path])) {
+        if (detectCycle(dependency)) {
           return true;
         }
       }
@@ -242,7 +239,7 @@ export const dependencyMapper = {
     // Check each subtask for cycles
     for (const subtask of subtasks) {
       if (!visited.has(subtask.id)) {
-        detectCycle(subtask.id, []);
+        detectCycle(subtask.id);
       }
     }
     
@@ -318,7 +315,7 @@ export const dependencyMapper = {
     visualization += '\n## Dependency Graph\n\n```\n';
     
     // Create a simple ASCII dependency graph
-    orderedSubtasks.forEach((subtask, index) => {
+    orderedSubtasks.forEach((subtask, _) => {
       const id = subtask.id;
       // Ensure ID is a string before slicing
       const shortId = String(id).slice(0, 8);
