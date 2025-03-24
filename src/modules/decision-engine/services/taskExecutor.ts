@@ -11,15 +11,15 @@ class TaskExecutor {
 
   public addTask(task: Task): void {
     this.taskQueue.push(task);
-    this.executeTasks();
+    void this.executeTasks();
   }
 
-  private executeTasks(): void {
+  private async executeTasks(): Promise<void> {
     while (this.activeTasks.size < this.maxConcurrentTasks && this.taskQueue.length > 0) {
       const task = this.taskQueue.shift();
       if (task) {
         this.activeTasks.add(task);
-        this.executeTask(task);
+        await this.executeTask(task);
       }
     }
   }
@@ -29,7 +29,7 @@ class TaskExecutor {
       await task.run();
     } finally {
       this.activeTasks.delete(task);
-      this.executeTasks();
+      void this.executeTasks();
     }
   }
 }
