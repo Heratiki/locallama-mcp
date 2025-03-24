@@ -85,12 +85,12 @@ class UserPreferencesManager {
     try {
       if (fs.existsSync(this.preferencesPath)) {
         const data = fs.readFileSync(this.preferencesPath, 'utf-8');
-        const loadedPreferences = JSON.parse(data);
+        const loadedPreferences = JSON.parse(data) as Partial<UserPreferences>;
         
         // Merge with defaults to ensure all fields are present
         this.preferences = {
           ...DEFAULT_PREFERENCES,
-          ...loadedPreferences
+          ...loadedPreferences as UserPreferences
         };
         
         logger.debug('Loaded user preferences from file');
@@ -111,7 +111,7 @@ class UserPreferencesManager {
   public async savePreferences(): Promise<void> {
     try {
       const data = JSON.stringify(this.preferences, null, 2);
-      fs.writeFileSync(this.preferencesPath, data, 'utf-8');
+      await fs.promises.writeFile(this.preferencesPath, data, 'utf-8');
       logger.debug('Saved user preferences to file');
     } catch (error) {
       logger.error('Error saving user preferences', error);
