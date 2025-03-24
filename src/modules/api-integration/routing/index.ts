@@ -3,7 +3,6 @@ import { jobTracker } from '../../decision-engine/services/jobTracker.js';
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
-// import { costMonitor } from '../../cost-monitor/index.js'; TODO: Find out where this was intended to be used.
 import { IRouter, RouteTaskParams, RouteTaskResult, CancelJobResult } from './types.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
@@ -102,12 +101,10 @@ export class Router implements IRouter {
         priority: params.priority || 'quality',
       });
       
-      // Job creation
+      // Job creation and progress tracking
       const jobId = uuidv4();
-      jobTracker.createJob(jobId, params.task, decision.model);
-      
-      // Progress tracking
-      jobTracker.updateJobProgress(jobId, 0);
+      await jobTracker.createJob(jobId, params.task, decision.model);
+      await jobTracker.updateJobProgress(jobId, 0);
       
       // Execute task asynchronously
       void (async () => {
@@ -204,10 +201,7 @@ export class Router implements IRouter {
       }
       
       // Cancel the job
-      await new Promise<void>((resolve) => {
-        jobTracker.cancelJob(jobId);
-        resolve();
-      });
+      await jobTracker.cancelJob(jobId);
       
       return {
         success: true,
