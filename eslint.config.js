@@ -16,7 +16,7 @@ export default [
       sourceType: 'module',
       parser: tseslint.parser,
       parserOptions: {
-        project: './tsconfig.json',
+        project: './tsconfig.test.json',
       },
       globals: {
         node: true,

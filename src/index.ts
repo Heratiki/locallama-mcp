@@ -24,7 +24,7 @@ const version = packageJson.version;
  * This MCP Server works with Cline.Bot to optimize costs by intelligently
  * routing coding tasks between local LLMs and paid APIs.
  */
-class LocalLamaMcpServer {
+export class LocalLamaMcpServer {
   private server: Server;
   constructor() {
     this.server = new Server(
