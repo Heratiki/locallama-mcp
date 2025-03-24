@@ -2,6 +2,7 @@ import { logger } from '../../../utils/logger.js';
 import { openRouterModule } from '../../openrouter/index.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { CodeEvaluationOptions, ModelCodeEvaluationResult } from '../types/index.js';
+// import { Model } from '../../../types/index.js'; // Import Model type for proper typing
 
 interface ErrorResponse {
   message: string;
@@ -287,13 +288,14 @@ export const codeEvaluationService = {
 
     try {
       const jsonMatch = result.text.match(/```json\n([\s\S]*?)\n```/) ||
-                        result.text.match(/\{[\s\S]*"qualityScore"[\s\S]*\}/);
+                        result.text.match(/\{[\\s\S]*"qualityScore"[\s\S]*\}/);
 
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const parsedEvaluation: unknown = JSON.parse(jsonStr);
+        const parsedEvaluation: unknown = JSON.parse(jsonStr); // Parse to unknown
 
         if (isModelEvaluation(parsedEvaluation)) {
+          // Now TypeScript *knows* it's a ModelEvaluation
           return {
             qualityScore: parsedEvaluation.qualityScore,
             explanation: parsedEvaluation.explanation,
@@ -449,80 +451,62 @@ If there are bugs or edge cases not handled, identify them specifically.`;
     explanation: string;
   }> {
     // Get initial heuristic score
-    const heuristicScore = await this.evaluateCodeQuality(task, code) as number;
-
+    const heuristicScoreResult = await this.evaluateCodeQuality(task, code);
+    const heuristicScore = typeof heuristicScoreResult === 'number' 
+      ? heuristicScoreResult 
+      : heuristicScoreResult.score;
+    
     // Check if model review is recommended
     const recommendModelCheck = this.needsModelReview(heuristicScore, code.length);
-
+    
     // Get available models for code validation
     const availableModels: { id: string; name: string; isFree: boolean }[] = [];
-
+    
     // Try to get free models first
     try {
       const freeModels = await costMonitor.getFreeModels();
-      const codeCapableFreeModels = freeModels.filter((m) =>
-        m.id.toLowerCase().includes('code') ||
-        m.id.toLowerCase().includes('coder') ||
-        m.id.toLowerCase().includes('deepseek')
-      );
-
-      for (const model of codeCapableFreeModels) {
-        availableModels.push({
-          id: model.id,
-          name: model.name,
-          isFree: true,
-        });
-      }
-    } catch (error) {
-      if (isErrorResponse(error)) {
-        logger.debug('Error getting free models:', error.message);
-      } else {
-        logger.debug('Error getting free models:', error);
-      }
-    }
-
-    // If no free models, get paid models
-    if (availableModels.length === 0) {
-      try {
-        const paidModels = await costMonitor.getPaidModels();
-        const codeCapablePaidModels = paidModels.filter((m) =>
-          m.id.toLowerCase().includes('code') ||
-          m.id.toLowerCase().includes('coder') ||
-          m.id.toLowerCase().includes('deepseek')
-        );
-
-        for (const model of codeCapablePaidModels) {
+      
+      // Find models suitable for code evaluation
+      for (const model of freeModels) {
+        // Type guards to ensure properties exist and are of the right type
+        if (!model || typeof model.id !== 'string' || !model.name) {
+          continue;
+        }
+        
+        // Check if the model is suitable for code evaluation
+        const modelId = model.id.toLowerCase();
+        if (modelId.includes('code') || modelId.includes('coder') || modelId.includes('deepseek')) {
           availableModels.push({
             id: model.id,
             name: model.name,
-            isFree: false,
+            isFree: true,
           });
         }
-      } catch (error) {
-        if (isErrorResponse(error)) {
-          logger.debug('Error getting paid models:', error.message);
-        } else {
-          logger.debug('Error getting paid models:', error);
-        }
+      }
+    } catch (error) {
+      // Handle error safely
+      if (error instanceof Error) {
+        logger.debug('Error getting free models:', error.message);
+      } else if (isErrorResponse(error)) {
+        logger.debug('Error getting free models:', error.message);
+      } else {
+        logger.debug('Error getting free models:', String(error));
       }
     }
-
-    // Provide explanation for the recommendation
-    try {
-      return {
-        recommendModelCheck,
-        availableModels,
-        explanation: recommendModelCheck
-          ? 'Based on the initial evaluation, it is recommended to validate the code using a model for a more accurate assessment.'
-          : 'The initial evaluation suggests that the code quality is acceptable. Model validation is optional.',
-      };
-    } catch (error) {
-      logger.error('Error in getCodeValidationOptions:', error);
-      return {
-        recommendModelCheck: false,
-        availableModels: [],
-        explanation: 'An error occurred during code validation option generation.',
-      };
+    
+    // If no free models, don't attempt to get paid models
+    if (availableModels.length === 0) {
+      // TODO: Implement functionality to get paid models
+      logger.debug('No free models available for code evaluation. Paid models functionality is not implemented.');
     }
+    
+    // Provide explanation for the recommendation
+    return {
+      recommendModelCheck,
+      availableModels,
+      explanation: recommendModelCheck
+        ? 'Based on the initial evaluation, it is recommended to validate the code using a model for a more accurate assessment.'
+        : 'The initial evaluation suggests that the code quality is acceptable. Model validation is optional.',
+    };
   }
 };
