@@ -14,6 +14,19 @@ import {
   OpenRouterErrorType
 } from './types.js';
 
+// Add type definitions for OpenRouter API responses
+interface OpenRouterChatCompletion {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+  };
+}
+
 // File path for storing OpenRouter model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'openrouter-models.json');
 
@@ -80,9 +93,8 @@ export const openRouterModule = {
       try {
         await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
         logger.debug(`Ensured directory exists: ${path.dirname(TRACKING_FILE_PATH)}`);
-      } catch (error: any) {
-        // Ignore if directory already exists
-        logger.debug(`Directory check: ${error.message}`);
+      } catch {
+        logger.debug('Unknown error during directory check');
       }
       
       // Load tracking data from disk if available
@@ -90,7 +102,7 @@ export const openRouterModule = {
         const data = await fs.readFile(TRACKING_FILE_PATH, 'utf8');
         this.modelTracking = JSON.parse(data) as OpenRouterModelTracking;
         logger.debug(`Loaded OpenRouter tracking data with ${Object.keys(this.modelTracking.models).length} models and ${this.modelTracking.freeModels.length} free models`);
-      } catch (error) {
+      } catch {
         logger.debug('No existing OpenRouter tracking data found, will create new tracking data');
         this.modelTracking = {
           models: {},
@@ -105,7 +117,7 @@ export const openRouterModule = {
         const data = await fs.readFile(strategiesPath, 'utf8');
         this.promptingStrategies = JSON.parse(data) as Record<string, PromptingStrategy>;
         logger.debug(`Loaded OpenRouter prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
-      } catch (error) {
+      } catch {
         logger.debug('No existing OpenRouter prompting strategies found');
         this.promptingStrategies = {};
       }
@@ -126,8 +138,8 @@ export const openRouterModule = {
           logger.debug(`OpenRouter models data is ${hoursSinceLastUpdate.toFixed(1)} hours old, no update needed`);
         }
       }
-    } catch (error) {
-      logger.error('Error initializing OpenRouter module:', error);
+    } catch {
+      logger.error('Error initializing OpenRouter module');
     }
   },
 
@@ -226,9 +238,9 @@ export const openRouterModule = {
       } else {
         logger.warn('Invalid response from OpenRouter API:', response.data);
       }
-    } catch (error) {
-      logger.error('Error updating OpenRouter models:');
-      this.handleOpenRouterError(error as Error);
+    } catch {
+      logger.error('Error updating OpenRouter models');
+      this.handleOpenRouterError(new Error('Unknown error'));
     }
   },
 
@@ -278,16 +290,19 @@ export const openRouterModule = {
       // Ensure the directory exists
       try {
         await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
-      } catch (error: any) {
-        // Ignore if directory already exists
-        logger.debug(`Directory check during save: ${error.message}`);
+      } catch {
+        logger.debug('Unknown error during directory check');
       }
       
       await fs.writeFile(TRACKING_FILE_PATH, JSON.stringify(this.modelTracking, null, 2));
       logger.debug('Successfully saved OpenRouter tracking data to disk');
-    } catch (error: any) {
-      logger.error(`Error saving OpenRouter tracking data to ${TRACKING_FILE_PATH}:`, error);
-      logger.error(`Error details: ${error.message}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        logger.error(`Error saving OpenRouter tracking data to ${TRACKING_FILE_PATH}:`, error);
+        logger.error(`Error details: ${error.message}`);
+      } else {
+        logger.error('Unknown error occurred');
+      }
     }
   },
 
@@ -303,16 +318,23 @@ export const openRouterModule = {
       // Ensure the directory exists
       try {
         await mkdir(path.dirname(strategiesPath), { recursive: true });
-      } catch (error: any) {
-        // Ignore if directory already exists
-        logger.debug(`Directory check during save strategies: ${error.message}`);
+      } catch (error) {
+        if (error instanceof Error) {
+          logger.debug(`Directory check during save strategies: ${error.message}`);
+        } else {
+          logger.debug('Unknown error during directory check');
+        }
       }
       
       await fs.writeFile(strategiesPath, JSON.stringify(this.promptingStrategies, null, 2));
       logger.debug('Successfully saved OpenRouter prompting strategies to disk');
-    } catch (error: any) {
-      logger.error(`Error saving OpenRouter prompting strategies to ${path.join(config.rootDir, 'openrouter-strategies.json')}:`, error);
-      logger.error(`Error details: ${error.message}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        logger.error(`Error saving OpenRouter prompting strategies to ${path.join(config.rootDir, 'openrouter-strategies.json')}:`, error);
+        logger.error(`Error details: ${error.message}`);
+      } else {
+        logger.error('Unknown error occurred');
+      }
     }
   },
 
@@ -406,9 +428,9 @@ export const openRouterModule = {
       }
       
       return freeModels;
-    } catch (error) {
+    } catch {
       logger.error('Error getting free models from OpenRouter:');
-      this.handleOpenRouterError(error as Error);
+      this.handleOpenRouterError(new Error('Unknown error'));
       return [];
     }
   },
@@ -468,7 +490,11 @@ export const openRouterModule = {
         logger.debug(`Existing strategy for model ${modelId} is better (${existingStrategy.successRate}/${existingStrategy.qualityScore} vs ${successRate}/${qualityScore})`);
       }
     } catch (error) {
-      logger.error(`Error updating prompting strategy for model ${modelId}:`, error);
+      if (error instanceof Error) {
+        logger.error(`Error updating prompting strategy for model ${modelId}:`, error);
+      } else {
+        logger.error('Unknown error occurred');
+      }
     }
   },
 
@@ -486,6 +512,7 @@ export const openRouterModule = {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<OpenRouterErrorResponse>;
       
+      // Process response members safely using type guards
       if (axiosError.response?.data?.error) {
         const errorData = axiosError.response.data.error;
         
@@ -527,7 +554,7 @@ export const openRouterModule = {
       }
     }
     
-    logger.error('Unknown OpenRouter error:', error);
+    logger.error('Unknown OpenRouter error');
     return OpenRouterErrorType.UNKNOWN;
   },
 
@@ -591,7 +618,7 @@ export const openRouterModule = {
       }
       
       // Make the request
-      const response = await axios.post(
+      const response = await axios.post<OpenRouterChatCompletion>(
         'https://openrouter.ai/api/v1/chat/completions',
         {
           model: modelId,
@@ -613,19 +640,35 @@ export const openRouterModule = {
       clearTimeout(timeoutId);
       
       // Process the response
-      if (response.status === 200 && response.data.choices && response.data.choices.length > 0) {
-        return {
-          success: true,
-          text: response.data.choices[0].message.content,
-          usage: response.data.usage,
-        };
-      } else {
-        logger.warn('Invalid response from OpenRouter API:', response.data);
-        return { success: false, error: OpenRouterErrorType.INVALID_REQUEST };
+      if (
+        response.status === 200 &&
+        response.data &&
+        Array.isArray(response.data.choices) &&
+        response.data.choices.length > 0
+      ) {
+        const firstChoice = response.data.choices[0] as { message: { content: string } };
+        if (
+          firstChoice.message &&
+          typeof firstChoice.message.content === 'string'
+        ) {
+          return {
+            success: true,
+            text: firstChoice.message.content,
+            usage: response.data.usage &&
+              typeof response.data.usage === 'object' &&
+              'prompt_tokens' in response.data.usage &&
+              'completion_tokens' in response.data.usage
+              ? (response.data.usage as { prompt_tokens: number; completion_tokens: number })
+              : { prompt_tokens: 0, completion_tokens: 0 },
+          };
+        }
       }
-    } catch (error) {
-      const errorType = this.handleOpenRouterError(error as Error);
-      return { success: false, error: errorType };
+      logger.warn('Invalid response from OpenRouter API:', response.data);
+      return { success: false, error: OpenRouterErrorType.INVALID_REQUEST };
+    } catch {
+      logger.error('Unknown OpenRouter error');
+      this.handleOpenRouterError(new Error('Unknown error'));
+      return { success: false, error: OpenRouterErrorType.UNKNOWN };
     }
   },
 
@@ -704,7 +747,7 @@ export const openRouterModule = {
       
       // Try each strategy
       let bestStrategy: PromptingStrategy | null = null;
-      let bestResponse: { success: boolean; text?: string; usage?: any } | null = null;
+      let bestResponse: { success: boolean; text?: string; usage?: { prompt_tokens: number; completion_tokens: number } } | null = null;
       let bestQualityScore = 0;
       
       for (const strategy of strategiesToTry) {
@@ -739,7 +782,7 @@ export const openRouterModule = {
           }
           
           // Make the request
-          const response = await axios.post(
+          const response = await axios.post<OpenRouterChatCompletion>(
             'https://openrouter.ai/api/v1/chat/completions',
             {
               model: modelId,
@@ -780,9 +823,9 @@ export const openRouterModule = {
               bestQualityScore = qualityScore;
             }
           }
-        } catch (error) {
+        } catch {
           clearTimeout(timeoutId);
-          logger.debug(`Error trying prompting strategy for model ${modelId}:`, error);
+          logger.debug(`Error trying prompting strategy for model ${modelId}`);
         }
       }
       
@@ -822,8 +865,8 @@ export const openRouterModule = {
         bestStrategy: existingStrategy,
         success: false
       };
-    } catch (error) {
-      logger.error(`Error benchmarking prompting strategies for model ${modelId}:`, error);
+    } catch {
+      logger.error('Unknown error occurred');
       
       return {
         bestStrategy: {
@@ -964,8 +1007,12 @@ export const openRouterModule = {
       try {
         await fs.unlink(TRACKING_FILE_PATH).catch(() => {});
         logger.debug('Deleted tracking file');
-      } catch (error: any) {
-        logger.debug('No tracking file to delete or error deleting file:', error.message);
+      } catch (error) {
+        if (error instanceof Error) {
+          logger.debug('No tracking file to delete or error deleting file:', error.message);
+        } else {
+          logger.debug('Unknown error occurred');
+        }
       }
       
       // Force an update
@@ -973,9 +1020,13 @@ export const openRouterModule = {
       await this.updateModels();
       
       logger.info('Successfully cleared tracking data and updated models');
-    } catch (error: any) {
-      logger.error('Error clearing tracking data:', error);
-      logger.error(`Error details: ${error.message}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        logger.error('Error clearing tracking data:', error);
+        logger.error(`Error details: ${error.message}`);
+      } else {
+        logger.error('Unknown error occurred');
+      }
     }
   },
 
@@ -1027,7 +1078,11 @@ export const openRouterModule = {
       
       return result.text;
     } catch (error) {
-      logger.error(`Error executing task with OpenRouter model ${modelId}:`, error);
+      if (error instanceof Error) {
+        logger.error(`Error executing task with OpenRouter model ${modelId}:`, error);
+      } else {
+        logger.error('Unknown error occurred');
+      }
       throw error;
     }
   }
