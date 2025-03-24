@@ -34,9 +34,7 @@ export const apiHandlers = {
     preemptive?: boolean;
   }) {
     const jobId = `job_${uuidv4()}`;
-
-    // Create job first
-    jobTracker.createJob(jobId, params.task);
+    void jobTracker.createJob(jobId, params.task);
 
     try {
       // Get initial routing decision
@@ -52,7 +50,7 @@ export const apiHandlers = {
       const job = jobTracker.getJob(jobId);
       if (job) {
         job.model = decision.model;
-        jobTracker.updateJobProgress(jobId, 0, 180000); // Initial 3-minute estimate
+        void jobTracker.updateJobProgress(jobId, 0, 180000); // Initial 3-minute estimate
       }
 
       return {
@@ -159,7 +157,7 @@ export const apiHandlers = {
 
   cancelJob(jobId: string) {
     try {
-      jobTracker.cancelJob(jobId);
+      void jobTracker.cancelJob(jobId);
       return {
         jobId,
         status: 'Cancelled'
@@ -249,7 +247,7 @@ export const apiHandlers = {
     priority: 'cost' | 'speed' | 'quality';
   }) {
     const jobId = `job_${uuidv4()}`;
-    jobTracker.createJob(jobId, params.task);
+    void jobTracker.createJob(jobId, params.task);
 
     try {
       // First check Retriv index for similar tasks
@@ -265,7 +263,7 @@ export const apiHandlers = {
         logger.info(`Found similar task with ${similarTasks[0].similarity.toFixed(2)} similarity score`);
 
         // Update job progress
-        jobTracker.updateJobProgress(jobId, 25, 120000);
+        void jobTracker.updateJobProgress(jobId, 25, 120000);
 
         // Use the similar task to optimize the current one
         const optimizedTask = costMonitor.optimizeCodeTask(
@@ -287,7 +285,7 @@ export const apiHandlers = {
         const job = jobTracker.getJob(jobId);
         if (job) {
           job.model = decision.model;
-          jobTracker.updateJobProgress(jobId, 50, 90000);
+          void jobTracker.updateJobProgress(jobId, 50, 90000);
         }
 
         return {
@@ -317,7 +315,7 @@ export const apiHandlers = {
       const job = jobTracker.getJob(jobId);
       if (job) {
         job.model = decision.model;
-        jobTracker.updateJobProgress(jobId, 0, 180000);
+        void jobTracker.updateJobProgress(jobId, 0, 180000);
       }
 
       return {
@@ -327,7 +325,7 @@ export const apiHandlers = {
       };
     } catch (error) {
       logger.error('Error optimizing and routing task:', error);
-      jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error');
+      void jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
   }

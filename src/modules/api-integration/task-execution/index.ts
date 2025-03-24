@@ -19,7 +19,7 @@ export class TaskExecutor implements ITaskExecutor {
       logger.info(`Executing task with model ${model} for job ${jobId}`);
       
       // Update job progress to executing (25%)
-      jobTracker.updateJobProgress(jobId, 25, 120000);
+      void jobTracker.updateJobProgress(jobId, 25, 120000);
       
       let result: string;
       
@@ -28,13 +28,13 @@ export class TaskExecutor implements ITaskExecutor {
         // Handle OpenRouter execution via explicit prefix
         try {
           // Update progress to 50% before API call
-          jobTracker.updateJobProgress(jobId, 50, 60000);
+          void jobTracker.updateJobProgress(jobId, 50, 60000);
           
           // Execute the task via OpenRouter
           result = await openRouterModule.executeTask(model.replace('openrouter:', ''), task);
           
           // Update progress to 75% after successful API call
-          jobTracker.updateJobProgress(jobId, 75, 30000);
+          void jobTracker.updateJobProgress(jobId, 75, 30000);
         } catch (error) {
           logger.error(`Failed to execute task with OpenRouter: ${error instanceof Error ? error.message : String(error)}`);
           throw error;
@@ -55,13 +55,13 @@ export class TaskExecutor implements ITaskExecutor {
         // Skip if it contains ':' as that's likely a local provider format (e.g., 'ollama:llama2')
         try {
           // Update progress to 50% before API call
-          jobTracker.updateJobProgress(jobId, 50, 60000);
+          void jobTracker.updateJobProgress(jobId, 50, 60000);
           
           // Execute the task via OpenRouter
           result = await openRouterModule.executeTask(model, task);
           
           // Update progress to 75% after successful API call
-          jobTracker.updateJobProgress(jobId, 75, 30000);
+          void jobTracker.updateJobProgress(jobId, 75, 30000);
         } catch (error) {
           logger.error(`Failed to execute task with OpenRouter model ${model}: ${error instanceof Error ? error.message : String(error)}`);
           throw error;
@@ -70,7 +70,7 @@ export class TaskExecutor implements ITaskExecutor {
         // For all other model types (local, ollama, lm-studio), handle execution directly
         try {
           // Update progress to 50% before execution
-          jobTracker.updateJobProgress(jobId, 50, 60000);
+          void jobTracker.updateJobProgress(jobId, 50, 60000);
           
           // Extract provider and model name
           const modelParts = model.split(':');
@@ -93,7 +93,7 @@ export class TaskExecutor implements ITaskExecutor {
           }
           
           // Update progress to 75% after execution
-          jobTracker.updateJobProgress(jobId, 75, 30000);
+          void jobTracker.updateJobProgress(jobId, 75, 30000);
         } catch (error) {
           logger.error(`Failed to execute task with model ${model}: ${error instanceof Error ? error.message : String(error)}`);
           throw error;
@@ -120,13 +120,13 @@ export class TaskExecutor implements ITaskExecutor {
       }
       
       // Complete the job (100%)
-      jobTracker.completeJob(jobId);
+      void jobTracker.completeJob(jobId);
       logger.info(`Job ${jobId} completed successfully`);
       
       return formattedResult;
     } catch (error) {
       logger.error(`Error executing task for job ${jobId}:`, error);
-      jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error during execution');
+      void jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error during execution');
       throw error;
     }
   }
