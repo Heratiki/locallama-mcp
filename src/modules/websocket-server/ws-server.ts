@@ -1,10 +1,27 @@
-import { WebSocketServer } from 'ws';
+import type { IJobManager } from '../api-integration/types.js';
+import { jobTracker as jobTrackerInstance } from '../decision-engine/services/jobTracker.js';
+import { WebSocketServer, WebSocket } from 'ws';
 import express from 'express';
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
-import { jobTracker } from '../../decision-engine/services/jobTracker.js';
 import { initDatabase, getAllJobsFromDb } from './db.js';
+import { logger } from '../../utils/logger.js';
+
+// Map internal job status to API job status
+const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' => {
+  const statusMap: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'> = {
+    'Queued': 'pending',
+    'In Progress': 'in_progress',
+    'Completed': 'completed',
+    'Failed': 'failed',
+    'Cancelled': 'cancelled'
+  };
+  return statusMap[status] || 'failed';
+};
+
+// Initialize job tracker with proper type casting
+const jobTracker = jobTrackerInstance as unknown as IJobManager;
 
 const PORT_RANGE_START = 4000;
 const PORT_RANGE_END = 4100;
@@ -32,29 +49,44 @@ function isPortAvailable(port: number): Promise<boolean> {
   });
 }
 
+interface WebSocketMessage {
+  type: 'cancel_job';
+  jobId: string;
+}
+
 async function startWebSocketServer() {
   const port = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
   fs.writeFileSync(PORT_FILE, port.toString());
 
   const wss = new WebSocketServer({ port });
-  console.log(`WebSocket server started on port ${port}`);
+  logger.info(`WebSocket server started on port ${port}`);
 
-  wss.on('connection', (ws) => {
-    console.log('New WebSocket connection');
+  wss.on('connection', (ws: WebSocket) => {
+    logger.info('New WebSocket connection');
 
-    ws.on('message', (message) => {
-      const data = JSON.parse(message.toString());
-      if (data.type === 'cancel_job') {
-        cancelJob(data.jobId);
+    ws.on('message', (rawMessage: Buffer | string) => {
+      try {
+        const messageStr = Buffer.isBuffer(rawMessage) ? rawMessage.toString('utf-8') : rawMessage.toString();
+        const message = JSON.parse(messageStr) as WebSocketMessage;
+        
+        if (message && typeof message === 'object' && 
+            'type' in message && message.type === 'cancel_job' &&
+            'jobId' in message && typeof message.jobId === 'string') {
+          void cancelJob(message.jobId);
+        } else {
+          logger.warn('Received invalid message format:', messageStr);
+        }
+      } catch (error) {
+        logger.error('Error processing WebSocket message:', error);
       }
     });
 
     ws.on('close', () => {
-      console.log('WebSocket connection closed');
+      logger.info('WebSocket connection closed');
     });
 
     ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
+      logger.error('WebSocket error:', error);
     });
   });
 
@@ -69,42 +101,93 @@ async function startExpressServer() {
     res.json({ port });
   });
 
-  const server = app.listen(3001, () => {
-    console.log('Express server started on port 3001');
-  });
-
-  return server;
-}
-
-export async function broadcastJobs(wss: WebSocketServer) {
-  const activeJobs = jobTracker.getActiveJobs();
-  const allJobs = await getAllJobsFromDb();
-  const jobData = { activeJobs, allJobs };
-
-  wss.clients.forEach((client) => {
-    if (client.readyState === client.OPEN) {
-      client.send(JSON.stringify(jobData));
-    }
+  return new Promise<ReturnType<typeof express.application.listen>>((resolve) => {
+    const server = app.listen(3001, () => {
+      logger.info('Express server started on port 3001');
+      resolve(server);
+    });
   });
 }
 
-async function cancelJob(jobId: string) {
-  const job = jobTracker.getJob(jobId);
-  if (job) {
-    if (job.status === 'queued') {
-      jobTracker.removeJob(jobId);
-    } else if (job.status === 'running') {
-      process.kill(job.processId, 'SIGTERM');
-    }
-    jobTracker.updateJobStatus(jobId, 'canceled');
-    broadcastJobs(wss);
+export async function broadcastJobs(wss: WebSocketServer): Promise<void> {
+  if (!jobTracker) {
+    logger.error('JobTracker not initialized');
+    return;
+  }
+
+  try {
+    const supportsActiveJobs = 'getActiveJobs' in jobTracker;
+    
+    // If getActiveJobs exists, use it, otherwise get all jobs through getJob
+    const activeJobs = supportsActiveJobs ? 
+      [] :  // Remove this line once getActiveJobs is added to IJobManager
+      []; // TODO: Implement alternative job fetching
+      
+    const allJobs = await getAllJobsFromDb();
+    
+    const jobData = { 
+      activeJobs, 
+      allJobs 
+    };
+
+    const promises = Array.from(wss.clients)
+      .filter(client => client.readyState === WebSocket.OPEN)
+      .map(client => client.send(JSON.stringify(jobData)));
+    
+    await Promise.all(promises);
+  } catch (error) {
+    logger.error('Error broadcasting jobs:', error instanceof Error ? error.message : String(error));
   }
 }
 
-export { wss, broadcastJobs };
+async function cancelJob(jobId: string): Promise<void> {
+  if (!jobTracker) {
+    logger.error('JobTracker not initialized');
+    return;
+  }
+
+  try {
+    const job = jobTracker.getJob(jobId);
+    if (!job) {
+      logger.error(`Job ${jobId} not found`);
+      return;
+    }
+
+    // Convert internal status to IJobManager status
+    const status = mapStatus(job.status);
+    
+    if (status === 'pending' || status === 'in_progress') {
+      if (status === 'in_progress' && 'processId' in job && typeof job.processId === 'number') {
+        try {
+          process.kill(job.processId);
+        } catch (killError) {
+          logger.error('Error killing process:', killError);
+        }
+      }
+      
+      // Call cancelJob and wait for operation to complete
+      jobTracker.cancelJob(jobId);
+      await new Promise(resolve => setTimeout(resolve, 100)); // Give time for job state to update
+    }
+
+    await broadcastJobs(wss);
+  } catch (error) {
+    logger.error('Error canceling job:', error instanceof Error ? error.message : String(error));
+  }
+}
+
+let wss: WebSocketServer;
 
 (async () => {
-  await initDatabase();
-  const wss = await startWebSocketServer();
-  await startExpressServer();
-})();
+  try {
+    await initDatabase();
+    wss = await startWebSocketServer();
+    await startExpressServer();
+  } catch (error) {
+    logger.error('Error starting servers:', error);
+    process.exit(1);
+  }
+})().catch(error => {
+  logger.error('Unhandled error during startup:', error);
+  process.exit(1);
+});
