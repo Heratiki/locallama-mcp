@@ -1,4 +1,3 @@
-import path from 'path';
 import { logger } from '../../../utils/logger.js';
 import { codeTaskAnalyzer } from './codeTaskAnalyzer.js';
 import { dependencyMapper } from './dependencyMapper.js';
@@ -332,7 +331,17 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         }
       }
       
-      // If no suitable free model, use GPT-3.5 Turbo
+      // If no suitable free model, try available models
+      if (!synthesisModel && availableModels.length > 0) {
+        const suitableModel = availableModels.find(model => 
+          (model.contextWindow || 0) >= combinedResults.length
+        );
+        if (suitableModel) {
+          synthesisModel = suitableModel;
+        }
+      }
+      
+      // If still no suitable model, use GPT-3.5 Turbo as fallback
       if (!synthesisModel) {
         synthesisModel = {
           id: 'gpt-3.5-turbo',
