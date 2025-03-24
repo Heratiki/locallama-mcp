@@ -3,6 +3,14 @@ import { openRouterModule } from '../../openrouter/index.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { CodeEvaluationOptions, ModelCodeEvaluationResult } from '../types/index.js';
 
+interface ErrorResponse {
+  message: string;
+}
+
+function isErrorResponse(obj: unknown): obj is ErrorResponse {
+  return typeof obj === 'object' && obj !== null && 'message' in obj && typeof (obj as ErrorResponse).message === 'string';
+}
+
 interface ModelEvaluation {
   qualityScore: number;
   explanation: string;
@@ -234,81 +242,68 @@ export const codeEvaluationService = {
   ): Promise<ModelCodeEvaluationResult> {
     // Default options
     const timeout = options?.timeoutMs || 30000; // 30 seconds default
-    
+
     // Choose a model for evaluation
-    // If a specific model is requested, use that, otherwise pick a suitable one
     let modelId = options?.modelId;
     if (!modelId) {
       // Try to get a free model first
       try {
         const freeModels = await costMonitor.getFreeModels();
         if (freeModels.length > 0) {
-          // Find a suitable free model - prefer ones specialized for code
-          const codeModels = freeModels.filter(m => 
-            m.id.toLowerCase().includes('code') || 
+          const codeModels = freeModels.filter(m =>
+            m.id.toLowerCase().includes('code') ||
             m.id.toLowerCase().includes('starcoder') ||
             m.id.toLowerCase().includes('coder') ||
             m.id.toLowerCase().includes('deepseek')
           );
-          
+
           if (codeModels.length > 0) {
             modelId = codeModels[0].id;
           } else {
-            // If no code-specialized models, use any free model
             modelId = freeModels[0].id;
           }
         }
       } catch (error) {
         logger.debug('Error getting free models, falling back to default:', error);
       }
-      
-      // If we still don't have a model ID, use default paid models
+
       if (!modelId) {
-        modelId = 'gpt-3.5-turbo'; // Default to GPT-3.5 for cost efficiency
+        modelId = 'gpt-3.5-turbo';
       }
     }
-    
-    // Construct the prompt for code evaluation
+
     const detailedAnalysis = options?.detailedAnalysis ?? false;
     const evaluationPrompt = this.constructCodeEvaluationPrompt(task, response, taskType, detailedAnalysis);
-    
-    // Call the model using OpenRouter
+
     const result = await openRouterModule.callOpenRouterApi(
       modelId,
       evaluationPrompt,
       timeout
     );
-    
+
     if (!result.success || !result.text) {
       throw new Error(`Model evaluation failed: ${result.error}`);
     }
-    
-    // Parse the model's response
+
     try {
-      // First, check if the response contains a JSON object
-      const jsonMatch = result.text.match(/```json\\n([\\s\\S]*?)\\n```/) || 
-                        result.text.match(/\\{[\\s\\S]*"qualityScore"[\\s\\S]*\\}/);
-      
+      const jsonMatch = result.text.match(/```json\n([\s\S]*?)\n```/) ||
+                        result.text.match(/\{[\s\S]*"qualityScore"[\s\S]*\}/);
+
       if (jsonMatch) {
-        // Parse JSON from the response
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        let modelEvaluation: ModelEvaluation;
-        try {
-          const parsedEvaluation: unknown = JSON.parse(jsonStr);
-          
-          if (
-            typeof parsedEvaluation === 'object' &&
-            parsedEvaluation !== null &&
-            typeof (parsedEvaluation as ModelEvaluation).qualityScore === 'number' &&
-            typeof (parsedEvaluation as ModelEvaluation).explanation === 'string' &&
-            typeof (parsedEvaluation as ModelEvaluation).isValid === 'boolean'
-          ) {
-            modelEvaluation = parsedEvaluation as ModelEvaluation;
-          } else {
-            throw new Error('Invalid model evaluation format');
-          }
-        } catch (error) {
-          logger.error('Error parsing model evaluation response:', error);
+        const parsedEvaluation: unknown = JSON.parse(jsonStr);
+
+        if (isModelEvaluation(parsedEvaluation)) {
+          return {
+            qualityScore: parsedEvaluation.qualityScore,
+            explanation: parsedEvaluation.explanation,
+            isValid: parsedEvaluation.isValid,
+            suggestions: Array.isArray(parsedEvaluation.suggestions) ? parsedEvaluation.suggestions : [],
+            implementationIssues: Array.isArray(parsedEvaluation.implementationIssues) ? parsedEvaluation.implementationIssues : [],
+            alternativeSolutions: Array.isArray(parsedEvaluation.alternativeSolutions) ? parsedEvaluation.alternativeSolutions : []
+          };
+        } else {
+          logger.error('Error parsing model evaluation response: Invalid model evaluation format');
           return {
             qualityScore: 0.5,
             explanation: 'Invalid model evaluation format',
@@ -318,184 +313,216 @@ export const codeEvaluationService = {
             alternativeSolutions: []
           };
         }
-322 |         return {
-323 |           qualityScore: modelEvaluation.qualityScore,
-324 |           explanation: modelEvaluation.explanation,
-325 |           isValid: modelEvaluation.isValid,
-326 |           suggestions: Array.isArray(modelEvaluation.suggestions) ? modelEvaluation.suggestions : [],
-327 |           implementationIssues: Array.isArray(modelEvaluation.implementationIssues) ? modelEvaluation.implementationIssues : [],
-328 |           alternativeSolutions: Array.isArray(modelEvaluation.alternativeSolutions) ? modelEvaluation.alternativeSolutions : []
-329 |         };
-330 |       } else {
-331 |         // If no JSON found, extract information from the free text response
-332 |         const qualityMatch = result.text.match(/quality\\s*(?:score|rating)?:\\s*(\\d+(?:\\.\\d+)?)/i) || 
-333 |                             result.text.match(/score:\\s*(\\d+(?:\\.\\d+)?)/i) ||
-334 |                             result.text.match(/rating:\\s*(\\d+(?:\\.\\d+)?)/i);
-335 |         
-336 |         const qualityScore = qualityMatch ? parseFloat(qualityMatch[1]) / 10 : 0.5;
-337 |         
-338 |         const validMatch = result.text.toLowerCase().includes('valid') || 
-339 |                           result.text.toLowerCase().includes('correct') ||
-340 |                           result.text.toLowerCase().includes('works');
-341 |         
-342 |         return {
-343 |           qualityScore: Math.min(Math.max(qualityScore, 0), 1),
-344 |           explanation: result.text,
-345 |           isValid: validMatch,
-346 |           suggestions: []
-347 |         };
-348 |       }
-349 |     } catch (error) {
-350 |       logger.error('Error parsing model evaluation response:', error);
-351 |       
-352 |       // Fall back to a simple quality assessment based on keywords
-353 |       const text = result.text.toLowerCase();
-354 |       let score = 0.5; // Default neutral score
-355 |       
-356 |       // Increase score based on positive keywords
-357 |       if (text.includes('excellent') || text.includes('outstanding')) score += 0.3;
-358 |       else if (text.includes('good') || text.includes('solid')) score += 0.2;
-359 |       else if (text.includes('acceptable') || text.includes('adequate')) score += 0.1;
-360 |       
-361 |       // Decrease score based on negative keywords
-362 |       if (text.includes('error') || text.includes('wrong')) score -= 0.2;
-363 |       else if (text.includes('issue') || text.includes('problem')) score -= 0.1;
-364 |       else if (text.includes('improve') || text.includes('could be better')) score -= 0.05;
-365 |       
-366 |       return {
-367 |         qualityScore: Math.min(Math.max(score, 0), 1),
-368 |         explanation: result.text,
-369 |         isValid: score > 0.6,
-370 |         suggestions: []
-371 |       };
-372 |     }
-373 |   },
-374 |   
-375 |   /**
-376 |    * Construct a prompt for code evaluation
-377 |    * The prompt instructs the model on how to evaluate the code quality
-378 |    */
-379 |   constructCodeEvaluationPrompt(
-380 |     task: string, 
-381 |     response: string, 
-382 |     taskType: string,
-383 |     detailedAnalysis: boolean
-384 |   ): string {
-385 |     // Build a task-specific prompt
-386 |     let taskSpecificGuidance = '';
-387 |     if (taskType === 'factorial') {
-388 |       taskSpecificGuidance = `
-389 | For a factorial function implementation:
-390 | - Check if it handles base cases (0 and 1) correctly
-391 | - Verify if it uses recursion or iteration appropriately
-392 | - Look for potential overflow issues with large inputs
-393 | - Check for proper parameter validation
-394 | `;
-395 |     } else if (taskType === 'binary-search') {
-396 |       taskSpecificGuidance = `
-397 | For a binary search implementation:
-398 | - Verify the algorithm correctly handles the middle element calculation
-399 | - Check if it properly narrows the search range with left/right pointers
-400 | - Ensure it correctly handles edge cases (empty array, element not found)
-401 | - Verify the time complexity is logarithmic (O(log n))
-402 | `;
-403 |     }
-404 |     
-405 |     // Base prompt for code evaluation
-406 |     const basePrompt = `You are a code quality evaluator. Analyze the following code that was written in response to the task provided.
-407 | TASK DESCRIPTION:
-408 | ${task}
-409 | CODE TO EVALUATE:
-410 | ${response}
-411 | ${taskSpecificGuidance}
-412 | Evaluate the code on the following criteria:
-413 | 1. Correctness: Does the code correctly solve the given task?
-414 | 2. Efficiency: Is the algorithm and implementation efficient?
-415 | 3. Readability: Is the code well-structured and easy to understand?
-416 | 4. Best practices: Does the code follow coding best practices?
-417 | 5. Error handling: Does the code handle edge cases and errors appropriately?`;
-418 |     // For basic evaluation, just request a score and brief explanation
-419 |     if (!detailedAnalysis) {
-420 |       return `${basePrompt}
-421 | Provide your evaluation in the following JSON format:
-422 | \`\`\`json
-423 | {
-424 |   "qualityScore": 0.0,  // A value between 0.0 and 1.0, with 1.0 being perfect
-425 |   "explanation": "",    // Brief explanation of the score
-426 |   "isValid": true       // Whether the code correctly solves the task
-427 | }
-428 | \`\`\`
-429 | Keep your explanation concise. Focus on whether the code works as expected and any major issues.`;
-430 |     }
-431 |     
-432 |     // For detailed analysis, request more comprehensive feedback
-433 |     return `${basePrompt}
-434 | Provide a detailed evaluation in the following JSON format:
-435 | \`\`\`json
-436 | {
-437 |   "qualityScore": 0.0,  // A value between 0.0 and 1.0, with 1.0 being perfect
-438 |   "explanation": "",    // Detailed explanation of your evaluation
-439 |   "isValid": true,      // Whether the code correctly solves the task
-440 |   "implementationIssues": [
-441 |     // List specific issues or bugs in the implementation, if any
-442 |   ],
-443 |   "suggestions": [
-444 |     // List specific suggestions for improvement
-445 |   ],
-446 |   "alternativeSolutions": [
-447 |     // Optional: If there are better approaches, briefly describe them
-448 |   ]
-449 | }
-450 | \`\`\`
-451 | Be thorough in your analysis. If the solution is correct but could be improved, explain how.
-452 | If there are bugs or edge cases not handled, identify them specifically.`;
-453 |   },
-454 |   
-455 |   /**
-456 |    * Check if a code evaluation needs model review based on the heuristic score
-457 |    * This helps decide whether to recommend getting a second opinion from a model
-458 |    */
-459 |   needsModelReview(heuristicScore: number, codeLength: number): boolean {
-460 |     // If the score is in the "uncertain" middle range, suggest model review
-461 |     if (heuristicScore > 0.3 && heuristicScore < 0.7) {
-462 |       return true;
-463 |     }
-464 |     
-465 |     // For longer code snippets, our heuristics might be less reliable
-466 |     if (codeLength > 500 && heuristicScore < 0.8) {
-467 |       return true;
-468 |     }
-469 |     
-470 |     // For very complex looking code, suggest model review
-471 |     const isComplexLooking = codeLength > 300 && 
-472 |                            (codeLength / 300 > heuristicScore);
-473 |     
-474 |     return isComplexLooking;
-475 |   },
-476 |   
-477 |   /**
-478 |    * Get validation options for questionable code
-479 |    * This provides the user with options to validate code using a model
-480 |    */
-481 |   async getCodeValidationOptions(task: string, code: string): Promise<{
-482 |     recommendModelCheck: boolean;
-483 |     availableModels: { id: string; name: string; isFree: boolean }[];
-484 |     explanation: string;
-485 |   }> {
-486 |     // Get initial heuristic score
-487 |     const heuristicScore = await this.evaluateCodeQuality(task, code) as number;
-488 |     
-489 |     // Check if model review is recommended
-490 |     const recommendModelCheck = this.needsModelReview(heuristicScore, code.length);
-491 |     
-492 |     // Get available models for code validation
-493 |     const availableModels: { id: string; name: string; isFree: boolean }[] = [];
-494 |     
-495 |     // Try to get free models first
-496 |     try {
-497 |       const freeModels = await costMonitor.getFreeModels();
-498 |       const codeCapableFreeModels = freeModels.filter(m => 
-499 |         m.id.toLowerCase().includes('code') || 
-500 |         m.id.toLowerCase().includes('coder') ||
+      } else {
+        logger.error('Error parsing model evaluation response: No valid JSON found in response.');
+        return {
+          qualityScore: 0,
+          explanation: 'Model evaluation failed to return a valid JSON response.',
+          isValid: false,
+          suggestions: [],
+          implementationIssues: [],
+          alternativeSolutions: []
+        };
+      }
+    } catch (error) {
+      logger.error('Error parsing model evaluation response:', error);
+      return {
+        qualityScore: 0,
+        explanation: 'An unexpected error occurred during model evaluation.',
+        isValid: false,
+        suggestions: [],
+        implementationIssues: [],
+        alternativeSolutions: []
+      };
+    }
+  },
+  
+  /**
+   * Construct a prompt for code evaluation
+   * The prompt instructs the model on how to evaluate the code quality
+   */
+  constructCodeEvaluationPrompt(
+    task: string, 
+    response: string, 
+    taskType: string,
+    detailedAnalysis: boolean
+  ): string {
+    // Build a task-specific prompt
+    let taskSpecificGuidance = '';
+    if (taskType === 'factorial') {
+      taskSpecificGuidance = `
+For a factorial function implementation:
+- Check if it handles base cases (0 and 1) correctly
+- Verify if it uses recursion or iteration appropriately
+- Look for potential overflow issues with large inputs
+- Check for proper parameter validation
+`;
+    } else if (taskType === 'binary-search') {
+      taskSpecificGuidance = `
+For a binary search implementation:
+- Verify the algorithm correctly handles the middle element calculation
+- Check if it properly narrows the search range with left/right pointers
+- Ensure it correctly handles edge cases (empty array, element not found)
+- Verify the time complexity is logarithmic (O(log n))
+`;
+    }
+    
+    // Base prompt for code evaluation
+    const basePrompt = `You are a code quality evaluator. Analyze the following code that was written in response to the task provided.
+TASK DESCRIPTION:
+${task}
+CODE TO EVALUATE:
+${response}
+${taskSpecificGuidance}
+Evaluate the code on the following criteria:
+1. Correctness: Does the code correctly solve the given task?
+2. Efficiency: Is the algorithm and implementation efficient?
+3. Readability: Is the code well-structured and easy to understand?
+4. Best practices: Does the code follow coding best practices?
+5. Error handling: Does the code handle edge cases and errors appropriately?`;
+    // For basic evaluation, just request a score and brief explanation
+    if (!detailedAnalysis) {
+      return `${basePrompt}
+Provide your evaluation in the following JSON format:
+\`\`\`json
+{
+  "qualityScore": 0.0,  // A value between 0.0 and 1.0, with 1.0 being perfect
+  "explanation": "",    // Brief explanation of the score
+  "isValid": true       // Whether the code correctly solves the task
+}
+\`\`\`
+Keep your explanation concise. Focus on whether the code works as expected and any major issues.`;
+    }
+    
+    // For detailed analysis, request more comprehensive feedback
+    return `${basePrompt}
+Provide a detailed evaluation in the following JSON format:
+\`\`\`json
+{
+  "qualityScore": 0.0,  // A value between 0.0 and 1.0, with 1.0 being perfect
+  "explanation": "",    // Detailed explanation of your evaluation
+  "isValid": true,      // Whether the code correctly solves the task
+  "implementationIssues": [
+    // List specific issues or bugs in the implementation, if any
+  ],
+  "suggestions": [
+    // List specific suggestions for improvement
+  ],
+  "alternativeSolutions": [
+    // Optional: If there are better approaches, briefly describe them
+  ]
+}
+\`\`\`
+Be thorough in your analysis. If the solution is correct but could be improved, explain how.
+If there are bugs or edge cases not handled, identify them specifically.`;
+  },
+  
+  /**
+   * Check if a code evaluation needs model review based on the heuristic score
+   * This helps decide whether to recommend getting a second opinion from a model
+   */
+  needsModelReview(heuristicScore: number, codeLength: number): boolean {
+    // If the score is in the "uncertain" middle range, suggest model review
+    if (heuristicScore > 0.3 && heuristicScore < 0.7) {
+      return true;
+    }
+    
+    // For longer code snippets, our heuristics might be less reliable
+    if (codeLength > 500 && heuristicScore < 0.8) {
+      return true;
+    }
+    
+    // For very complex looking code, suggest model review
+    const isComplexLooking = codeLength > 300 && 
+                           (codeLength / 300 > heuristicScore);
+    
+    return isComplexLooking;
+  },
+  
+  /**
+   * Get validation options for questionable code
+   * This provides the user with options to validate code using a model
+   */
+  async getCodeValidationOptions(task: string, code: string): Promise<{
+    recommendModelCheck: boolean;
+    availableModels: { id: string; name: string; isFree: boolean }[];
+    explanation: string;
+  }> {
+    // Get initial heuristic score
+    const heuristicScore = await this.evaluateCodeQuality(task, code) as number;
 
-[File truncated: showing 500 of 558 total lines. Use start_line and end_line if you need to read more.].
+    // Check if model review is recommended
+    const recommendModelCheck = this.needsModelReview(heuristicScore, code.length);
+
+    // Get available models for code validation
+    const availableModels: { id: string; name: string; isFree: boolean }[] = [];
+
+    // Try to get free models first
+    try {
+      const freeModels = await costMonitor.getFreeModels();
+      const codeCapableFreeModels = freeModels.filter((m) =>
+        m.id.toLowerCase().includes('code') ||
+        m.id.toLowerCase().includes('coder') ||
+        m.id.toLowerCase().includes('deepseek')
+      );
+
+      for (const model of codeCapableFreeModels) {
+        availableModels.push({
+          id: model.id,
+          name: model.name,
+          isFree: true,
+        });
+      }
+    } catch (error) {
+      if (isErrorResponse(error)) {
+        logger.debug('Error getting free models:', error.message);
+      } else {
+        logger.debug('Error getting free models:', error);
+      }
+    }
+
+    // If no free models, get paid models
+    if (availableModels.length === 0) {
+      try {
+        const paidModels = await costMonitor.getPaidModels();
+        const codeCapablePaidModels = paidModels.filter((m) =>
+          m.id.toLowerCase().includes('code') ||
+          m.id.toLowerCase().includes('coder') ||
+          m.id.toLowerCase().includes('deepseek')
+        );
+
+        for (const model of codeCapablePaidModels) {
+          availableModels.push({
+            id: model.id,
+            name: model.name,
+            isFree: false,
+          });
+        }
+      } catch (error) {
+        if (isErrorResponse(error)) {
+          logger.debug('Error getting paid models:', error.message);
+        } else {
+          logger.debug('Error getting paid models:', error);
+        }
+      }
+    }
+
+    // Provide explanation for the recommendation
+    try {
+      return {
+        recommendModelCheck,
+        availableModels,
+        explanation: recommendModelCheck
+          ? 'Based on the initial evaluation, it is recommended to validate the code using a model for a more accurate assessment.'
+          : 'The initial evaluation suggests that the code quality is acceptable. Model validation is optional.',
+      };
+    } catch (error) {
+      logger.error('Error in getCodeValidationOptions:', error);
+      return {
+        recommendModelCheck: false,
+        availableModels: [],
+        explanation: 'An error occurred during code validation option generation.',
+      };
+    }
+  }
+};

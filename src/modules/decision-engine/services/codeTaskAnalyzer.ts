@@ -13,8 +13,19 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../../config/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 
+// Define a type for the raw subtask data parsed from the model response
+type RawSubtask = {
+  id?: string | number;
+  description?: string;
+  complexity?: number;
+  estimatedTokens?: number;
+  dependencies?: string[];
+  codeType?: string;
+  [key: string]: any; // Allow other properties
+};
+
 // Prompts for code task analysis
-const DECOMPOSE_TASK_PROMPT = `You are a code architecture expert helping to break down a complex coding task into smaller subtasks. 
+const DECOMPOSE_TASK_PROMPT = `You are a code architecture expert helping to break down a complex coding task into smaller subtasks.
 Analyze the following coding task and decompose it into logical, modular subtasks.
 
 Task: {task}
@@ -72,14 +83,7 @@ export const codeTaskAnalyzer = {
     options: CodeTaskAnalysisOptions = {}
   ): Promise<DecomposedCodeTask> {
     logger.debug('Decomposing code task:', task);
-    
-    const promptOptions = {
-      maxSubtasks: options.maxSubtasks || 8,
-      granularity: options.granularity || 'medium',
-      includeTests: options.includeTests !== undefined ? options.includeTests : true,
-      tokenBudgetPerSubtask: options.tokenBudgetPerSubtask || 1500,
-    };
-    
+        
     try {
       // First, analyze the complexity to determine if decomposition is necessary
       const complexityResult = await this.analyzeComplexity(task);
@@ -144,17 +148,23 @@ export const codeTaskAnalyzer = {
       const subtasksRaw = this.parseSubtasksFromResponse(decompositionResult.text);
       
       // Process and validate subtasks
-      const subtasks: CodeSubtask[] = subtasksRaw.map(subtask => ({
+      const subtasks: CodeSubtask[] = subtasksRaw.map((subtask: RawSubtask) => ({
         id: typeof subtask.id === 'string' ? subtask.id : (typeof subtask.id === 'number' ? String(subtask.id) : uuidv4()),
-        description: subtask.description,
+        description: subtask.description || 'No description provided',
         complexity: Math.min(Math.max(subtask.complexity || 0.5, 0), 1), // Ensure within 0-1
         estimatedTokens: subtask.estimatedTokens ||
           Math.round(500 + (subtask.complexity || 0.5) * 1500), // Estimate based on complexity if not provided
         dependencies: subtask.dependencies || [],
-        codeType: subtask.codeType || 'other',
+        codeType: ((): CodeSubtask['codeType'] => {
+          const type = subtask.codeType || 'other';
+          if (['function', 'other', 'class', 'method', 'interface', 'type', 'module', 'test'].includes(type)) {
+            return type as CodeSubtask['codeType'];
+          }
+          return 'other';
+        })(),
         recommendedModelSize: this.determineRecommendedModelSize(subtask.complexity || 0.5)
       }));
-      
+
       // Generate dependency map
       const dependencyMap: Record<string, string[]> = {};
       subtasks.forEach(subtask => {
@@ -317,14 +327,20 @@ export const codeTaskAnalyzer = {
   
   /**
    * Parse subtasks from the model response
-   * 
+   *
    * @param response The model's response text
    * @returns An array of parsed subtasks
    */
-  parseSubtasksFromResponse(response: string): any[] {
+function isSubtasksWrapper(obj: any): obj is { subtasks: RawSubtask[] } {
+  return typeof obj === 'object' && obj !== null && Array.isArray(obj.subtasks);
+}
+
+
+
+  parseSubtasksFromResponse(response: string): RawSubtask[] {
     try {
       // Try to extract JSON object
-      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || 
+      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) ||
                         response.match(/\{[\s\S]*?\}/);
       
       /*
@@ -351,19 +367,19 @@ export const codeTaskAnalyzer = {
         if (Array.isArray(parsed)) {
           return parsed.map((subtask: RawSubtask) => ({
             ...subtask,
-            id: subtask.id ? String(subtask.id) : uuidv4()
+            id: subtask.id ? String(subtask.id) : uuidv4(),
           }));
-        } else if (parsed.subtasks && Array.isArray(parsed.subtasks)) {
+        } else if (isSubtasksWrapper(parsed)) {
           // Handle case where JSON contains a wrapper object with subtasks array
           return parsed.subtasks.map((subtask: RawSubtask) => ({
             ...subtask,
-            id: subtask.id ? String(subtask.id) : uuidv4()
+            id: subtask.id ? String(subtask.id) : uuidv4(),
           }));
         }
-        return []; // Return empty array if JSON doesn't match expected format
-      }
-      
-      // Fallback to heuristic parsing if JSON extraction fails
+          return []; // Return empty array if JSON doesn't match expected format
+        }
+        
+        // Fallback to heuristic parsing if JSON extraction fails
       /*
       Author: Roo
       Date: March 11, 2025, 8:29:12 PM
@@ -559,6 +575,7 @@ export const codeTaskAnalyzer = {
  * @param taskDescription The task description
  * @returns Detailed integration complexity factors
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 async function evaluateIntegrationFactors(taskDescription: string): Promise<IntegrationFactors> {
   const patterns = {
     systemInteractions: [
@@ -598,7 +615,7 @@ async function evaluateIntegrationFactors(taskDescription: string): Promise<Inte
 
   // Evaluate each factor based on pattern matching
   for (const [factor, patternList] of Object.entries(patterns)) {
-    const matches = patternList.reduce((count, pattern) => {
+    const matches = patternList.reduce((count: number, pattern) => {
       return count + (pattern.test(taskDescription) ? 1 : 0);
     }, 0);
     scores[factor as keyof IntegrationFactors] = Math.min(matches / patternList.length, 1);
@@ -612,6 +629,7 @@ async function evaluateIntegrationFactors(taskDescription: string): Promise<Inte
  * @param taskDescription The task description to evaluate
  * @returns Domain knowledge evaluation scores
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 async function evaluateDomainKnowledge(taskDescription: string): Promise<DomainFactors> {
   const patterns = {
     domainSpecificity: [
@@ -656,7 +674,7 @@ async function evaluateDomainKnowledge(taskDescription: string): Promise<DomainF
 
   // Evaluate each factor based on pattern matching and weight
   for (const [factor, patternList] of Object.entries(patterns)) {
-    const matches = patternList.reduce((count, pattern) => {
+    const matches = patternList.reduce((count: number, pattern) => {
       return count + (pattern.test(taskDescription) ? 1 : 0);
     }, 0);
     scores[factor as keyof DomainFactors] = Math.min(matches / patternList.length, 1);
@@ -670,6 +688,7 @@ async function evaluateDomainKnowledge(taskDescription: string): Promise<DomainF
  * @param taskDescription The task description to evaluate
  * @returns Technical requirements evaluation scores
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 async function evaluateTechnicalRequirements(taskDescription: string): Promise<Record<string, number>> {
   // Define patterns to recognize different technical requirement aspects
   const patterns = {
@@ -722,7 +741,7 @@ async function evaluateTechnicalRequirements(taskDescription: string): Promise<R
 
   // Evaluate each technical factor based on pattern matching
   for (const [factor, patternList] of Object.entries(patterns)) {
-    const matches = patternList.reduce((count, pattern) => {
+    const matches = patternList.reduce((count: number, pattern) => {
       return count + (pattern.test(taskDescription) ? 1 : 0);
     }, 0);
     scores[factor] = Math.min(matches / patternList.length, 1);

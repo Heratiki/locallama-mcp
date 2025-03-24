@@ -1,7 +1,7 @@
-import path from 'path';
-import fs from 'fs/promises';
-import { mkdir } from 'fs/promises';
-import { config } from '../../../config/index.js';
+// import path from 'path';
+// import fs from 'fs/promises';
+// import { mkdir } from 'fs/promises';
+// import { config } from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
 import { ModelPerformanceData } from '../../../types/index.js';
 
@@ -26,7 +26,7 @@ class ModelsDbService {
     return ModelsDbService.instance;
   }
 
-  async initialize(): Promise<void> {
+  initialize(): void {
     logger.debug('Initializing models database');
     // Initialize with empty database if none exists
     if (Object.keys(this.database.models).length === 0) {

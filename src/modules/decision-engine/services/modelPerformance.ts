@@ -1,22 +1,24 @@
 import { logger } from '../../../utils/logger.js';
 import { Model } from '../../../types/index.js';
-import { ModelPerformanceData, ModelsDatabase, COMPLEXITY_THRESHOLDS, ModelPerformanceAnalysis } from '../types/index.js';
+import { ModelPerformanceData, ModelPerformanceAnalysis } from '../types/index.js';
 import { modelsDbService } from './modelsDb.js';
 import { openRouterModule } from '../../openrouter/index.js';
 
 /**
- * Enhanced service for tracking and analyzing model performance with resource monitoring
+ * Interface for the model performance tracker methods
+ * Used by the code model selector to avoid circular dependencies
  */
-interface ModelPerformanceTracker {
-  // Add methods as needed based on usage in codeModelSelector
-}
+type ModelPerformanceTracker = {
+  analyzePerformanceByComplexity: (min: number, max: number) => ModelPerformanceAnalysis;
+  getModelStats: (modelId: string) => Partial<ModelPerformanceData> | null;
+};
 
 export const modelPerformanceTracker = {
   /**
    * Initialize the model performance tracker
    * This must be called after all services are defined to avoid circular dependencies
    */
-  initialize(codeModelSelector: { setModelPerformanceTracker: (tracker: any) => void }): void {
+  initialize(codeModelSelector: { setModelPerformanceTracker: (tracker: ModelPerformanceTracker) => void }): void {
     if (codeModelSelector) {
       // Inject this tracker into codeModelSelector to avoid circular dependency
       codeModelSelector.setModelPerformanceTracker(this);
@@ -46,7 +48,7 @@ export const modelPerformanceTracker = {
       }
     ): Promise<void> {
       try {
-        const modelsDb = await modelsDbService.getDatabase();
+        const modelsDb = modelsDbService.getDatabase();
         const modelId = model.id;
   
         // Calculate quality score if we have a response
@@ -104,16 +106,25 @@ export const modelPerformanceTracker = {
           // Add resource usage history
           const resourceHistoryEntry = {
             timestamp: Date.now(), // Use number timestamp instead of string
-            tokenUsage: response.tokenUsage.total,
-            responseTime: response.timeTaken,
-            success: response.success
+            cpuUsage: response.systemResources?.cpuUsage ?? 0,
+            memoryUsage: response.systemResources?.memoryUsage ?? 0,
+            responseTime: response.timeTaken
           };
-  
-          // Need to cast to access non-standard properties
-          (modelsDb.models[modelId] as any).resourceHistory = [resourceHistoryEntry];
+
+          // Add resource history to the model data
+          const modelWithHistory = modelsDb.models[modelId] as ModelPerformanceData & {
+            resourceHistory?: Array<{
+              timestamp: number;
+              cpuUsage: number;
+              memoryUsage: number;
+              responseTime: number;
+            }>;
+          };
+          
+          modelWithHistory.resourceHistory = [resourceHistoryEntry];
         } else {
           // Update existing model data with weighted averages for all metrics
-          const existingModel = modelsDb.models[modelId] as unknown as {
+          const existingModel = modelsDb.models[modelId] as ModelPerformanceData & {
             benchmarkCount: number;
             successRate: number;
             qualityScore: number;
@@ -124,9 +135,9 @@ export const modelPerformanceTracker = {
             memoryFootprint?: number;
             resourceHistory?: Array<{
               timestamp: number;
-              tokenUsage: number;
+              cpuUsage: number;
+              memoryUsage: number;
               responseTime: number;
-              success: boolean;
             }>;
           };
   
@@ -173,24 +184,33 @@ export const modelPerformanceTracker = {
           // Add to resource usage history (keep last 10 entries)
           const history = (existingModel.resourceHistory || []) as Array<{
             timestamp: number;
-            tokenUsage: number;
+            cpuUsage: number;
+            memoryUsage: number;
             responseTime: number;
-            success: boolean;
           }>;
   
           history.push({
             timestamp: Date.now(), // Use number timestamp instead of string
-            tokenUsage: response.tokenUsage.total,
-            responseTime: response.timeTaken,
-            success: response.success
+            cpuUsage: response.systemResources?.cpuUsage ?? 0,
+            memoryUsage: response.systemResources?.memoryUsage ?? 0,
+            responseTime: response.timeTaken
           });
   
-          // Keep only the last 10 entries
-          (modelsDb.models[modelId] as any).resourceHistory = history.slice(-10);
+          // Keep only the last 10 entries and update the resource history
+          const modelWithHistory = modelsDb.models[modelId] as ModelPerformanceData & {
+            resourceHistory?: Array<{
+              timestamp: number;
+              cpuUsage: number;
+              memoryUsage: number;
+              responseTime: number;
+            }>;
+          };
+          
+          modelWithHistory.resourceHistory = history.slice(-10);
         }
   
         // Save the updated database - use updateModelData instead of save
-        await modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+        modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
         logger.debug(`Updated performance data for ${modelId}: Success=${response.success}, Quality=${qualityScore.toFixed(2)}, Time=${response.timeTaken}ms, TokenEff=${tokenEfficiency.toFixed(3)}`);
       } catch (error) {
         logger.error('Error tracking model performance:', error);
@@ -200,7 +220,7 @@ export const modelPerformanceTracker = {
   /**
    * Track system resource usage for a model
    */
-  async trackResourceUsage(
+  trackResourceUsage(
     modelId: string, 
     resources: {
       cpuUsage?: number;
@@ -208,7 +228,7 @@ export const modelPerformanceTracker = {
       gpuMemoryUsage?: number;
       responseTime?: number;
     }
-  ): Promise<void> {
+  ): void {
     try {
       const modelsDb = modelsDbService.getDatabase();
       
@@ -218,7 +238,7 @@ export const modelPerformanceTracker = {
       }
       
       // Cast to allow access to properties
-      const modelData = modelsDb.models[modelId] as unknown as {
+      const modelData = modelsDb.models[modelId] as ModelPerformanceData & {
         benchmarkCount: number;
         systemResourceUsage?: number;
         memoryFootprint?: number;
@@ -263,7 +283,7 @@ export const modelPerformanceTracker = {
   /**
    * Get performance statistics for a specific model
    */
-  getModelStats(modelId: string): any {
+  getModelStats(modelId: string): Partial<ModelPerformanceData> | null {
     try {
       const modelsDb = modelsDbService.getDatabase();
       return modelsDb.models[modelId] || null;
@@ -300,7 +320,7 @@ export const modelPerformanceTracker = {
       
       const scoredModels = modelEntries
         .filter(([_, data]) => {
-          const typedData = data as unknown as { provider: string };
+          const typedData = data as ModelPerformanceData;
           if (options?.requireLocalOnly) {
             return typedData.provider === 'local' || 
                    typedData.provider === 'lm-studio' || 
@@ -310,7 +330,7 @@ export const modelPerformanceTracker = {
         })
         .map(([id, data]) => {
           // Cast to access properties
-          const typedData = data as unknown as {
+          const typedData = data as ModelPerformanceData & {
             avgResponseTime: number;
             complexityScore: number;
             successRate: number;
@@ -343,8 +363,8 @@ export const modelPerformanceTracker = {
         .sort((a, b) => b.score - a.score)
         .slice(0, count);
       
-      return scoredModels.map(({ id, data }) => {
-        const modelData = modelsDb.models[id] as unknown as {
+      return scoredModels.map(({ id }) => {
+        const modelData = modelsDb.models[id] as ModelPerformanceData & {
           name: string;
           provider: string;
           contextWindow: number;
@@ -381,10 +401,10 @@ export const modelPerformanceTracker = {
     try {
       const modelsDb = modelsDbService.getDatabase();
       const relevantModels = Object.values(modelsDb.models).filter(model => {
-        const typedModel = model as unknown as { complexityScore: number };
+        const typedModel = model as ModelPerformanceData & { complexityScore: number };
         return typedModel.complexityScore >= minComplexity && 
                typedModel.complexityScore <= maxComplexity;
-      }) as unknown as Array<{
+      }) as Array<ModelPerformanceData & {
         id: string;
         successRate: number;
         qualityScore: number;
@@ -476,7 +496,7 @@ export const modelPerformanceTracker = {
   }[] {
     try {
       const modelsDb = modelsDbService.getDatabase();
-      const model = modelsDb.models[modelId] as unknown as { 
+      const model = modelsDb.models[modelId] as ModelPerformanceData & { 
         resourceHistory?: Array<{
           timestamp: number;
           tokenUsage: number;
@@ -516,14 +536,14 @@ export const modelPerformanceTracker = {
       // Calculate efficiency score for each model
       const scoredModels = modelEntries
         .filter(([_, data]) => {
-          const typedData = data as unknown as { 
+          const typedData = data as ModelPerformanceData & { 
             systemResourceUsage?: number; 
             tokenEfficiency?: number;
           };
           return typedData.systemResourceUsage !== undefined && typedData.tokenEfficiency !== undefined;
         })
         .map(([id, data]) => {
-          const typedData = data as unknown as { 
+          const typedData = data as ModelPerformanceData & { 
             systemResourceUsage?: number; 
             tokenEfficiency?: number;
             provider: string;

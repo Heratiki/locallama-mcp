@@ -45,7 +45,7 @@ export interface DecomposedCodeTask {
   totalEstimatedTokens: number;
   
   /** Any additional context or metadata */
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   
   /** Dependencies between components as adjacency list */
   dependencyMap: Record<string, string[]>;

@@ -262,16 +262,28 @@ export interface TaskRoutingParams {
 }
 
 export interface ModelPerformanceData {
-  avgResponseTime: number;
+  id: string;
+  name: string;
+  provider: string; // 'openrouter', 'local', 'lm-studio', 'ollama', etc.
+  lastSeen: string;
+  contextWindow: number;
+  successRate: number;
   qualityScore: number;
+  avgResponseTime: number;
+  complexityScore: number;
+  lastBenchmarked: string;
+  benchmarkCount: number;
+  isFree: boolean; // Whether this is a free model
   tokenEfficiency?: number;
   systemResourceUsage?: number;
   memoryFootprint?: number;
   resourceHistory?: Array<{
     timestamp: number;
-    cpuUsage: number;
-    memoryUsage: number;
+    tokenUsage: number;
     responseTime: number;
+    success: boolean;
+    cpuUsage?: number;
+    memoryUsage?: number;
   }>;
 }
 

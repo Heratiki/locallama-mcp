@@ -487,7 +487,7 @@ export const benchmarkService = {
         // Read and parse the benchmark results
         const filePath = path.join(benchmarkDir, latestFile);
         const data = await fs.readFile(filePath, 'utf8');
-        const results: ComprehensiveBenchmarkResults = JSON.parse(data) as ComprehensiveBenchmarkResults;
+        JSON.parse(data) as ComprehensiveBenchmarkResults;
         
         logger.info('Updated model performance profiles from benchmark results');
       } catch (error) {

@@ -1,30 +1,28 @@
 import { logger } from '../../../utils/logger.js';
 import { costMonitor } from '../../cost-monitor/index.js';
-import { modelsDbService } from './modelsDb.js';
 // Import types only to avoid circular dependency
 import type { ModelPerformanceAnalysis } from '../types/index.js';
-
-export type ModelPerformanceTracker = {
-  analyzePerformanceByComplexity: (min: number, max: number) => {
-    averageSuccessRate: number;
-    averageQualityScore: number;
-    averageResponseTime: number;
-    bestPerformingModels: string[];
-  };
-  getModelStats: (modelId: string) => {
-    complexityScore: number;
-    successRate: number;
-    qualityScore: number;
-    avgResponseTime: number;
-    tokenEfficiency: number;
-    systemResourceUsage: number;
-    memoryFootprint: number;
-  } | undefined;
-};
 import { CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { config } from '../../../config/index.js';
+
+/**
+ * Interface for the model performance tracker methods
+ * Used to avoid circular dependencies
+ */
+export type ModelPerformanceTracker = {
+  analyzePerformanceByComplexity: (min: number, max: number) => ModelPerformanceAnalysis;
+  getModelStats: (modelId: string) => {
+    complexityScore?: number;
+    successRate?: number;
+    qualityScore?: number;
+    avgResponseTime?: number;
+    tokenEfficiency?: number;
+    systemResourceUsage?: number;
+    memoryFootprint?: number;
+  } | null;
+};
 
 /**
  * Service for selecting appropriate models for code subtasks
@@ -38,8 +36,9 @@ export const codeModelSelector = {
   selectModelsForSubtasks,
 
   // Set the modelPerformanceTracker reference dynamically to avoid circular dependency
-  _modelPerformanceTracker: ModelPerformanceTracker | null = null;
-  setModelPerformanceTracker(tracker: ModelPerformanceTracker) {
+  _modelPerformanceTracker: null as ModelPerformanceTracker | null,
+  
+  setModelPerformanceTracker(tracker: ModelPerformanceTracker): void {
     this._modelPerformanceTracker = tracker;
   },
 
@@ -47,22 +46,28 @@ export const codeModelSelector = {
   calculateComplexityMatchScore(
     model: Model,
     subtask: CodeSubtask,
-    modelStats: any
+    modelStats: Record<string, unknown> | null
   ): number {
     let score = 0;
 
     // Use historical complexity match if available
-    if ((modelStats as { complexityScore?: number })?.complexityScore !== undefined) {
-      score += 1 - Math.abs((modelStats as { complexityScore: number }).complexityScore - subtask.complexity);
+    if (modelStats && typeof modelStats.complexityScore === 'number') {
+      score += 1 - Math.abs(modelStats.complexityScore - subtask.complexity);
     }
 
     // Model size appropriateness
     if (subtask.recommendedModelSize === 'small') {
-      if (model.id.toLowerCase().match(/1\\.5b|1b|3b|mini|tiny/)) score += 0.3;
+      if (model.id.toLowerCase().match(/1\.5b|1b|3b|mini|tiny/)) {
+        score += 0.3;
+      }
     } else if (subtask.recommendedModelSize === 'medium') {
-      if (model.id.toLowerCase().match(/7b|8b|13b/)) score += 0.3;
+      if (model.id.toLowerCase().match(/7b|8b|13b/)) {
+        score += 0.3;
+      }
     } else if (subtask.recommendedModelSize === 'large') {
-      if (model.id.toLowerCase().match(/70b|40b|34b/)) score += 0.3;
+      if (model.id.toLowerCase().match(/70b|40b|34b/)) {
+        score += 0.3;
+      }
     }
 
     return score;
@@ -70,24 +75,26 @@ export const codeModelSelector = {
 
   calculateHistoricalPerformanceScore(
     model: Model,
-    modelStats: any,
-    perfAnalysis: any
+    modelStats: Record<string, unknown> | null,
+    perfAnalysis: ModelPerformanceAnalysis
   ): number {
     let score = 0;
 
     if (modelStats) {
       // Success rate compared to average
-      if ((modelStats as { successRate: number }).successRate > perfAnalysis.averageSuccessRate) {
+      if (typeof modelStats.successRate === 'number' && 
+          modelStats.successRate > perfAnalysis.averageSuccessRate) {
         score += 0.4;
       }
 
       // Quality score compared to average
-      if (modelStats.qualityScore > (perfAnalysis as { averageQualityScore: number }).averageQualityScore) {
+      if (typeof modelStats.qualityScore === 'number' && 
+          modelStats.qualityScore > perfAnalysis.averageQualityScore) {
         score += 0.4;
       }
 
       // Bonus for being among best performing models
-      if ((perfAnalysis as { bestPerformingModels: string[] }).bestPerformingModels.includes(model.id)) {
+      if (perfAnalysis.bestPerformingModels.includes(model.id)) {
         score += 0.2;
       }
     } else {
@@ -106,12 +113,12 @@ export const codeModelSelector = {
   calculateResourceEfficiencyScore(
     model: Model,
     subtask: CodeSubtask,
-    modelStats: any
+    modelStats: Record<string, unknown> | null
   ): number {
     let score = 0;
 
     // Response time efficiency if available
-    if (modelStats?.avgResponseTime) {
+    if (modelStats && typeof modelStats.avgResponseTime === 'number') {
       score += Math.max(0, 1 - (modelStats.avgResponseTime / 15000));
     }
 
@@ -124,12 +131,12 @@ export const codeModelSelector = {
     }
 
     // Token efficiency - if tracked in model stats
-    if (modelStats?.tokenEfficiency) {
+    if (modelStats && typeof modelStats.tokenEfficiency === 'number') {
       score += Math.min(1, modelStats.tokenEfficiency);
     }
 
     // System resource efficiency
-    if (modelStats?.systemResourceUsage) {
+    if (modelStats && typeof modelStats.systemResourceUsage === 'number') {
       // Lower system resource usage gets a higher score
       score += Math.max(0, 1 - modelStats.systemResourceUsage);
     }
@@ -143,7 +150,9 @@ export const codeModelSelector = {
         score += 0.1; // Quantized models use less memory
       }
 
-      if (modelStats?.memoryFootprint && modelStats.memoryFootprint < 8) {
+      if (modelStats && 
+          typeof modelStats.memoryFootprint === 'number' && 
+          modelStats.memoryFootprint < 8) {
         score += 0.1; // Models with small memory footprint (< 8GB)
       }
     }
@@ -218,6 +227,11 @@ export const codeModelSelector = {
     subtasks: CodeSubtask[],
     availableModels: Model[]
   ): Promise<Map<string, Model>> {
+    if (!this._modelPerformanceTracker) {
+      logger.warn('Model performance tracker not initialized, using simple assignment');
+      return selectModelsForSubtasks(subtasks, false);
+    }
+
     const assignments = new Map<string, Model>();
     const modelLoad = new Map<string, number>(); // Track load per model
 
@@ -226,6 +240,10 @@ export const codeModelSelector = {
 
     for (const subtask of subtasks) {
       // Use the injected reference to avoid circular dependency
+      if (!this._modelPerformanceTracker) {
+        logger.warn('Model performance tracker is not initialized.');
+        continue;
+      }
       const perfAnalysis = this._modelPerformanceTracker.analyzePerformanceByComplexity(
         Math.max(0, subtask.complexity - 0.1),
         Math.min(1, subtask.complexity + 0.1)
@@ -271,6 +289,10 @@ export const codeModelSelector = {
             return true;
           })
           .map(async m => {
+            if (!this._modelPerformanceTracker) {
+              logger.warn('Model performance tracker is not initialized.');
+              return { model: m, score: 0 }; // Return a default score
+            }
             const perfAnalysis = this._modelPerformanceTracker.analyzePerformanceByComplexity(
               Math.max(0, subtask.complexity - 0.1),
               Math.min(1, subtask.complexity + 0.1)
@@ -313,6 +335,11 @@ async function findBestModelForSubtask(subtask: CodeSubtask): Promise<Model | nu
   logger.debug(`Finding best model for subtask: ${subtask.description}`);
   
   try {
+    if (!codeModelSelector._modelPerformanceTracker) {
+      logger.warn('Model performance tracker not initialized, using fallback model');
+      return getFallbackModel(subtask);
+    }
+
     // Get available models from both local and remote sources
     const availableModels = await costMonitor.getAvailableModels();
     const freeModels = await costMonitor.getFreeModels();
@@ -324,8 +351,8 @@ async function findBestModelForSubtask(subtask: CodeSubtask): Promise<Model | nu
     });
     
     if (suitableModels.length === 0) {
-      logger.warn(`No models found that can handle subtask with ${subtask.estimatedTokens}`);
-      return codeModelSelector.getFallbackModel(subtask);
+      logger.warn(`No models found that can handle subtask with ${subtask.estimatedTokens} tokens`);
+      return getFallbackModel(subtask);
     }
     
     // Get performance analysis for this complexity range
@@ -338,7 +365,7 @@ async function findBestModelForSubtask(subtask: CodeSubtask): Promise<Model | nu
     // Score all suitable models with enhanced scoring system
     const scoredModels = await Promise.all(
       suitableModels.map(async model => {
-        const score = await codeModelSelector.scoreModelForSubtask(model, subtask, perfAnalysis);
+        const score = await scoreModelForSubtask(model, subtask, perfAnalysis);
         return { model, score };
       })
     );
@@ -363,29 +390,30 @@ async function findBestModelForSubtask(subtask: CodeSubtask): Promise<Model | nu
     }
     
     // If no suitable local model, use best overall if it meets minimum threshold
-    if (scoredModels[0].score >= thresholds.minAcceptableScore) {
+    if (scoredModels.length > 0 && scoredModels[0].score >= thresholds.minAcceptableScore) {
       logger.debug(`Best model for subtask: ${scoredModels[0].model.id} with score ${scoredModels[0].score}`);
       return scoredModels[0].model;
     }
     
     // If no model scores well enough, try fallback
-    return codeModelSelector.getFallbackModel(subtask);
+    return getFallbackModel(subtask);
   } catch (error) {
     logger.error('Error finding best model for subtask:', error);
-    return codeModelSelector.getFallbackModel(subtask);
+    return getFallbackModel(subtask);
   }
 }
 
 async function scoreModelForSubtask(
   model: Model, 
   subtask: CodeSubtask,
-  perfAnalysis: {
-    averageSuccessRate: number;
-    averageQualityScore: number;
-    averageResponseTime: number;
-    bestPerformingModels: string[];
-  }
+  perfAnalysis: ModelPerformanceAnalysis
 ): Promise<number> {
+    if (!codeModelSelector._modelPerformanceTracker) {
+        logger.warn('Model performance tracker is not initialized.');
+        // Basic fallback scoring if tracker isn't available
+        return model.provider === 'local' ? 0.7 : 0.6;
+    }
+
   // Use the injected reference to avoid circular dependency
   const modelStats = codeModelSelector._modelPerformanceTracker.getModelStats(model.id);
   let score = 0;
@@ -433,7 +461,7 @@ async function getFallbackModel(subtask: CodeSubtask): Promise<Model | null> {
           }
         };
       
-      case 'medium':
+      case 'medium': {
         // Try to find a medium-sized local model
         const localModels = await costMonitor.getAvailableModels();
         const mediumModel = localModels.find(m => 
@@ -455,22 +483,23 @@ async function getFallbackModel(subtask: CodeSubtask): Promise<Model | null> {
             completion: 0
           }
         };
+      }
       
       case 'large':
-        case 'remote':
-          return {
-            id: 'gpt-3.5-turbo',
-            name: 'GPT-3.5 Turbo',
-            provider: 'openai',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0.000001,
-              completion: 0.000002
-            }
-          };
+      case 'remote':
+        return {
+          id: 'gpt-3.5-turbo',
+          name: 'GPT-3.5 Turbo',
+          provider: 'openai',
+          capabilities: {
+            chat: true,
+            completion: true
+          },
+          costPerToken: {
+            prompt: 0.000001,
+            completion: 0.000002
+          }
+        };
           
       default:
         return {
@@ -509,7 +538,7 @@ async function getFallbackModel(subtask: CodeSubtask): Promise<Model | null> {
 
 async function selectModelsForSubtasks(
   subtasks: CodeSubtask[],
-  useResourceEfficient: boolean = false
+  useResourceEfficient = false
 ): Promise<Map<string, Model>> {
   if (useResourceEfficient) {
     // Use the new optimized resource distribution method

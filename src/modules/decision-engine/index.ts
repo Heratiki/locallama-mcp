@@ -60,12 +60,12 @@ export const decisionEngine = {
    * Initialize the decision engine
    * This is called when the module is first loaded
    */
-  async initialize(): Promise<void> {
+  initialize(): void {
     logger.info('Initializing decision engine');
     
     try {
       // Initialize models database
-      await modelsDbService.initialize();
+      modelsDbService.initialize();
 
       // Initialize module connections to resolve circular dependencies
       modelPerformanceTracker.initialize(codeModelSelector);
