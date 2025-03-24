@@ -1,5 +1,4 @@
 import type { IJobManager } from '../api-integration/types.js';
-import { jobTracker as jobTrackerInstance } from '../decision-engine/services/jobTracker.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import express from 'express';
 import net from 'net';
@@ -20,13 +19,18 @@ const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'f
   return statusMap[status] || 'failed';
 };
 
-// Initialize job tracker with proper type casting
-const jobTracker = jobTrackerInstance as unknown as IJobManager;
+// Will be initialized later to avoid circular dependency
+let jobTracker: IJobManager;
 
 const PORT_RANGE_START = 4000;
 const PORT_RANGE_END = 4100;
 const PORT_FILE = path.resolve('.locallama_port');
 const WS_PORT_API = '/ws-port';
+
+// Function to initialize the job tracker
+export function initJobTracker(tracker: unknown): void {
+  jobTracker = tracker as IJobManager;
+}
 
 async function findAvailablePort(start: number, end: number): Promise<number> {
   for (let port = start; port <= end; port++) {
