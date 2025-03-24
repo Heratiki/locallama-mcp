@@ -1,7 +1,7 @@
-import sqlite3 from 'sqlite3';
-import { Database, ISqlite, open } from 'sqlite';
 import fs from 'fs';
 import path from 'path';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite'; // Removed Database, ISqlite due to not being used.
 import { logger } from '../../utils/logger.js';
 
 interface Job {
@@ -14,20 +14,45 @@ interface Job {
   updated_at: string;
 }
 
+interface DbRunResult {
+  lastID: number;
+  changes: number;
+}
+
+type SafeDB = {
+  run(sql: string, params?: unknown[]): Promise<DbRunResult>;
+  all<T>(sql: string, params?: unknown[]): Promise<T[]>;
+  exec(sql: string): Promise<void>;
+};
+
 const DB_PATH = process.env.DB_PATH || './data/jobs.db';
 
-async function initDatabase(): Promise<Database> {
+async function initDatabase(): Promise<SafeDB | null> {
   if (!fs.existsSync(path.dirname(DB_PATH))) {
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   }
 
+  let dbConnection;
   try {
-    const db = await open<Database, sqlite3.Database>({
+    dbConnection = await open({
       filename: DB_PATH,
       driver: sqlite3.Database
     });
 
-    await (db as ISqlite.Database).exec(`
+    if (!dbConnection) {
+      return null;
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error('Failed to initialize database:', error.message);
+    } else {
+      logger.error('Failed to initialize database:', String(error));
+    }
+    return null;
+  }
+
+  try {
+    await dbConnection.exec(`
       CREATE TABLE IF NOT EXISTS jobs (
         id TEXT PRIMARY KEY,
         description TEXT,
@@ -38,18 +63,25 @@ async function initDatabase(): Promise<Database> {
         updated_at TEXT
       )
     `);
-
-    return db;
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Failed to initialize database:', error.message);
+  } catch (execError) {
+    if (execError instanceof Error) {
+      logger.error('Failed to create table:', execError.message);
+    } else {
+      logger.error('Failed to create table:', String(execError));
     }
-    throw error;
+    return null;
   }
+
+  return dbConnection as SafeDB;
 }
 
 async function insertJob(job: Job): Promise<void> {
-  const db = await initDatabase() as ISqlite.Database;
+  const db = await initDatabase();
+  if (!db) {
+    logger.error('Database not initialized');
+    return;
+  }
+
   try {
     await db.run(
       'INSERT INTO jobs (id, description, status, progress, parent_task_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -58,13 +90,20 @@ async function insertJob(job: Job): Promise<void> {
   } catch (error) {
     if (error instanceof Error) {
       logger.error('Failed to insert job:', error.message);
+    } else {
+      logger.error('Failed to insert job:', String(error));
     }
     throw error;
   }
 }
 
 async function updateJob(job: Partial<Job> & { id: string }): Promise<void> {
-  const db = await initDatabase() as ISqlite.Database;
+  const db = await initDatabase();
+  if (!db) {
+    logger.error('Database not initialized');
+    return;
+  }
+
   try {
     await db.run(
       'UPDATE jobs SET status = ?, progress = ?, updated_at = ? WHERE id = ?',
@@ -73,26 +112,39 @@ async function updateJob(job: Partial<Job> & { id: string }): Promise<void> {
   } catch (error) {
     if (error instanceof Error) {
       logger.error('Failed to update job:', error.message);
+    } else {
+      logger.error('Failed to update job:', String(error));
     }
-    throw error;
   }
 }
 
 async function getAllJobsFromDb(): Promise<Job[]> {
-  const db = await initDatabase() as ISqlite.Database;
+  const db = await initDatabase();
+  if (!db) {
+    logger.error('Database not initialized');
+    return [];
+  }
+
   try {
-    const rows = await db.all('SELECT * FROM jobs') as Job[];
+    const rows = await db.all<Job>('SELECT * FROM jobs');
     return rows;
   } catch (error) {
     if (error instanceof Error) {
       logger.error('Failed to get all jobs:', error.message);
+    } else {
+      logger.error('Failed to get all jobs:', String(error));
     }
     return [];
   }
 }
 
 async function cleanupOldJobs(): Promise<void> {
-  const db = await initDatabase() as ISqlite.Database;
+  const db = await initDatabase();
+  if (!db) {
+    logger.error('Database not initialized');
+    return;
+  }
+
   try {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - 7);
@@ -100,8 +152,9 @@ async function cleanupOldJobs(): Promise<void> {
   } catch (error) {
     if (error instanceof Error) {
       logger.error('Failed to cleanup old jobs:', error.message);
+    } else {
+      logger.error('Failed to cleanup old jobs:', String(error));
     }
-    throw error;
   }
 }
 
