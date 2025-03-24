@@ -1,7 +1,33 @@
+/* Required dependencies - used throughout the module */
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
 import axios from 'axios';
 import { openRouterModule } from '../openrouter/index.js';
+
+// Define types for API responses
+interface LMStudioResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+}
+
+interface OllamaResponse {
+  message: {
+    content: string;
+  };
+}
+
+interface FallbackResult {
+  provider: 'local' | 'paid';
+  model?: string;
+  success: boolean;
+  text?: string;
+  usage?: unknown;
+  message: string;
+  service?: string;
+}
 
 /**
  * Fallback & Error Handling Module
@@ -20,7 +46,7 @@ export const fallbackHandler = {
     task?: string;
     modelId?: string;
     timeout?: number;
-  }): Promise<{ success: boolean; fallbackUsed: boolean; result?: any }> {
+  }): Promise<{ success: boolean; fallbackUsed: boolean; result?: FallbackResult }> {
     const { operation, provider, fallbackAvailable, task, modelId, timeout } = context;
     
     logger.error(`Error during ${operation} with provider ${provider}:`, error);
@@ -68,7 +94,7 @@ export const fallbackHandler = {
             
             if (openRouterResult.success) {
               fallbackResult = {
-                provider: 'paid',
+                provider: 'paid' as const,
                 success: true,
                 text: openRouterResult.text,
                 usage: openRouterResult.usage,
@@ -90,7 +116,7 @@ export const fallbackHandler = {
               
               if (openRouterResult.success) {
                 fallbackResult = {
-                  provider: 'paid',
+                  provider: 'paid' as const,
                   model: bestModel.id,
                   success: true,
                   text: openRouterResult.text,
@@ -119,7 +145,7 @@ export const fallbackHandler = {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), timeout);
             
-            const response = await axios.post(
+            const response = await axios.post<LMStudioResponse | OllamaResponse>(
               apiEndpoint,
               {
                 model: fallbackModelId,
@@ -142,28 +168,39 @@ export const fallbackHandler = {
             clearTimeout(timeoutId);
             
             // Handle response format differences between LM Studio and Ollama
-            let responseText;
+            let responseText = '';
             if (fallbackOption === 'lm-studio') {
-              responseText = response.data.choices[0].message.content;
+              const lmStudioResponse = response.data as LMStudioResponse;
+              responseText = lmStudioResponse.choices[0].message.content;
             } else {
-              responseText = response.data.message.content;
+              const ollamaResponse = response.data as OllamaResponse;
+              responseText = ollamaResponse.message.content;
             }
             
             fallbackResult = {
-              provider: 'local',
+              provider: 'local' as const,
               model: fallbackModelId,
               success: true,
               text: responseText,
               message: `Fallback to ${fallbackOption} successful`,
             };
+
+            return {
+              success: true,
+              fallbackUsed: true,
+              result: fallbackResult
+            };
+
           } catch (apiError) {
-            throw new Error(`${fallbackOption} API fallback failed: ${apiError}`);
+            const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+            throw new Error(`${fallbackOption} API fallback failed: ${errorMessage}`);
           }
         }
       } else {
         // For operations without a specific task, just return that fallback is available
+        const newProvider: 'local' | 'paid' = provider === 'local' ? 'paid' : 'local';
         fallbackResult = {
-          provider: provider === 'local' ? 'paid' : 'local',
+          provider: newProvider,
           service: fallbackOption,
           success: true,
           message: `Fallback to ${fallbackOption} available`,
@@ -196,7 +233,6 @@ export const fallbackHandler = {
     try {
       let endpoint;
       let testEndpoint;
-      let testPayload;
       
       // Configure the API call based on the service
       switch (service) {
@@ -229,7 +265,11 @@ export const fallbackHandler = {
             const freeModels = await openRouterModule.getFreeModels();
             return freeModels.length > 0;
           } catch (error) {
-            logger.error('Error checking OpenRouter availability:', error);
+            if (error instanceof Error) {
+              logger.error('Error checking OpenRouter availability:', error);
+            } else {
+              logger.error('Unknown error checking OpenRouter availability');
+            }
             return false;
           }
         
