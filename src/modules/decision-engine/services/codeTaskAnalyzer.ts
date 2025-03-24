@@ -21,8 +21,14 @@ type RawSubtask = {
   estimatedTokens?: number;
   dependencies?: string[];
   codeType?: string;
-  [key: string]: any; // Allow other properties
+  [key: string]: unknown; // Changed from any to unknown
 };
+
+// Helper function to check if an object has a subtasks array
+function isSubtasksWrapper(obj: unknown): obj is { subtasks: RawSubtask[] } {
+  return typeof obj === 'object' && obj !== null && 
+         'subtasks' in obj && Array.isArray((obj as Record<string, unknown>).subtasks);
+}
 
 // Prompts for code task analysis
 const DECOMPOSE_TASK_PROMPT = `You are a code architecture expert helping to break down a complex coding task into smaller subtasks.
@@ -245,10 +251,10 @@ export const codeTaskAnalyzer = {
       const domainFactors = await evaluateDomainKnowledge(task);
       const technicalFactors = await evaluateTechnicalRequirements(task);
       
-      const avgIntegrationComplexity = Object.values(integrationFactors)
+      const avgIntegrationComplexity = (Object.values(integrationFactors) as number[])
         .reduce((sum, val) => sum + val, 0) / Object.keys(integrationFactors).length;
       
-      const avgDomainComplexity = Object.values(domainFactors)
+      const avgDomainComplexity = (Object.values(domainFactors) as number[])
         .reduce((sum, val) => sum + val, 0) / Object.keys(domainFactors).length;
         
       const avgTechnicalComplexity = Object.values(technicalFactors)
@@ -331,12 +337,6 @@ export const codeTaskAnalyzer = {
    * @param response The model's response text
    * @returns An array of parsed subtasks
    */
-function isSubtasksWrapper(obj: any): obj is { subtasks: RawSubtask[] } {
-  return typeof obj === 'object' && obj !== null && Array.isArray(obj.subtasks);
-}
-
-
-
   parseSubtasksFromResponse(response: string): RawSubtask[] {
     try {
       // Try to extract JSON object
@@ -349,19 +349,31 @@ function isSubtasksWrapper(obj: any): obj is { subtasks: RawSubtask[] } {
       Original code preserved below - modified to ensure JSON-parsed subtask IDs are always strings
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        return JSON.parse(jsonStr);
+        const parsed = JSON.parse(jsonStr) as unknown;
+        
+        // Validate that parsed data matches CodeComplexityResult structure
+        if (
+          typeof parsed === 'object' && parsed !== null &&
+          typeof (parsed as any).overallComplexity === 'number' &&
+          typeof (parsed as any).factors === 'object' &&
+          typeof (parsed as any).explanation === 'string'
+        ) {
+          return parsed as CodeComplexityResult;
+        }
+        
+        // If validation fails, continue to fallback parsing
       }
       */
       
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const parsed = JSON.parse(jsonStr);
+        const parsed: unknown = JSON.parse(jsonStr);
         
         // Ensure all subtask IDs are strings
         // Define minimal type for raw subtask data
         type RawSubtask = {
           id?: string | number;
-          [key: string]: any;
+          [key: string]: unknown;
         };
         
         if (Array.isArray(parsed)) {
@@ -410,7 +422,7 @@ function isSubtasksWrapper(obj: any): obj is { subtasks: RawSubtask[] } {
       const sections = response.split(/\n\s*\d+\.\s+/);
       return sections
         .filter(section => section.trim().length > 0)
-        .map((section, index) => {
+        .map(section => {
           const descriptionMatch = section.match(/(?:Title|Description|Task):\s*(.+?)(?:\n|$)/i);
           const complexityMatch = section.match(/Complexity:\s*(\d+(?:\.\d+)?)/i);
           const tokensMatch = section.match(/Tokens?:\s*(\d+)/i);
@@ -459,7 +471,35 @@ function isSubtasksWrapper(obj: any): obj is { subtasks: RawSubtask[] } {
       
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        return JSON.parse(jsonStr);
+        const parsed: unknown = JSON.parse(jsonStr);
+        
+        // Use type-safe validation with Record<string, unknown>
+        if (
+          typeof parsed === 'object' && parsed !== null
+        ) {
+          const candidate = parsed as Record<string, unknown>;
+          
+          // Validate required fields and their types
+          if (
+            typeof candidate.overallComplexity === 'number' &&
+            typeof candidate.explanation === 'string' &&
+            typeof candidate.factors === 'object' && candidate.factors !== null
+          ) {
+            // Validate factors structure
+            const factors = candidate.factors as Record<string, unknown>;
+            if (
+              typeof factors.algorithmic === 'number' &&
+              typeof factors.integration === 'number' &&
+              typeof factors.domainKnowledge === 'number' &&
+              typeof factors.technical === 'number'
+            ) {
+              // Only cast after thorough validation
+              return parsed as CodeComplexityResult;
+            }
+          }
+        }
+        
+        // If validation fails, continue to fallback parsing
       }
       
       // Fall back to heuristic parsing
