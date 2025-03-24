@@ -30,4 +30,5 @@ class RetrivOptimizer {
   }
 }
 
-export { RetrivOptimizer, IndexedItem };
+export { RetrivOptimizer };
+export type { IndexedItem };
