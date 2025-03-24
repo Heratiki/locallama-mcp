@@ -184,7 +184,7 @@ class TaskRouter {
   /**
    * Track model usage statistics for improved future routing
    */
-  private trackModelUsage(model: Model, complexity: number, tokenCount: number): void {
+  private trackModelUsage(model: Model, _complexity: number, _tokenCount: number): void {
     try {
       // Track processing power over time (simple moving average)
       const currentPower = this._modelProcessingPower.get(model.id) || 1.0;
@@ -205,9 +205,11 @@ class TaskRouter {
         }
       }
       
-      // Also track memory usage if available
-      if (stats?.memoryFootprint) {
-        this._modelMemoryUsage.set(model.id, stats.memoryFootprint);
+      // Also track memory usage if available, using type-safe property access
+      if (stats && 'memoryUsage' in stats && typeof stats.memoryUsage === 'number') {
+        this._modelMemoryUsage.set(model.id, stats.memoryUsage);
+      } else if (stats && 'memoryFootprint' in stats && typeof stats['memoryFootprint'] === 'number') {
+        this._modelMemoryUsage.set(model.id, stats['memoryFootprint']);
       }
     } catch (error) {
       logger.warn("Error tracking model usage", error);
@@ -295,7 +297,7 @@ class TaskRouter {
           const stats = modelPerformanceTracker.getModelStats(model.id);
           if (stats) {
             // Quality match for task complexity
-            if (Math.abs(stats.complexityScore - task.complexity) < 0.2) {
+            if (stats.complexityScore && Math.abs(stats.complexityScore - task.complexity) < 0.2) {
               score += 1.5;
             }
             
@@ -415,7 +417,7 @@ class TaskRouter {
         });
       
       // Process each group
-      for (const [groupKey, taskGroup] of sortedGroups) {
+      for (const [, taskGroup] of sortedGroups) {
         if (taskGroup.length === 0) continue;
         
         // Pick the most complex task as representative
@@ -619,7 +621,7 @@ class TaskRouter {
         });
         
         // Process each group
-        for (const [_, taskGroup] of groups.entries()) {
+        for (const [, taskGroup] of groups.entries()) {
           if (taskGroup.length === 0) continue;
           
           // Get the most complex task as representative
