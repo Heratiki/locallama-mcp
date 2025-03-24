@@ -415,7 +415,7 @@ async function scoreModelForSubtask(
     }
 
   // Use the injected reference to avoid circular dependency
-  const modelStats = codeModelSelector._modelPerformanceTracker.getModelStats(model.id);
+  const modelStats = await Promise.resolve(codeModelSelector._modelPerformanceTracker.getModelStats(model.id));
   let score = 0;
   
   // Task Complexity Match (30%)
