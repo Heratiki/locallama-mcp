@@ -7,11 +7,11 @@ class NewModule {
     this.newComponent = new NewComponent();
   }
 
-  public addDataToComponent(data: any): void {
+  public addDataToComponent(data: { id: string; [key: string]: string | number | boolean | null | undefined }): void {
     this.newComponent.addData(data);
   }
 
-  public getDataFromComponent(): any[] {
+  public getDataFromComponent(): { id: string; [key: string]: string | number | boolean | null | undefined }[] {
     return this.newComponent.getData();
   }
 }
