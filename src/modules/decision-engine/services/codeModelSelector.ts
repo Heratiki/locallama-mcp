@@ -3,6 +3,24 @@ import { costMonitor } from '../../cost-monitor/index.js';
 import { modelsDbService } from './modelsDb.js';
 // Import types only to avoid circular dependency
 import type { ModelPerformanceAnalysis } from '../types/index.js';
+
+export type ModelPerformanceTracker = {
+  analyzePerformanceByComplexity: (min: number, max: number) => {
+    averageSuccessRate: number;
+    averageQualityScore: number;
+    averageResponseTime: number;
+    bestPerformingModels: string[];
+  };
+  getModelStats: (modelId: string) => {
+    complexityScore: number;
+    successRate: number;
+    qualityScore: number;
+    avgResponseTime: number;
+    tokenEfficiency: number;
+    systemResourceUsage: number;
+    memoryFootprint: number;
+  } | undefined;
+};
 import { CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
@@ -20,8 +38,8 @@ export const codeModelSelector = {
   selectModelsForSubtasks,
 
   // Set the modelPerformanceTracker reference dynamically to avoid circular dependency
-  _modelPerformanceTracker: null,
-  setModelPerformanceTracker(tracker: any) {
+  _modelPerformanceTracker: ModelPerformanceTracker | null = null;
+  setModelPerformanceTracker(tracker: ModelPerformanceTracker) {
     this._modelPerformanceTracker = tracker;
   },
 
@@ -34,13 +52,13 @@ export const codeModelSelector = {
     let score = 0;
 
     // Use historical complexity match if available
-    if (modelStats?.complexityScore !== undefined) {
-      score += 1 - Math.abs(modelStats.complexityScore - subtask.complexity);
+    if ((modelStats as { complexityScore?: number })?.complexityScore !== undefined) {
+      score += 1 - Math.abs((modelStats as { complexityScore: number }).complexityScore - subtask.complexity);
     }
 
     // Model size appropriateness
     if (subtask.recommendedModelSize === 'small') {
-      if (model.id.toLowerCase().match(/1\.5b|1b|3b|mini|tiny/)) score += 0.3;
+      if (model.id.toLowerCase().match(/1\\.5b|1b|3b|mini|tiny/)) score += 0.3;
     } else if (subtask.recommendedModelSize === 'medium') {
       if (model.id.toLowerCase().match(/7b|8b|13b/)) score += 0.3;
     } else if (subtask.recommendedModelSize === 'large') {
@@ -59,17 +77,17 @@ export const codeModelSelector = {
 
     if (modelStats) {
       // Success rate compared to average
-      if (modelStats.successRate > perfAnalysis.averageSuccessRate) {
+      if ((modelStats as { successRate: number }).successRate > perfAnalysis.averageSuccessRate) {
         score += 0.4;
       }
 
       // Quality score compared to average
-      if (modelStats.qualityScore > perfAnalysis.averageQualityScore) {
+      if (modelStats.qualityScore > (perfAnalysis as { averageQualityScore: number }).averageQualityScore) {
         score += 0.4;
       }
 
       // Bonus for being among best performing models
-      if (perfAnalysis.bestPerformingModels.includes(model.id)) {
+      if ((perfAnalysis as { bestPerformingModels: string[] }).bestPerformingModels.includes(model.id)) {
         score += 0.2;
       }
     } else {
@@ -439,21 +457,21 @@ async function getFallbackModel(subtask: CodeSubtask): Promise<Model | null> {
         };
       
       case 'large':
-      case 'remote':
-        return {
-          id: 'gpt-3.5-turbo',
-          name: 'GPT-3.5 Turbo',
-          provider: 'openai',
-          capabilities: {
-            chat: true,
-            completion: true
-          },
-          costPerToken: {
-            prompt: 0.000001,
-            completion: 0.000002
-          }
-        };
-        
+        case 'remote':
+          return {
+            id: 'gpt-3.5-turbo',
+            name: 'GPT-3.5 Turbo',
+            provider: 'openai',
+            capabilities: {
+              chat: true,
+              completion: true
+            },
+            costPerToken: {
+              prompt: 0.000001,
+              completion: 0.000002
+            }
+          };
+          
       default:
         return {
           id: config.defaultLocalModel,
@@ -490,7 +508,7 @@ async function getFallbackModel(subtask: CodeSubtask): Promise<Model | null> {
 }
 
 async function selectModelsForSubtasks(
-  subtasks: CodeSubtask[], 
+  subtasks: CodeSubtask[],
   useResourceEfficient: boolean = false
 ): Promise<Map<string, Model>> {
   if (useResourceEfficient) {
@@ -499,39 +517,19 @@ async function selectModelsForSubtasks(
       ...(await costMonitor.getAvailableModels()),
       ...(await costMonitor.getFreeModels())
     ];
+
     return codeModelSelector.optimizeResourceUsage(subtasks, availableModels);
   } else {
-    const modelAssignments = new Map<string, Model>();
-    
-    // Resource-efficient approach: Group similar subtasks and assign the same model
-    // Group by complexity and recommended model size
-    const groups = new Map<string, CodeSubtask[]>();
-    
-    subtasks.forEach(subtask => {
-      const key = `${subtask.recommendedModelSize}-${Math.round(subtask.complexity * 10) / 10}`;
-      if (!groups.has(key)) {
-        groups.set(key, []);
-      }
-      groups.get(key)?.push(subtask);
-    });
-    
-    // Assign models to each group
-    for (const [_, subtaskGroup] of groups.entries()) {
-      // Use the most complex task in the group to find a model
-      const representativeTask = subtaskGroup.reduce(
-        (most, current) => current.complexity > most.complexity ? current : most,
-        subtaskGroup[0]
-      );
-      
-      const model = await codeModelSelector.findBestModelForSubtask(representativeTask);
+    // Simple strategy - just pick the best model for each subtask
+    const assignments = new Map<string, Model>();
+    for (const subtask of subtasks) {
+      const model = await findBestModelForSubtask(subtask);
       if (model) {
-        // Assign this model to all tasks in the group
-        subtaskGroup.forEach(subtask => {
-          modelAssignments.set(subtask.id, model);
-        });
+        assignments.set(subtask.id, model);
+      } else {
+        logger.warn(`No model found for subtask ${subtask.id}`);
       }
     }
-    
-    return modelAssignments;
+    return assignments;
   }
 }

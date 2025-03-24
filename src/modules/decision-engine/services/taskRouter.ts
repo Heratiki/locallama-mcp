@@ -354,8 +354,8 @@ class TaskRouter {
             const estimatedDuration = completionTime - Date.now();
             
             setTimeout(() => {
-              this.updateModelLoad(selectedModel!, false);
-              logger.debug(`Reduced load for ${selectedModel!.id} after task ${task.id} completion`);
+              this.updateModelLoad(selectedModel, false);
+              logger.debug(`Reduced load for ${selectedModel.id} after task ${task.id} completion`);
             }, estimatedDuration); 
           }
           
@@ -572,8 +572,8 @@ class TaskRouter {
           const estimatedDuration = estimatedCompletionTime - Date.now();
           
           setTimeout(() => {
-            this.updateModelLoad(selectedModel!, false);
-            logger.debug(`Reduced load for ${selectedModel!.id} after task group completion`);
+            this.updateModelLoad(selectedModel, false);
+            logger.debug(`Reduced load for ${selectedModel.id} after task group completion`);
           }, Math.max(30000, estimatedDuration)); // At least 30 seconds
         }
       }

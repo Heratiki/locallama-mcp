@@ -149,7 +149,7 @@ export const dependencyMapper = {
     
     // Group tasks by execution level
     const levels: CodeSubtask[][] = [];
-    let remainingTasks = new Set(subtasks.map(s => s.id));
+    const remainingTasks = new Set(subtasks.map(s => s.id));
     
     // Continue until all tasks are assigned to levels
     while (remainingTasks.size > 0) {
