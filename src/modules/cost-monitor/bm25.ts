@@ -117,95 +117,73 @@ export class BM25Searcher {
     logger.info(`Using Python executable: ${this.pythonExecutable}`);
   }
 
-  private resolvePythonExecutable(): string {
-    let pythonExecutable = 'python'; // Default Python executable
-
-    // Check if custom Python path is provided in environment or config
-    if (process.env.RETRIV_PYTHON_PATH) {
-      pythonExecutable = process.env.RETRIV_PYTHON_PATH.trim();
-      logger.info(`Using Python executable from RETRIV_PYTHON_PATH: ${pythonExecutable}`);
-      return pythonExecutable;
-    }
-
-    if (config.python?.path) {
-      pythonExecutable = config.python.path.trim();
-      logger.info(`Using Python executable from config: ${pythonExecutable}`);
-      return pythonExecutable;
-    }
-
-    // Try to detect virtual environment automatically
-    try {
-      const virtualEnvPath = this.detectVirtualEnvironment();
-      if (virtualEnvPath) {
-        pythonExecutable = virtualEnvPath;
-        logger.info(`Automatically detected Python virtual environment: ${pythonExecutable}`);
-        return pythonExecutable;
-      }
-    } catch (err: unknown) {
-      logger.debug('Failed to auto-detect Python virtual environment:', err instanceof Error ? err.message : String(err));
-    }
-
-    // Try to find the retriv module using the default Python
-    try {
-      execSync(`${pythonExecutable} -c "import retriv"`, { stdio: 'pipe' });
-      logger.info(`Found retriv module using default Python: ${pythonExecutable}`);
-      return pythonExecutable;
-    } catch {
-      // Try common Python executable names
-      const pythonOptions = ['python3', 'python', 'py'];
-      for (const pythonCmd of pythonOptions) {
-        try {
-          execSync(`${pythonCmd} --version`, { stdio: 'pipe' });
-          pythonExecutable = pythonCmd;
-          logger.info(`Using available Python executable: ${pythonCmd}`);
-          return pythonExecutable;
-        } catch {
-          // This Python executable is not available
-        }
-      }
-
-      logger.warn('Retriv module not found in default Python environment. Please set RETRIV_PYTHON_PATH or configure python.path in config.');
-    }
-
-    // Verify that the Python executable file exists
-    if (pythonExecutable.includes('/')) {
-      try {
-        if (!fs.existsSync(pythonExecutable)) {
-          logger.warn(`Python executable not found at path: ${pythonExecutable}. Will try using default 'python' command.`);
-          return 'python';
-        }
-      } catch (err: unknown) {
-        logger.warn(`Error checking Python executable path: ${err instanceof Error ? err.message : String(err)}. Will try using default 'python' command.`);
-        return 'python';
-      }
-    }
-
-    return pythonExecutable;
-  }
-
   /**
    * Try to detect Python virtual environment
    * @returns Path to Python executable in virtual environment or null
    */
   private detectVirtualEnvironment(): string | null {
     try {
-      // Common virtual environment locations to check
+      // First check explicitly configured paths
+      if (config.python?.path) {
+        const configuredPath = path.resolve(config.python.path);
+        if (fs.existsSync(configuredPath)) {
+          try {
+            execSync(`${configuredPath} -c "import retriv"`, { stdio: 'pipe' });
+            logger.info(`Using configured Python path: ${configuredPath}`);
+            return configuredPath;
+          } catch {
+            logger.warn(`Configured Python path exists but cannot import retriv: ${configuredPath}`);
+          }
+        }
+      }
+
+      // Check if running in a virtual environment
+      if (process.env.VIRTUAL_ENV) {
+        const venvPythonPath = path.join(
+          process.env.VIRTUAL_ENV,
+          process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+        );
+
+        if (fs.existsSync(venvPythonPath)) {
+          try {
+            execSync(`${venvPythonPath} -c "import retriv"`, { stdio: 'pipe' });
+            logger.info(`Using active virtual environment Python: ${venvPythonPath}`);
+            return venvPythonPath;
+          } catch {
+            logger.warn(`Active virtual environment Python cannot import retriv: ${venvPythonPath}`);
+          }
+        }
+      }
+
+      // Check configured virtual environment path
+      if (config.python?.virtualEnv) {
+        const venvPythonPath = path.join(
+          config.python.virtualEnv,
+          process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+        );
+
+        if (fs.existsSync(venvPythonPath)) {
+          try {
+            execSync(`${venvPythonPath} -c "import retriv"`, { stdio: 'pipe' });
+            logger.info(`Using configured virtual environment Python: ${venvPythonPath}`);
+            return venvPythonPath;
+          } catch {
+            logger.warn(`Configured virtual environment Python cannot import retriv: ${venvPythonPath}`);
+          }
+        }
+      }
+
+      // Check common virtual environment locations
       const possibleVenvPaths = [
-        // Check current working directory
         path.join(process.cwd(), 'venv', 'bin', 'python'),
         path.join(process.cwd(), 'env', 'bin', 'python'),
         path.join(process.cwd(), '.venv', 'bin', 'python'),
-        // Check parent directory
         path.join(process.cwd(), '..', 'venv', 'bin', 'python'),
         path.join(process.cwd(), '..', 'env', 'bin', 'python'),
-        path.join(process.cwd(), '..', '.venv', 'bin', 'python'),
-        // Check home directory
-        path.join(process.env.HOME || '', 'venv', 'bin', 'python'),
-        path.join(process.env.HOME || '', 'env', 'bin', 'python'),
-        path.join(process.env.HOME || '', '.venv', 'bin', 'python')
+        path.join(process.cwd(), '..', '.venv', 'bin', 'python')
       ];
 
-      // For Windows systems
+      // Add Windows-specific paths
       if (process.platform === 'win32') {
         possibleVenvPaths.push(
           path.join(process.cwd(), 'venv', 'Scripts', 'python.exe'),
@@ -217,37 +195,21 @@ export class BM25Searcher {
         );
       }
 
-      // Check which paths exist and contain retriv
+      // Check each possible path
       for (const venvPath of possibleVenvPaths) {
         if (fs.existsSync(venvPath)) {
           try {
-            // Check if this Python has retriv installed
             execSync(`${venvPath} -c "import retriv"`, { stdio: 'pipe' });
-            return venvPath; // Found a working environment with retriv
+            logger.info(`Found working virtual environment with retriv: ${venvPath}`);
+            return venvPath;
           } catch {
-            // This environment doesn't have retriv, continue checking
+            logger.debug(`Virtual environment at ${venvPath} exists but cannot import retriv`);
           }
         }
       }
 
-      // Check if VIRTUAL_ENV is set
-      if (process.env.VIRTUAL_ENV) {
-        const venvPythonPath = path.join(
-          process.env.VIRTUAL_ENV,
-          process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
-        );
-
-        if (fs.existsSync(venvPythonPath)) {
-          try {
-            execSync(`${venvPythonPath} -c "import retriv"`, { stdio: 'pipe' });
-            return venvPythonPath;
-          } catch {
-            // VIRTUAL_ENV is set but doesn't contain retriv
-          }
-        }
-      }
-
-      return null; // No suitable virtual environment found
+      logger.warn('No suitable virtual environment with retriv found');
+      return null;
     } catch (err: unknown) {
       logger.error('Error while detecting virtual environment:', err instanceof Error ? err.message : String(err));
       return null;
@@ -785,5 +747,55 @@ export class BM25Searcher {
         }
       }, 10000);
     });
+  }
+
+  private resolvePythonExecutable(): string {
+    let pythonExecutable = 'python';
+
+    // Try to find Python in this order:
+    // 1. RETRIV_PYTHON_PATH environment variable
+    // 2. config.python.path
+    // 3. Detected virtual environment
+    // 4. System Python with retriv installed
+    // 5. Fallback to default 'python' command
+
+    if (process.env.RETRIV_PYTHON_PATH) {
+      pythonExecutable = process.env.RETRIV_PYTHON_PATH.trim();
+      logger.info(`Using Python executable from RETRIV_PYTHON_PATH: ${pythonExecutable}`);
+      return pythonExecutable;
+    }
+
+    if (config.python?.path) {
+      pythonExecutable = config.python.path.trim();
+      logger.info(`Using Python executable from config: ${pythonExecutable}`);
+      return pythonExecutable;
+    }
+
+    // Try to detect virtual environment
+    try {
+      const virtualEnvPath = this.detectVirtualEnvironment();
+      if (virtualEnvPath) {
+        pythonExecutable = virtualEnvPath;
+        return pythonExecutable;
+      }
+    } catch (err) {
+      logger.debug('Failed to auto-detect Python virtual environment:', err instanceof Error ? err.message : String(err));
+    }
+
+    // Try common Python commands if no virtual environment found
+    const pythonCommands = ['python3', 'python', 'py'];
+    for (const cmd of pythonCommands) {
+      try {
+        execSync(`${cmd} -c "import retriv"`, { stdio: 'pipe' });
+        logger.info(`Found retriv module using system Python: ${cmd}`);
+        return cmd;
+      } catch {
+        continue;
+      }
+    }
+
+    // If nothing else works, return default and let it fail with a clear error
+    logger.warn('Could not find Python with retriv installed, falling back to default "python" command');
+    return pythonExecutable;
   }
 }

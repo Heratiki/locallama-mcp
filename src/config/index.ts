@@ -1,5 +1,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
+import { execSync } from 'child_process';
+
 // Load environment variables from .env file
 dotenv.config();
 // Determine root directory in a way that works with both runtime and tests
@@ -147,8 +150,8 @@ export const config: Config = {
   
   // Python configuration
   python: {
-    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH,
-    virtualEnv: process.env.PYTHON_VENV_PATH,
+    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH || path.join(process.cwd(), '.venv/bin/python'),
+    virtualEnv: process.env.PYTHON_VENV_PATH || path.join(process.cwd(), '.venv'),
     detectVirtualEnv: parseBool(process.env.PYTHON_DETECT_VENV, true),
   },
   
@@ -212,12 +215,24 @@ export function validateConfig(): void {
   // Validate Python path if provided
   if (config.python?.path && typeof config.python.path === 'string') {
     try {
-      // Path validation will be done when used
+      const pythonPath = path.resolve(config.python.path);
+      if (!fs.existsSync(pythonPath)) {
+        errors.push(`Python executable not found at configured path: ${pythonPath}`);
+      } else {
+        try {
+          // Verify Python can import retriv
+          execSync(`${pythonPath} -c "import retriv"`, { stdio: 'pipe' });
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errors.push(`Python at ${pythonPath} cannot import retriv: ${errorMessage}`);
+        }
+      }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      errors.push(`Invalid Python path: ${errorMessage}`);
+      errors.push(`Invalid Python path configuration: ${errorMessage}`);
     }
   }
+
   if (errors.length > 0) {
     throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);
   }
