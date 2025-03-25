@@ -4,6 +4,7 @@ import express from 'express';
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { initDatabase, getAllJobsFromDb } from './db.js';
 import { logger } from '../../utils/logger.js';
 
@@ -99,6 +100,13 @@ async function startWebSocketServer() {
 
 async function startExpressServer() {
   const app = express();
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const uiPath = path.resolve(__dirname, '../../../ui.html');
+
+  // Serve the UI file at the root
+  app.get('/', (req, res) => {
+    res.sendFile(uiPath);
+  });
 
   app.get(WS_PORT_API, (req, res) => {
     const port = fs.readFileSync(PORT_FILE, 'utf-8');
