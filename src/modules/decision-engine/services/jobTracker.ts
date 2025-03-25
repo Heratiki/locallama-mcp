@@ -1,30 +1,47 @@
 import { logger } from '../../../utils/logger.js';
 import { WebSocketServer } from 'ws';
 import { broadcastJobs } from '../../websocket-server/ws-server.js';
+import net from 'net';
 
 // Get the WebSocket server instance
-// Try different ports if the default is in use
 let wss: WebSocketServer | null = null;
-let portToUse = 8080;
-const maxPortAttempts = 5;
+const BASE_PORT = 8080;
+const MAX_PORT = 8180;
 
-function initializeWebSocketServer(attemptCount = 0) {
-  try {
-    wss = new WebSocketServer({ port: portToUse });
-    logger.info(`Job tracker WebSocket server started on port ${portToUse}`);
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'EADDRINUSE' && attemptCount < maxPortAttempts) {
-      logger.warn(`Port ${portToUse} is already in use, trying port ${portToUse + 1}`);
-      portToUse++;
-      initializeWebSocketServer(attemptCount + 1);
-    } else {
-      logger.error('Failed to initialize WebSocket server:', error instanceof Error ? error.message : String(error));
-      // Continue without WebSocket server - the app can still function without job tracking
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port);
+  });
+}
+
+async function findAvailablePort(startPort: number, endPort: number): Promise<number> {
+  for (let port = startPort; port <= endPort; port++) {
+    if (await isPortAvailable(port)) {
+      return port;
     }
+  }
+  throw new Error(`No available ports found in range ${startPort}-${endPort}`);
+}
+
+async function initializeWebSocketServer() {
+  try {
+    const port = await findAvailablePort(BASE_PORT, MAX_PORT);
+    wss = new WebSocketServer({ port });
+    logger.info(`Job tracker WebSocket server started on port ${port}`);
+  } catch (error) {
+    logger.error('Failed to initialize WebSocket server:', error instanceof Error ? error.message : String(error));
+    // Continue without WebSocket server - the app can still function without job tracking
   }
 }
 
-initializeWebSocketServer();
+// Initialize the WebSocket server
+void initializeWebSocketServer();
 
 export interface Job {
   id: string;
