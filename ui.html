@@ -3,96 +3,187 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Job Viewer</title>
+  <title>LocalLama MCP Interface</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 0;
-      padding: 0;
-      display: flex;
-      height: 100vh;
+      padding: 20px;
+      background-color: #f5f5f5;
     }
-    #split-pane {
-      display: flex;
-      width: 100%;
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
     }
-    #job-list-container {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px;
-      border-right: 2px solid #ccc;
+    
+    .card {
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    #command-console {
-      flex: 1;
-      padding: 10px;
+    
+    .model-card {
+      cursor: pointer;
+      transition: transform 0.2s;
     }
+    
+    .model-card:hover {
+      transform: translateY(-2px);
+    }
+    
     .status-indicator {
       position: fixed;
-      top: 10px;
-      right: 10px;
-      padding: 5px 10px;
-      border-radius: 5px;
+      top: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      border-radius: 20px;
       color: white;
+      font-weight: bold;
     }
-    .status-connecting {
-      background-color: orange;
+    
+    .status-connecting { background-color: #ffc107; }
+    .status-connected { background-color: #28a745; }
+    .status-error { background-color: #dc3545; }
+    
+    .tool-button {
+      margin: 5px;
+      min-width: 120px;
     }
-    .status-connected {
-      background-color: green;
+    
+    #modelSearch {
+      margin-bottom: 15px;
     }
-    .status-error {
-      background-color: red;
+    
+    .provider-section {
+      margin-bottom: 30px;
     }
-    .job {
-      margin-bottom: 10px;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
+    
+    .model-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
     }
-    .progress-bar {
-      height: 10px;
-      background-color: #ccc;
-      border-radius: 5px;
-      overflow: hidden;
-    }
-    .progress-bar-inner {
-      height: 100%;
-      background-color: green;
+    
+    .tab-content {
+      padding: 20px;
+      background: white;
+      border-radius: 0 0 5px 5px;
+      border: 1px solid #dee2e6;
+      border-top: none;
     }
   </style>
 </head>
 <body>
-  <div id="split-pane">
-    <div id="job-list-container"></div>
-    <div id="command-console">
-      <div id="command-buttons">
-        <h2>Available Commands</h2>
-        <button onclick="sendCommand('status')">Status</button>
-        <button onclick="sendCommand('models')">Models</button>
-        <button onclick="sendCommand('benchmarks')">Benchmarks</button>
-        <button onclick="sendCommand('list resources')">List Resources</button>
-        <button onclick="sendCommand('list tools')">List Tools</button>
+  <div class="container">
+    <h1 class="mb-4">LocalLama MCP Interface</h1>
+    
+    <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+      <li class="nav-item">
+        <a class="nav-link active" id="models-tab" data-bs-toggle="tab" href="#models" role="tab">Models</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" id="tools-tab" data-bs-toggle="tab" href="#tools" role="tab">Tools</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" id="jobs-tab" data-bs-toggle="tab" href="#jobs" role="tab">Jobs</a>
+      </li>
+    </ul>
+    
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="models" role="tabpanel">
+        <div class="row mb-3">
+          <div class="col">
+            <input type="text" id="modelSearch" class="form-control" placeholder="Search models...">
+          </div>
+          <div class="col-auto">
+            <div class="btn-group">
+              <button class="btn btn-outline-secondary" onclick="filterModels('all')">All</button>
+              <button class="btn btn-outline-secondary" onclick="filterModels('free')">Free</button>
+              <button class="btn btn-outline-secondary" onclick="filterModels('paid')">Paid</button>
+            </div>
+          </div>
+        </div>
+        <div id="modelList"></div>
       </div>
-
-      <div id="response-output">
-        <h2>Response Output</h2>
-        <div id="output-display" style="background: #f4f4f4; padding: 10px; border: 1px solid #ccc; height: 300px; overflow-y: auto;"></div>
+      
+      <div class="tab-pane fade" id="tools" role="tabpanel">
+        <div class="row">
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-header">
+                <h5 class="mb-0">Task Routing</h5>
+              </div>
+              <div class="card-body">
+                <form id="routeForm">
+                  <div class="mb-3">
+                    <label class="form-label">Task Description</label>
+                    <textarea class="form-control" id="taskDescription" rows="3"></textarea>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Context Length</label>
+                    <input type="number" class="form-control" id="contextLength" value="1000">
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Priority</label>
+                    <select class="form-control" id="priority">
+                      <option value="quality">Quality</option>
+                      <option value="speed">Speed</option>
+                      <option value="cost">Cost</option>
+                    </select>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Route Task</button>
+                </form>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-md-8">
+            <div class="card">
+              <div class="card-header">
+                <h5 class="mb-0">Available Tools</h5>
+              </div>
+              <div class="card-body" id="toolsList">
+                <!-- Tools will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tab-pane fade" id="jobs" role="tabpanel">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">Active Jobs</h5>
+          </div>
+          <div class="card-body">
+            <div id="jobsList"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
+  
   <div id="status-indicator" class="status-indicator status-connecting">Connecting...</div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let ws;
+    let modelsList = [];
 
     async function initializeWebSocket() {
       try {
-        ws = new WebSocket('ws://localhost:5000'); // Connect to the bridge server
+        ws = new WebSocket('ws://localhost:5000');
         const statusIndicator = document.getElementById('status-indicator');
 
         ws.addEventListener('open', () => {
           console.log('WebSocket connection established');
           statusIndicator.textContent = 'Connected';
           statusIndicator.className = 'status-indicator status-connected';
+          // Request initial data
+          sendCommand('models');
+          sendCommand('list tools');
         });
 
         ws.addEventListener('error', (error) => {
@@ -101,13 +192,121 @@
           statusIndicator.className = 'status-indicator status-error';
         });
 
-        ws.addEventListener('close', (event) => {
-          console.warn('WebSocket connection closed:', event);
+        ws.addEventListener('close', () => {
+          console.warn('WebSocket connection closed');
           statusIndicator.textContent = 'Disconnected';
           statusIndicator.className = 'status-indicator status-error';
         });
+
+        ws.addEventListener('message', handleWebSocketMessage);
       } catch (error) {
         console.error('WebSocket initialization error:', error);
+      }
+    }
+
+    function handleWebSocketMessage(event) {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.result && message.result.contents) {
+          message.result.contents.forEach(content => {
+            if (content.uri === 'locallama://models') {
+              modelsList = JSON.parse(content.text);
+              displayModels(modelsList);
+            } else if (content.uri === 'locallama://tools') {
+              displayTools(JSON.parse(content.text));
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error processing message:', error);
+      }
+    }
+
+    function displayModels(models) {
+      const modelList = document.getElementById('modelList');
+      const providers = {};
+      
+      // Group models by provider
+      models.forEach(model => {
+        const provider = model.provider || 'unknown';
+        if (!providers[provider]) {
+          providers[provider] = [];
+        }
+        providers[provider].push(model);
+      });
+      
+      // Create HTML for each provider section
+      let html = '';
+      Object.entries(providers).forEach(([provider, providerModels]) => {
+        html += `
+          <div class="provider-section">
+            <h3>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h3>
+            <div class="model-grid">
+        `;
+        
+        providerModels.forEach(model => {
+          const cost = model.costPerToken.prompt === "0" ? 'Free' : 
+            `$${model.costPerToken.prompt}/1K tokens`;
+          
+          html += `
+            <div class="card model-card" onclick="selectModel('${model.id}')">
+              <div class="card-body">
+                <h5 class="card-title">${model.name}</h5>
+                <p class="card-text">
+                  <small class="text-muted">
+                    Context: ${model.contextWindow.toLocaleString()} tokens<br>
+                    Cost: ${cost}
+                  </small>
+                </p>
+              </div>
+            </div>
+          `;
+        });
+        
+        html += `
+            </div>
+          </div>
+        `;
+      });
+      
+      modelList.innerHTML = html;
+    }
+
+    function displayTools(tools) {
+      const toolsList = document.getElementById('toolsList');
+      let html = '<div class="row">';
+      
+      tools.forEach(tool => {
+        html += `
+          <div class="col-md-6 mb-3">
+            <button class="btn btn-outline-primary tool-button" 
+                    onclick="executeTool('${tool.name}')"
+                    title="${tool.description}">
+              ${tool.name}
+            </button>
+          </div>
+        `;
+      });
+      
+      html += '</div>';
+      toolsList.innerHTML = html;
+    }
+
+    function filterModels(type) {
+      const filtered = type === 'all' ? modelsList :
+        modelsList.filter(model => {
+          const isFree = model.costPerToken.prompt === "0";
+          return type === 'free' ? isFree : !isFree;
+        });
+      displayModels(filtered);
+    }
+
+    function selectModel(modelId) {
+      const model = modelsList.find(m => m.id === modelId);
+      if (model) {
+        // Implement model selection logic here
+        console.log('Selected model:', model);
       }
     }
 
@@ -125,38 +324,32 @@
       }
     }
 
-    ws.addEventListener('message', (event) => {
-      const message = event.data;
-      const outputDisplay = document.getElementById('output-display');
+    function executeTool(toolName) {
+      // Implement tool execution logic here
+      console.log('Executing tool:', toolName);
+    }
 
-      try {
-        const parsedMessage = JSON.parse(message);
-
-        if (parsedMessage.result && parsedMessage.result.contents) {
-          parsedMessage.result.contents.forEach((content) => {
-            if (content.uri === 'locallama://models') {
-              const models = JSON.parse(content.text);
-              let table = '<table border="1" style="width: 100%; text-align: left;">';
-              table += '<tr><th>Name</th><th>Provider</th><th>Cost (Prompt)</th><th>Cost (Completion)</th><th>Context Window</th></tr>';
-              models.forEach((model) => {
-                table += `<tr><td>${model.name}</td><td>${model.provider}</td><td>${model.costPerToken.prompt}</td><td>${model.costPerToken.completion}</td><td>${model.contextWindow}</td></tr>`;
-              });
-              table += '</table>';
-              outputDisplay.innerHTML = table;
-            } else {
-              outputDisplay.innerHTML += `<pre>${JSON.stringify(JSON.parse(content.text), null, 2)}</pre>`;
-            }
-          });
-        } else if (parsedMessage.error) {
-          outputDisplay.innerHTML += `<div style="color: red;">Error: ${parsedMessage.error.message}</div>`;
-        } else {
-          outputDisplay.innerHTML += `<pre>${JSON.stringify(parsedMessage, null, 2)}</pre>`;
-        }
-      } catch (e) {
-        outputDisplay.innerHTML += `<div style="color: red;">Invalid response: ${message}</div>`;
-      }
+    // Initialize search functionality
+    document.getElementById('modelSearch').addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const filtered = modelsList.filter(model => 
+        model.name.toLowerCase().includes(searchTerm) ||
+        model.provider.toLowerCase().includes(searchTerm)
+      );
+      displayModels(filtered);
     });
 
+    // Initialize route form submission
+    document.getElementById('routeForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const task = document.getElementById('taskDescription').value;
+      const contextLength = document.getElementById('contextLength').value;
+      const priority = document.getElementById('priority').value;
+      
+      sendCommand(`route "${task}" ${contextLength} 200 0.7 ${priority}`);
+    });
+
+    // Start the WebSocket connection
     initializeWebSocket();
   </script>
 </body>

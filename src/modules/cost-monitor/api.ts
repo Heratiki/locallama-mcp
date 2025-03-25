@@ -106,8 +106,18 @@ export async function getAvailableModels(): Promise<Model[]> {
   
   // Try to get models from LM Studio
   try {
-    const lmStudioResponse = await axios.get<{ data: LMStudioModel[] }>(`${config.lmStudioEndpoint}/models`, {
-      timeout: 5000 // 5 second timeout
+    const url = new URL('/models', config.lmStudioEndpoint).toString();
+    logger.debug(`Attempting to connect to LM Studio at: ${url}`);
+    
+    const lmStudioResponse = await axios.get<{ data: LMStudioModel[] }>(url, {
+      timeout: 5000, // 5 second timeout
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      validateStatus: (status) => status === 200, // Only accept 200 OK
+      maxRedirects: 0, // Disable redirects
+      decompress: true // Enable decompression
     });
     
     if (lmStudioResponse.data?.data) {
