@@ -65,6 +65,31 @@
   <div id="split-pane">
     <div id="job-list-container"></div>
     <div id="command-console">
+      <div id="command-overview">
+        <h2>Available Commands</h2>
+        <ul>
+          <li><strong>status</strong>: Get current status of the MCP Server</li>
+          <li><strong>models</strong>: List available local and API LLM models</li>
+          <li><strong>benchmarks</strong>: Get results of model benchmarks</li>
+          <li><strong>usage &lt;api&gt;</strong>: Get token usage and cost statistics for a specific API</li>
+          <li><strong>route</strong>: Route a task based on parameters</li>
+          <li><strong>estimate</strong>: Estimate cost for token counts</li>
+          <li><strong>benchmark</strong>: Run benchmarks on a specific model</li>
+          <li><strong>cancel</strong>: Cancel a running job</li>
+          <li><strong>retriv</strong>: Initialize Retriv for code search</li>
+          <li><strong>free-models</strong>: Get list of free models from OpenRouter</li>
+          <li><strong>clear-tracking</strong>: Clear OpenRouter tracking data</li>
+          <li><strong>list resources</strong>: List all available resources</li>
+          <li><strong>list tools</strong>: List all available tools</li>
+          <li><strong>call</strong>: Call a tool with arguments</li>
+        </ul>
+      </div>
+
+      <div id="command-output">
+        <h2>Command Output</h2>
+        <pre id="output-display" style="background: #f4f4f4; padding: 10px; border: 1px solid #ccc; height: 200px; overflow-y: auto;"></pre>
+      </div>
+
       <textarea id="command-input" rows="10" style="width: 100%;"></textarea>
       <button id="send-command">Send Command</button>
     </div>
@@ -75,9 +100,7 @@
 
     async function initializeWebSocket() {
       try {
-        const response = await fetch('http://localhost:3001/ws-port');
-        const { port } = await response.json();
-        ws = new WebSocket(`ws://localhost:${port}`);
+        ws = new WebSocket('ws://localhost:5000'); // Connect to the bridge server
         const statusIndicator = document.getElementById('status-indicator');
 
         ws.addEventListener('open', () => {
@@ -86,8 +109,9 @@
         });
 
         ws.addEventListener('message', (event) => {
-          const message = JSON.parse(event.data);
-          handleJSONRPCMessage(message);
+          const message = event.data;
+          const outputDisplay = document.getElementById('output-display');
+          outputDisplay.textContent += `\n${message}`;
         });
 
         ws.addEventListener('error', () => {
@@ -104,11 +128,47 @@
       }
     }
 
+    document.getElementById('send-command').addEventListener('click', () => {
+      const commandInput = document.getElementById('command-input');
+      const command = commandInput.value.trim();
+      if (!command) {
+        alert('Please enter a command.');
+        return;
+      }
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const message = {
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'executeCommand',
+          params: { command }
+        };
+        ws.send(JSON.stringify(message));
+      } else {
+        alert('WebSocket is not connected.');
+      }
+    });
+
     function handleJSONRPCMessage(message) {
+      if (message.jsonrpc !== '2.0') {
+        console.error('Invalid JSON-RPC version:', message);
+        return;
+      }
+
+      const outputDisplay = document.getElementById('output-display');
+
       if (message.method === 'updateJobs') {
         renderJobs(message.params.jobs);
       } else if (message.method === 'commandResponse') {
-        console.log('Command response:', message.params);
+        if (message.result) {
+          console.log('Command response:', message.result);
+          outputDisplay.textContent += `\nCommand executed successfully:\n${JSON.stringify(message.result, null, 2)}`;
+        } else if (message.error) {
+          console.error('Command error:', message.error);
+          outputDisplay.textContent += `\nError executing command:\n${message.error.message}`;
+        }
+      } else {
+        console.warn('Unknown method:', message.method);
       }
     }
 
@@ -129,16 +189,6 @@
         container.appendChild(jobElement);
       });
     }
-
-    document.getElementById('send-command').addEventListener('click', () => {
-      const commandInput = document.getElementById('command-input');
-      const command = commandInput.value;
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ method: 'executeCommand', params: { command } }));
-      } else {
-        alert('WebSocket is not connected.');
-      }
-    });
 
     initializeWebSocket();
   </script>
