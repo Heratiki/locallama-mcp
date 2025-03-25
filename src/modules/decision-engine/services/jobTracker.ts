@@ -3,7 +3,28 @@ import { WebSocketServer } from 'ws';
 import { broadcastJobs } from '../../websocket-server/ws-server.js';
 
 // Get the WebSocket server instance
-const wss: WebSocketServer = new WebSocketServer({ port: 8080 });
+// Try different ports if the default is in use
+let wss: WebSocketServer | null = null;
+let portToUse = 8080;
+const maxPortAttempts = 5;
+
+function initializeWebSocketServer(attemptCount = 0) {
+  try {
+    wss = new WebSocketServer({ port: portToUse });
+    logger.info(`Job tracker WebSocket server started on port ${portToUse}`);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'EADDRINUSE' && attemptCount < maxPortAttempts) {
+      logger.warn(`Port ${portToUse} is already in use, trying port ${portToUse + 1}`);
+      portToUse++;
+      initializeWebSocketServer(attemptCount + 1);
+    } else {
+      logger.error('Failed to initialize WebSocket server:', error instanceof Error ? error.message : String(error));
+      // Continue without WebSocket server - the app can still function without job tracking
+    }
+  }
+}
+
+initializeWebSocketServer();
 
 export interface Job {
   id: string;
@@ -45,7 +66,7 @@ class JobTracker {
       model
     });
     logger.debug(`Created new job ${id} for task: ${task}`);
-    await broadcastJobs(wss);
+    if (wss) await broadcastJobs(wss);
     return id;
   }
 
@@ -62,7 +83,7 @@ class JobTracker {
         'Calculating...';
       this.activeJobs.set(id, job);
       logger.debug(`Updated job ${id} progress: ${job.progress}`);
-      await broadcastJobs(wss);
+      if (wss) await broadcastJobs(wss);
     }
   }
 
@@ -77,7 +98,7 @@ class JobTracker {
       job.estimated_time_remaining = '0';
       this.activeJobs.set(id, job);
       logger.debug(`Completed job ${id}`);
-      await broadcastJobs(wss);
+      if (wss) await broadcastJobs(wss);
     }
   }
 
@@ -91,7 +112,7 @@ class JobTracker {
       job.estimated_time_remaining = 'N/A';
       this.activeJobs.set(id, job);
       logger.debug(`Cancelled job ${id}`);
-      await broadcastJobs(wss);
+      if (wss) await broadcastJobs(wss);
     }
   }
 
@@ -105,7 +126,7 @@ class JobTracker {
       job.estimated_time_remaining = 'N/A';
       this.activeJobs.set(id, job);
       logger.error(`Job ${id} failed: ${error || 'Unknown error'}`);
-      await broadcastJobs(wss);
+      if (wss) await broadcastJobs(wss);
     }
   }
 

@@ -134,6 +134,8 @@ export class BM25Searcher {
           } catch {
             logger.warn(`Configured Python path exists but cannot import retriv: ${configuredPath}`);
           }
+        } else {
+          logger.warn(`Configured Python path does not exist: ${configuredPath}`);
         }
       }
 
@@ -174,24 +176,34 @@ export class BM25Searcher {
       }
 
       // Check common virtual environment locations
+      // Determine project root - handle both running from src and dist
+      let projectRoot = process.cwd();
+      if (projectRoot.includes('/dist') || projectRoot.includes('\\dist')) {
+        // If running from dist, go up one level
+        projectRoot = path.resolve(projectRoot, '..');
+        logger.debug(`Detected running from dist, using parent directory as project root: ${projectRoot}`);
+      }
+      
       const possibleVenvPaths = [
-        path.join(process.cwd(), 'venv', 'bin', 'python'),
-        path.join(process.cwd(), 'env', 'bin', 'python'),
-        path.join(process.cwd(), '.venv', 'bin', 'python'),
-        path.join(process.cwd(), '..', 'venv', 'bin', 'python'),
-        path.join(process.cwd(), '..', 'env', 'bin', 'python'),
-        path.join(process.cwd(), '..', '.venv', 'bin', 'python')
+        // Project root venvs
+        path.join(projectRoot, 'venv', 'bin', 'python'),
+        path.join(projectRoot, 'env', 'bin', 'python'),
+        path.join(projectRoot, '.venv', 'bin', 'python'),
+        // Absolute paths for clarity
+        path.resolve(projectRoot, 'venv/bin/python'),
+        path.resolve(projectRoot, 'env/bin/python'),
+        path.resolve(projectRoot, '.venv/bin/python'),
       ];
 
       // Add Windows-specific paths
       if (process.platform === 'win32') {
         possibleVenvPaths.push(
-          path.join(process.cwd(), 'venv', 'Scripts', 'python.exe'),
-          path.join(process.cwd(), 'env', 'Scripts', 'python.exe'),
-          path.join(process.cwd(), '.venv', 'Scripts', 'python.exe'),
-          path.join(process.cwd(), '..', 'venv', 'Scripts', 'python.exe'),
-          path.join(process.cwd(), '..', 'env', 'Scripts', 'python.exe'),
-          path.join(process.cwd(), '..', '.venv', 'Scripts', 'python.exe')
+          path.join(projectRoot, 'venv', 'Scripts', 'python.exe'),
+          path.join(projectRoot, 'env', 'Scripts', 'python.exe'),
+          path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),
+          path.resolve(projectRoot, 'venv/Scripts/python.exe'),
+          path.resolve(projectRoot, 'env/Scripts/python.exe'),
+          path.resolve(projectRoot, '.venv/Scripts/python.exe')
         );
       }
 
@@ -202,8 +214,8 @@ export class BM25Searcher {
             execSync(`${venvPath} -c "import retriv"`, { stdio: 'pipe' });
             logger.info(`Found working virtual environment with retriv: ${venvPath}`);
             return venvPath;
-          } catch {
-            logger.debug(`Virtual environment at ${venvPath} exists but cannot import retriv`);
+          } catch (err) {
+            logger.debug(`Virtual environment at ${venvPath} exists but cannot import retriv: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
       }
@@ -751,26 +763,31 @@ export class BM25Searcher {
 
   private resolvePythonExecutable(): string {
     let pythonExecutable = 'python';
-
+    
+    logger.debug(`Current working directory: ${process.cwd()}`);
+    const isRunningFromDist = process.cwd().endsWith('/dist') || process.cwd().endsWith('\\dist');
+    if (isRunningFromDist) {
+      logger.info(`Detected running from dist directory, will check parent directory for Python environment`);
+    }
+    
     // Try to find Python in this order:
     // 1. RETRIV_PYTHON_PATH environment variable
     // 2. config.python.path
     // 3. Detected virtual environment
     // 4. System Python with retriv installed
     // 5. Fallback to default 'python' command
-
     if (process.env.RETRIV_PYTHON_PATH) {
       pythonExecutable = process.env.RETRIV_PYTHON_PATH.trim();
       logger.info(`Using Python executable from RETRIV_PYTHON_PATH: ${pythonExecutable}`);
       return pythonExecutable;
     }
-
+    
     if (config.python?.path) {
       pythonExecutable = config.python.path.trim();
       logger.info(`Using Python executable from config: ${pythonExecutable}`);
       return pythonExecutable;
     }
-
+    
     // Try to detect virtual environment
     try {
       const virtualEnvPath = this.detectVirtualEnvironment();
@@ -781,7 +798,42 @@ export class BM25Searcher {
     } catch (err) {
       logger.debug('Failed to auto-detect Python virtual environment:', err instanceof Error ? err.message : String(err));
     }
-
+    
+    // Special handling when running from dist directory
+    if (isRunningFromDist) {
+      const projectRoot = path.resolve(process.cwd(), '..');
+      logger.debug(`Checking for Python in parent directory: ${projectRoot}`);
+      
+      // Check specific Python paths in the parent directory
+      const parentVenvPaths = [
+        path.join(projectRoot, '.venv', 'bin', 'python'),
+        path.join(projectRoot, 'venv', 'bin', 'python'),
+        path.join(projectRoot, 'env', 'bin', 'python')
+      ];
+      
+      // Add Windows-specific paths
+      if (process.platform === 'win32') {
+        parentVenvPaths.push(
+          path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),
+          path.join(projectRoot, 'venv', 'Scripts', 'python.exe'),
+          path.join(projectRoot, 'env', 'Scripts', 'python.exe')
+        );
+      }
+      
+      // Check each path specifically for retriv module
+      for (const venvPath of parentVenvPaths) {
+        if (fs.existsSync(venvPath)) {
+          try {
+            execSync(`${venvPath} -c "import retriv"`, { stdio: 'pipe' });
+            logger.info(`Found Python with retriv module in parent directory: ${venvPath}`);
+            return venvPath;
+          } catch {
+            logger.debug(`Python exists at ${venvPath} but retriv module not found`);
+          }
+        }
+      }
+    }
+    
     // Try common Python commands if no virtual environment found
     const pythonCommands = ['python3', 'python', 'py'];
     for (const cmd of pythonCommands) {

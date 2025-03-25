@@ -7,6 +7,92 @@ import { execSync } from 'child_process';
 dotenv.config();
 // Determine root directory in a way that works with both runtime and tests
 const rootDir = process.cwd();
+
+/**
+ * Helper function to detect python executable with retriv installed
+ */
+function detectPythonWithRetriv(): string | undefined {
+  // Explicitly defined path has highest priority
+  if (process.env.RETRIV_PYTHON_PATH) {
+    const pythonPath = process.env.RETRIV_PYTHON_PATH.trim();
+    try {
+      execSync(`${pythonPath} -c "import retriv"`, { stdio: 'pipe' });
+      return pythonPath;
+    } catch {
+      // Python path set but retriv module not found
+    }
+  }
+
+  if (process.env.PYTHON_PATH) {
+    const pythonPath = process.env.PYTHON_PATH.trim();
+    try {
+      execSync(`${pythonPath} -c "import retriv"`, { stdio: 'pipe' });
+      return pythonPath;
+    } catch {
+      // Python path set but retriv module not found
+    }
+  }
+
+  // Determine if we're running from dist directory
+  const currentDir = process.cwd();
+  const isRunningFromDist = currentDir.endsWith('/dist') || currentDir.endsWith('\\dist');
+  const projectRoot = isRunningFromDist ? path.resolve(currentDir, '..') : currentDir;
+
+  // Look for virtual environments
+  const possibleVenvPaths = [
+    // Absolute paths relative to project root
+    path.resolve(projectRoot, '.venv/bin/python'),
+    path.resolve(projectRoot, 'venv/bin/python'),
+    path.resolve(projectRoot, 'env/bin/python'),
+    // For Windows
+    path.resolve(projectRoot, '.venv/Scripts/python.exe'),
+    path.resolve(projectRoot, 'venv/Scripts/python.exe'),
+    path.resolve(projectRoot, 'env/Scripts/python.exe'),
+    // Current directory paths
+    path.resolve(currentDir, '.venv/bin/python'),
+    path.resolve(currentDir, 'venv/bin/python'),
+    path.resolve(currentDir, 'env/bin/python'),
+    // For Windows in current directory
+    path.resolve(currentDir, '.venv/Scripts/python.exe'),
+    path.resolve(currentDir, 'venv/Scripts/python.exe'),
+    path.resolve(currentDir, 'env/Scripts/python.exe'),
+    // Check parent directories too (in case running from dist)
+    path.resolve(currentDir, '../.venv/bin/python'),
+    path.resolve(currentDir, '../venv/bin/python'),
+    path.resolve(currentDir, '../env/bin/python'),
+    // For Windows in parent directory
+    path.resolve(currentDir, '../.venv/Scripts/python.exe'),
+    path.resolve(currentDir, '../venv/Scripts/python.exe'),
+    path.resolve(currentDir, '../env/Scripts/python.exe'),
+  ];
+
+  for (const venvPath of possibleVenvPaths) {
+    if (fs.existsSync(venvPath)) {
+      try {
+        execSync(`${venvPath} -c "import retriv"`, { stdio: 'pipe' });
+        return venvPath;
+      } catch {
+        // Continue to next path, no need to log every failure
+      }
+    }
+  }
+
+  // Try common Python commands as last resort
+  for (const cmd of ['python3', 'python', 'py']) {
+    try {
+      execSync(`${cmd} -c "import retriv"`, { stdio: 'pipe' });
+      return cmd;
+    } catch {
+      // Continue to next command, no need to log every failure
+    }
+  }
+
+  return undefined;
+}
+
+// Find best Python executable before config initialization
+const detectedPythonPath = detectPythonWithRetriv();
+
 /**
  * Type definitions for the configuration
  */
@@ -150,7 +236,7 @@ export const config: Config = {
   
   // Python configuration
   python: {
-    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH || path.join(process.cwd(), '.venv/bin/python'),
+    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH || detectedPythonPath || path.join(process.cwd(), '.venv/bin/python'),
     virtualEnv: process.env.PYTHON_VENV_PATH || path.join(process.cwd(), '.venv'),
     detectVirtualEnv: parseBool(process.env.PYTHON_DETECT_VENV, true),
   },
