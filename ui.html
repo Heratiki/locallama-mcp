@@ -5,105 +5,139 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Viewer</title>
   <style>
-    /* Add your CSS styles here */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      height: 100vh;
+    }
+    #split-pane {
+      display: flex;
+      width: 100%;
+    }
+    #job-list-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      border-right: 2px solid #ccc;
+    }
+    #command-console {
+      flex: 1;
+      padding: 10px;
+    }
+    .status-indicator {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 5px 10px;
+      border-radius: 5px;
+      color: white;
+    }
+    .status-connecting {
+      background-color: orange;
+    }
+    .status-connected {
+      background-color: green;
+    }
+    .status-error {
+      background-color: red;
+    }
+    .job {
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .progress-bar {
+      height: 10px;
+      background-color: #ccc;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .progress-bar-inner {
+      height: 100%;
+      background-color: green;
+    }
   </style>
 </head>
 <body>
-  <div id="job-list-container"></div>
-
+  <div id="split-pane">
+    <div id="job-list-container"></div>
+    <div id="command-console">
+      <textarea id="command-input" rows="10" style="width: 100%;"></textarea>
+      <button id="send-command">Send Command</button>
+    </div>
+  </div>
+  <div id="status-indicator" class="status-indicator status-connecting">Connecting...</div>
   <script>
-    async function fetchWebSocketPort() {
-      const response = await fetch('http://localhost:3001/ws-port');
-      const data = await response.json();
-      return data.port;
-    }
+    let ws;
+    const port = 3001; // Global WebSocket port
 
     async function initializeWebSocket() {
-      const port = await fetchWebSocketPort();
-      const ws = new WebSocket(`ws://localhost:${port}`);
+      try {
+        ws = new WebSocket(`ws://localhost:${port}`);
+        const statusIndicator = document.getElementById('status-indicator');
 
-      ws.addEventListener('open', () => {
-        console.log('WebSocket connection opened');
-      });
-
-      ws.addEventListener('message', (event) => {
-        const jobData = JSON.parse(event.data);
-        renderJobs(jobData);
-      });
-
-      ws.addEventListener('error', (error) => {
-        console.error('WebSocket error:', error);
-      });
-
-      ws.addEventListener('close', () => {
-        console.log('WebSocket connection closed');
-      });
-    }
-
-    function renderJobs(jobData) {
-      const container = document.getElementById('job-list-container');
-      container.innerHTML = '';
-
-      // Sort and group jobs based on parent_task_id
-      const groupedJobs = groupJobsByParent(jobData.allJobs);
-
-      for (const parentId in groupedJobs) {
-        const parentJob = groupedJobs[parentId].parent;
-        const childJobs = groupedJobs[parentId].children;
-
-        const parentJobElement = createJobElement(parentJob);
-        container.appendChild(parentJobElement);
-
-        const childJobContainer = document.createElement('div');
-        childJobContainer.style.marginLeft = '20px';
-
-        childJobs.forEach((childJob) => {
-          const childJobElement = createJobElement(childJob);
-          childJobContainer.appendChild(childJobElement);
+        ws.addEventListener('open', () => {
+          statusIndicator.textContent = 'Connected';
+          statusIndicator.className = 'status-indicator status-connected';
         });
 
-        container.appendChild(childJobContainer);
+        ws.addEventListener('message', (event) => {
+          const message = JSON.parse(event.data);
+          handleJSONRPCMessage(message);
+        });
+
+        ws.addEventListener('error', () => {
+          statusIndicator.textContent = 'Error';
+          statusIndicator.className = 'status-indicator status-error';
+        });
+
+        ws.addEventListener('close', () => {
+          statusIndicator.textContent = 'Disconnected';
+          statusIndicator.className = 'status-indicator status-error';
+        });
+      } catch (error) {
+        console.error('WebSocket initialization error:', error);
       }
     }
 
-    function groupJobsByParent(jobs) {
-      const groupedJobs = {};
+    function handleJSONRPCMessage(message) {
+      if (message.method === 'updateJobs') {
+        renderJobs(message.params.jobs);
+      } else if (message.method === 'commandResponse') {
+        console.log('Command response:', message.params);
+      }
+    }
 
+    function renderJobs(jobs) {
+      const container = document.getElementById('job-list-container');
+      container.innerHTML = '';
       jobs.forEach((job) => {
-        const parentId = job.parent_task_id || 'root';
-        if (!groupedJobs[parentId]) {
-          groupedJobs[parentId] = { parent: null, children: [] };
-        }
-        if (parentId === 'root') {
-          groupedJobs[parentId].children.push(job);
-        } else {
-          groupedJobs[parentId].parent = job;
-        }
-      });
-
-      return groupedJobs;
-    }
-
-    function createJobElement(job) {
-      const jobElement = document.createElement('div');
-      jobElement.innerHTML = `
-        <div>
-          <strong>ID:</strong> ${job.id} <br>
-          <strong>Description:</strong> ${job.description} <br>
-          <strong>Status:</strong> ${job.status} <br>
-          <strong>Progress:</strong> ${job.progress}% <br>
-          <button onclick="cancelJob('${job.id}')">Cancel</button>
-        </div>
-      `;
-      return jobElement;
-    }
-
-    function cancelJob(jobId) {
-      const ws = new WebSocket(`ws://localhost:${port}`);
-      ws.addEventListener('open', () => {
-        ws.send(JSON.stringify({ type: 'cancel_job', jobId }));
+        const jobElement = document.createElement('div');
+        jobElement.className = 'job';
+        jobElement.innerHTML = `
+          <div><strong>ID:</strong> ${job.id}</div>
+          <div><strong>Description:</strong> ${job.description}</div>
+          <div><strong>Status:</strong> ${job.status}</div>
+          <div class="progress-bar">
+            <div class="progress-bar-inner" style="width: ${job.progress}%;"></div>
+          </div>
+        `;
+        container.appendChild(jobElement);
       });
     }
+
+    document.getElementById('send-command').addEventListener('click', () => {
+      const commandInput = document.getElementById('command-input');
+      const command = commandInput.value;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ method: 'executeCommand', params: { command } }));
+      } else {
+        alert('WebSocket is not connected.');
+      }
+    });
 
     initializeWebSocket();
   </script>
