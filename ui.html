@@ -72,10 +72,11 @@
   <div id="status-indicator" class="status-indicator status-connecting">Connecting...</div>
   <script>
     let ws;
-    const port = 3001; // Global WebSocket port
 
     async function initializeWebSocket() {
       try {
+        const response = await fetch('http://localhost:3001/ws-port');
+        const { port } = await response.json();
         ws = new WebSocket(`ws://localhost:${port}`);
         const statusIndicator = document.getElementById('status-indicator');
 
