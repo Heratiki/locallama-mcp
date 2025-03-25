@@ -1,7 +1,14 @@
 #!/bin/bash
 
 # Get the directory where the script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+# This handles symlinks on macOS too
+SCRIPT_PATH="$0"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "Detecting Python virtual environment..."
@@ -30,10 +37,10 @@ else
 fi
 
 # Check if retriv is installed in the virtual environment
-if ! python -c "import retriv" &> /dev/null; then
+if ! python3 -c "import retriv" &> /dev/null; then
     echo "Warning: 'retriv' package not found in virtual environment."
     echo "Installing 'retriv' package..."
-    pip install retriv
+    pip3 install retriv
 fi
 
 # Set any environment variables if needed
