@@ -1,5 +1,5 @@
 import { decisionEngine } from '../../decision-engine/index.js';
-import { jobTracker, JobStatus } from '../../decision-engine/services/jobTracker.js';
+import { getJobTracker, JobStatus } from '../../decision-engine/services/jobTracker.js';
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
@@ -10,6 +10,8 @@ import { costEstimator } from '../cost-estimation/index.js';
 import { getCodeSearchEngine } from '../../cost-monitor/codeSearchEngine.js';
 import type { RetrivSearchResult } from '../retriv-integration/types.js';
 
+let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
+
 export class Router implements IRouter {
   /**
    * Route a coding task to either a local LLM, Free API LLM, or paid API LLM based on cost and complexity
@@ -17,25 +19,25 @@ export class Router implements IRouter {
   async routeTask(params: RouteTaskParams): Promise<RouteTaskResult> {
     try {
       logger.info(`Routing task with complexity ${params.complexity || 0.5}, context length ${params.contextLength}, priority ${params.priority || 'quality'}`);
-      
+
       // Load user preferences
       const userPreferences = await loadUserPreferences();
       const executionMode = userPreferences.executionMode || 'Fully automated selection';
-      
+
       // Cost estimation
       const costEstimate = await costEstimator.estimateCost({
         contextLength: params.contextLength,
         outputLength: params.expectedOutputLength || 0,
         model: undefined
       });
-      
+
       const costThreshold = userPreferences.costConfirmationThreshold || config.costThreshold || 0.1;
-      
+
       // Check if the execution mode allows paid APIs
       const allowsPaidAPIs = executionMode !== 'Local model only' &&
-                            executionMode !== 'Free API only' &&
-                            executionMode !== 'Local and Free API';
-      
+        executionMode !== 'Free API only' &&
+        executionMode !== 'Local and Free API';
+
       if (costEstimate.paid.cost.total > costThreshold && allowsPaidAPIs) {
         // Return a response that requires user confirmation
         return {
@@ -49,14 +51,14 @@ export class Router implements IRouter {
           }
         };
       }
-      
+
       // Task breakdown analysis
       let taskAnalysis = null;
       let hasSubtasks = false;
-      
+
       // Check if the execution mode allows any API (free or paid)
       const allowsAnyAPI = executionMode !== 'Local model only';
-      
+
       if (allowsAnyAPI) {
         try {
           const analysisResult = await decisionEngine.analyzeCodeTask(params.task);
@@ -68,7 +70,7 @@ export class Router implements IRouter {
           // Continue with normal processing if task analysis fails
         }
       }
-      
+
       // Retriv search
       let retrivResults: RetrivSearchResult[] = [];
       if (!hasSubtasks && userPreferences.prioritizeRetrivSearch) {
@@ -82,7 +84,7 @@ export class Router implements IRouter {
           // Continue with normal processing if Retriv search fails
         }
       }
-      
+
       if (retrivResults.length > 0) {
         // Use existing code from Retriv
         return {
@@ -94,7 +96,7 @@ export class Router implements IRouter {
           }
         };
       }
-      
+
       // Decision Engine routing
       const decision = await decisionEngine.routeTask({
         task: params.task,
@@ -103,12 +105,21 @@ export class Router implements IRouter {
         complexity: params.complexity || 0.5,
         priority: params.priority || 'quality',
       });
-      
+
       // Job creation and progress tracking
       const jobId = uuidv4();
-      await jobTracker.createJob(jobId, params.task, decision.model);
-      await jobTracker.updateJobProgress(jobId, 0);
-      
+      try {
+        jobTracker = await getJobTracker();
+        try {
+          await jobTracker.createJob(jobId, params.task, decision.model);
+          await jobTracker.updateJobProgress(jobId, 0);
+        } catch (createJobError) {
+          logger.error('Error creating/updating job:', createJobError);
+        }
+      } catch (getJobTrackerError) {
+        logger.error('Error initializing jobTracker:', getJobTrackerError);
+      }
+
       // Execute task asynchronously
       void (async () => {
         try {
@@ -119,10 +130,10 @@ export class Router implements IRouter {
           // Job failure is already handled in executeTask
         }
       })();
-      
+
       // Generate a reason if it doesn't exist in the decision object
       const routingReason = generateRoutingReason(decision);
-      
+
       // Return the routing result with job ID for tracking
       return {
         model: decision.model,
@@ -142,7 +153,7 @@ export class Router implements IRouter {
       throw error;
     }
   }
-  
+
   /**
    * Quickly route a coding task without making API calls (faster but less accurate)
    */
@@ -183,7 +194,18 @@ export class Router implements IRouter {
   async cancelJob(jobId: string): Promise<CancelJobResult> {
     try {
       // Get the job
-      const job = jobTracker.getJob(jobId);
+      let job;
+      try {
+        job = jobTracker.getJob(jobId);
+      } catch (getJobError) {
+        logger.error('Error getting job:', getJobError);
+        return {
+          success: false,
+          status: 'Error' as const,
+          message: `Error getting job: ${getJobError instanceof Error ? getJobError.message : String(getJobError)}`,
+          jobId
+        };
+      }
       if (!job) {
         return {
           success: false,
@@ -192,20 +214,42 @@ export class Router implements IRouter {
           jobId
         };
       }
-      
+
       // Check if the job can be cancelled
-      if ([JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED].includes(job.status)) {
+      let jobStatus;
+      try {
+        jobStatus = job.status;
+      } catch (jobStatusError) {
+        logger.error('Error getting job status:', jobStatusError);
         return {
           success: false,
-          status: job.status,
-          message: `Job with ID ${jobId} is already ${job.status.toLowerCase()}`,
+          status: 'Error' as const,
+          message: `Error getting job status: ${jobStatusError instanceof Error ? jobStatusError.message : String(jobStatusError)}`,
           jobId
         };
       }
-      
+      if ([JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED].includes(jobStatus)) {
+        return {
+          success: false,
+          status: jobStatus,
+          message: `Job with ID ${jobId} is already ${jobStatus.toLowerCase()}`,
+          jobId
+        };
+      }
+
       // Cancel the job
-      await jobTracker.cancelJob(jobId);
-      
+      try {
+        await jobTracker.cancelJob(jobId);
+      } catch (cancelJobError) {
+        logger.error('Error cancelling job:', cancelJobError);
+        return {
+          success: false,
+          status: 'Error' as const,
+          message: `Error cancelling job: ${cancelJobError instanceof Error ? cancelJobError.message : String(cancelJobError)}`,
+          jobId
+        };
+      }
+
       return {
         success: true,
         status: JobStatus.CANCELLED,

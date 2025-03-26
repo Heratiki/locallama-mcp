@@ -10,8 +10,13 @@ import { costMonitor } from '../cost-monitor/index.js';
 import { openRouterModule } from '../openrouter/index.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
-import { jobTracker } from '../decision-engine/services/jobTracker.js';
-import { readFileSync } from 'fs';
+import { getJobTracker } from '../decision-engine/services/jobTracker.js';
+
+// Initialize jobTracker once and await it
+const jobTrackerPromise = getJobTracker();
+let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
+
+import { readFileSync, existsSync } from 'fs'; // Import necessary modules
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -41,7 +46,10 @@ function isOpenRouterConfigured(): boolean {
  * Resources provide data about the current state of the system,
  * such as token usage, costs, and available models.
  */
-export function setupResourceHandlers(server: Server): void {
+export async function setupResourceHandlers(server: Server): Promise<void> {
+  // Initialize jobTracker
+  jobTracker = await jobTrackerPromise;
+
   // List available static resources
   server.setRequestHandler(ListResourcesRequestSchema, () => {
     logger.debug('Listing available resources');
@@ -66,7 +74,17 @@ export function setupResourceHandlers(server: Server): void {
         description: 'List of currently active jobs',
       },
     ];
-    
+    // Check if memory-bank directory exists
+    const memoryBankPath = join(__dirname, '../../../memory-bank'); // Construct the path to the memory-bank directory
+    if (existsSync(memoryBankPath)) { // Check if the directory exists
+      // Add a new resource for the memory bank
+      resources.push({
+        uri: 'locallama://memory-bank',
+        name: 'Memory Bank Files',
+        mimeType: 'application/json',
+        description: 'List of files in the memory bank directory',
+      });
+    }
     // Add OpenRouter resources if API key is configured
     if (isOpenRouterConfigured()) {
       resources.push(
@@ -90,7 +108,6 @@ export function setupResourceHandlers(server: Server): void {
         }
       );
     }
-    
     return { resources };
   });
 
@@ -436,6 +453,12 @@ export function setupResourceHandlers(server: Server): void {
     if (uri === 'locallama://jobs/active') {
       try {
         const activeJobs = jobTracker.getActiveJobs();
+        if (!activeJobs) {
+          throw new McpError(
+            ErrorCode.InternalError,
+            'Failed to get active jobs'
+          );
+        }
         return {
           contents: [
             {

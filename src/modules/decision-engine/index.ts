@@ -10,7 +10,7 @@ import { COMPLEXITY_THRESHOLDS, TOKEN_THRESHOLDS } from './types/index.js';
 import { codeTaskCoordinator } from './services/codeTaskCoordinator.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from './types/codeTask.js';
 import { apiHandlers } from './services/apiHandlers.js';
-import { jobTracker } from './services/jobTracker.js';
+import { getJobTracker } from './services/jobTracker.js';
 import { codeModelSelector } from './services/codeModelSelector.js';
 import { modelPerformanceTracker } from './services/modelPerformance.js';
 // import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
@@ -37,7 +37,7 @@ interface Factors {
 }
 
 // Re-export the API handlers and job tracker for external use
-export { apiHandlers, jobTracker };
+export { apiHandlers, getJobTracker as jobTracker };
 
 /**
  * Decision Engine
@@ -60,9 +60,11 @@ export const decisionEngine = {
    * Initialize the decision engine
    * This is called when the module is first loaded
    */
-  initialize(): void {
+  async initialize(): Promise<void> {
     logger.info('Initializing decision engine');
     
+    let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
+
     try {
       // Initialize models database
       modelsDbService.initialize();
@@ -70,10 +72,18 @@ export const decisionEngine = {
       // Initialize module connections to resolve circular dependencies
       modelPerformanceTracker.initialize(codeModelSelector);
       
-      // Start periodic job cleanup
-      setInterval(() => {
-        jobTracker.cleanupCompletedJobs();
-      }, 3600000); // Clean up every hour
+      try {
+        jobTracker = await getJobTracker();
+        setInterval(() => {
+          try {
+            jobTracker.cleanupCompletedJobs();
+          } catch (cleanupError) {
+            logger.error('Error cleaning up completed jobs:', cleanupError);
+          }
+        }, 3600000); // Clean up every hour
+      } catch (getJobTrackerError) {
+        logger.error('Error initializing jobTracker:', getJobTrackerError);
+      }
 
       // Check for new free models that haven't been benchmarked
       if (config.openRouterApiKey) {
@@ -236,26 +246,7 @@ export const decisionEngine = {
       model = bestFreeModel?.id || 'gpt-3.5-turbo'; // Fallback to standard model if no free model found
       
       explanation += `Selected free model ${model} based on scoring. `;
-    } else if (priority === 'cost' && hasFreeModels) {
-      // When cost is the priority and we have free models available, prefer them
-      const freeScoreThreshold = Math.max(localScore, paidScore) * 0.9; // Within 90% of the best score
-      
-      if (freeScore >= freeScoreThreshold) {
-        provider = 'paid'; // Using free model from OpenRouter
-        confidence = 0.7;
-        
-        const bestFreeModel = await modelSelector.getBestFreeModel(complexity, totalTokens);
-        model = bestFreeModel?.id || 'gpt-3.5-turbo';
-        
-        explanation += 'Cost is prioritized and free models are available with acceptable performance. ';
-      } else {
-        // Use the highest scoring provider
-        provider = localScore > paidScore ? 'local' : 'paid';
-        confidence = Math.min(Math.abs(localScore - paidScore), 1.0);
-        model = await this.selectModelForProvider(provider, complexity, totalTokens);
-      }
     } else {
-      // Use the highest scoring provider
       provider = localScore > paidScore ? 'local' : 'paid';
       confidence = Math.min(Math.abs(localScore - paidScore), 1.0);
       model = await this.selectModelForProvider(provider, complexity, totalTokens);

@@ -50,9 +50,8 @@ export class LocalLamaMcpServer {
     );
     
     // Set up resource and tool handlers
-    setupResourceHandlers(this.server);
     toolDefinitionProvider.initialize(this.server);
-    
+
     // Set up handler for tool calls
     this.setupToolCallHandler();
     
@@ -196,6 +195,8 @@ export class LocalLamaMcpServer {
   }
   
   async run(): Promise<void> {
+    // Set up resource and tool handlers
+    await setupResourceHandlers(this.server);
     try {
       logger.info('Starting LocalLama MCP Server...');
       const transport = new StdioServerTransport();

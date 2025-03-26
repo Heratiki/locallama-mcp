@@ -5,7 +5,6 @@ import net from 'net';
 import EventEmitter from 'events';
 
 // Job status enum for better type safety
-// Internal enum for type safety
 export enum JobStatus {
   QUEUED = 'Queued',
   IN_PROGRESS = 'In Progress',
@@ -51,14 +50,14 @@ class JobTracker extends EventEmitter {
 
   private constructor() {
     super();
-    this.initialize().catch(error => {
-      logger.error('Failed to initialize JobTracker:', error);
-    });
   }
 
-  static getInstance(): JobTracker {
+  static async getInstance(): Promise<JobTracker> {
     if (!JobTracker.instance) {
       JobTracker.instance = new JobTracker();
+      await JobTracker.instance.initializeTracker();
+    } else if (!JobTracker.instance.initialized) {
+      await JobTracker.instance.initializeTracker();
     }
     return JobTracker.instance;
   }
@@ -84,7 +83,7 @@ class JobTracker extends EventEmitter {
     throw new Error(`No available ports found in range ${this.BASE_PORT}-${this.MAX_PORT}`);
   }
 
-  private async initialize(): Promise<void> {
+  public async initializeTracker(): Promise<void> {
     if (this.initialized) {
       logger.warn('JobTracker already initialized');
       return;
@@ -102,10 +101,11 @@ class JobTracker extends EventEmitter {
     }
   }
 
-  /**
-   * Create a new job in the system
-   */
   async createJob(id: string, task: string, model?: string): Promise<string> {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
+    
     const job: Job = {
       id,
       task,
@@ -123,10 +123,11 @@ class JobTracker extends EventEmitter {
     return id;
   }
 
-  /**
-   * Update the progress of an existing job
-   */
   async updateJobProgress(id: string, progress: number, estimatedTimeRemaining?: number): Promise<void> {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
+
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = JobStatus.IN_PROGRESS;
@@ -142,10 +143,11 @@ class JobTracker extends EventEmitter {
     }
   }
 
-  /**
-   * Mark a job as completed
-   */
   async completeJob(id: string): Promise<void> {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
+
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = JobStatus.COMPLETED;
@@ -159,10 +161,11 @@ class JobTracker extends EventEmitter {
     }
   }
 
-  /**
-   * Cancel an active job
-   */
   async cancelJob(id: string): Promise<void> {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
+
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = JobStatus.CANCELLED;
@@ -175,10 +178,11 @@ class JobTracker extends EventEmitter {
     }
   }
 
-  /**
-   * Mark a job as failed with optional error message
-   */
   async failJob(id: string, error?: string): Promise<void> {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
+
     const job = this.activeJobs.get(id);
     if (job) {
       job.status = JobStatus.FAILED;
@@ -192,33 +196,34 @@ class JobTracker extends EventEmitter {
     }
   }
 
-  /**
-   * Get a specific job by ID
-   */
   getJob(id: string): Job | undefined {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
     return this.activeJobs.get(id);
   }
 
-  /**
-   * Get all active (non-completed, non-cancelled) jobs
-   */
   getActiveJobs(): Job[] {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
     return Array.from(this.activeJobs.values()).filter(
       job => job.status !== JobStatus.COMPLETED && job.status !== JobStatus.CANCELLED
     );
   }
 
-  /**
-   * Get all jobs in the system
-   */
   getAllJobs(): Job[] {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
     return Array.from(this.activeJobs.values());
   }
 
-  /**
-   * Clean up completed and cancelled jobs older than specified age
-   */
   cleanupCompletedJobs(maxAgeMs: number = 3600000): void {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
+    
     const now = Date.now();
     for (const [id, job] of this.activeJobs.entries()) {
       if (
@@ -232,6 +237,10 @@ class JobTracker extends EventEmitter {
   }
 
   private async broadcastUpdate(): Promise<void> {
+    if (!this.initialized) {
+      throw new Error('JobTracker not initialized');
+    }
+
     if (this.wss) {
       try {
         await broadcastJobs(this.wss);
@@ -241,13 +250,12 @@ class JobTracker extends EventEmitter {
     }
   }
 
-  /**
-   * Check if JobTracker is initialized
-   */
   isInitialized(): boolean {
     return this.initialized;
   }
 }
 
-// Export singleton instance
-export const jobTracker = JobTracker.getInstance();
+// Export async function to get singleton instance
+export const getJobTracker = async (): Promise<JobTracker> => {
+  return JobTracker.getInstance();
+};

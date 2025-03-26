@@ -1,4 +1,4 @@
-import { jobTracker } from './jobTracker.js';
+import { getJobTracker } from './jobTracker.js';
 // import { taskRouter } from './taskRouter.js'; // TODO: Check and make sure this module is still used elsewhere in the codebase.
 import { decisionEngine } from '../index.js';
 import { logger } from '../../../utils/logger.js';
@@ -34,7 +34,13 @@ export const apiHandlers = {
     preemptive?: boolean;
   }) {
     const jobId = `job_${uuidv4()}`;
-    void jobTracker.createJob(jobId, params.task);
+    let jobTracker;
+    try {
+      jobTracker = await getJobTracker();
+      void jobTracker.createJob(jobId, params.task);
+    } catch (createJobError) {
+      logger.error('Error creating job:', createJobError);
+    }
 
     try {
       // Get initial routing decision
@@ -47,10 +53,15 @@ export const apiHandlers = {
       });
 
       // Update job with selected model
-      const job = jobTracker.getJob(jobId);
-      if (job) {
-        job.model = decision.model;
-        void jobTracker.updateJobProgress(jobId, 0, 180000); // Initial 3-minute estimate
+      try {
+        jobTracker = await getJobTracker();
+        const job = jobTracker.getJob(jobId);
+        if (job) {
+          job.model = decision.model;
+          void jobTracker.updateJobProgress(jobId, 0, 180000); // Initial 3-minute estimate
+        }
+      } catch (getJobError) {
+        logger.error('Error getting/updating job:', getJobError);
       }
 
       return {
@@ -115,8 +126,10 @@ export const apiHandlers = {
     }
   },
 
-  getActiveJobs() {
+  async getActiveJobs() {
+    let jobTracker;
     try {
+      jobTracker = await getJobTracker();
       const jobs = jobTracker.getActiveJobs();
       return {
         jobs: jobs.map(job => ({
@@ -134,8 +147,10 @@ export const apiHandlers = {
     }
   },
 
-  getJobProgress(jobId: string) {
+  async getJobProgress(jobId: string) {
+    let jobTracker;
     try {
+      jobTracker = await getJobTracker();
       const job = jobTracker.getJob(jobId);
       if (!job) {
         throw new Error(`Job ${jobId} not found`);
@@ -155,8 +170,10 @@ export const apiHandlers = {
     }
   },
 
-  cancelJob(jobId: string) {
+  async cancelJob(jobId: string) {
+    let jobTracker;
     try {
+      jobTracker = await getJobTracker();
       void jobTracker.cancelJob(jobId);
       return {
         jobId,
@@ -247,7 +264,13 @@ export const apiHandlers = {
     priority: 'cost' | 'speed' | 'quality';
   }) {
     const jobId = `job_${uuidv4()}`;
-    void jobTracker.createJob(jobId, params.task);
+    let jobTracker;
+    try {
+      jobTracker = await getJobTracker();
+      void jobTracker.createJob(jobId, params.task);
+    } catch (createJobError) {
+      logger.error('Error creating job:', createJobError);
+    }
 
     try {
       // First check Retriv index for similar tasks
@@ -263,7 +286,12 @@ export const apiHandlers = {
         logger.info(`Found similar task with ${similarTasks[0].similarity.toFixed(2)} similarity score`);
 
         // Update job progress
-        void jobTracker.updateJobProgress(jobId, 25, 120000);
+        try {
+          jobTracker = await getJobTracker();
+          void jobTracker.updateJobProgress(jobId, 25, 120000);
+        } catch (updateJobProgressError) {
+          logger.error('Error updating job progress:', updateJobProgressError);
+        }
 
         // Use the similar task to optimize the current one
         const optimizedTask = costMonitor.optimizeCodeTask(
@@ -282,10 +310,15 @@ export const apiHandlers = {
         });
 
         // Update job with model selection
-        const job = jobTracker.getJob(jobId);
-        if (job) {
-          job.model = decision.model;
-          void jobTracker.updateJobProgress(jobId, 50, 90000);
+        try {
+          jobTracker = await getJobTracker();
+          const job = jobTracker.getJob(jobId);
+          if (job) {
+            job.model = decision.model;
+            void jobTracker.updateJobProgress(jobId, 50, 90000);
+          }
+        } catch (getJobError) {
+          logger.error('Error getting/updating job:', getJobError);
         }
 
         return {
@@ -312,10 +345,15 @@ export const apiHandlers = {
       });
 
       // Update job with selected model
-      const job = jobTracker.getJob(jobId);
-      if (job) {
-        job.model = decision.model;
-        void jobTracker.updateJobProgress(jobId, 0, 180000);
+      try {
+        jobTracker = await getJobTracker();
+        const job = jobTracker.getJob(jobId);
+        if (job) {
+          job.model = decision.model;
+          void jobTracker.updateJobProgress(jobId, 0, 180000);
+        }
+      } catch (getJobError) {
+        logger.error('Error getting/updating job:', getJobError);
       }
 
       return {
@@ -325,7 +363,12 @@ export const apiHandlers = {
       };
     } catch (error) {
       logger.error('Error optimizing and routing task:', error);
-      void jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error');
+      try {
+        jobTracker = await getJobTracker();
+        void jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error');
+      } catch (failJobError) {
+        logger.error('Error failing job:', failJobError);
+      }
       throw error;
     }
   }
