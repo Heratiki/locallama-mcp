@@ -1,5 +1,5 @@
 import { decisionEngine } from '../../decision-engine/index.js';
-import { jobTracker } from '../../decision-engine/services/jobTracker.js';
+import { jobTracker, JobStatus } from '../../decision-engine/services/jobTracker.js';
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
 import { costEstimator } from '../cost-estimation/index.js';
 import { getCodeSearchEngine } from '../../cost-monitor/codeSearchEngine.js';
+import type { RetrivSearchResult } from '../retriv-integration/types.js';
 
 export class Router implements IRouter {
   /**
@@ -68,11 +69,12 @@ export class Router implements IRouter {
       }
       
       // Retriv search
-      let retrivResults: unknown[] = [];
+      let retrivResults: RetrivSearchResult[] = [];
       if (!hasSubtasks && userPreferences.prioritizeRetrivSearch) {
         try {
           const codeSearchEngine = await getCodeSearchEngine();
-          retrivResults = await codeSearchEngine.search(params.task, 5);
+          const searchResults = await codeSearchEngine.search(params.task, 5);
+          retrivResults = searchResults as RetrivSearchResult[];
           logger.info(`Found ${retrivResults.length} results in Retriv for task: ${params.task}`);
         } catch (error) {
           logger.warn('Error searching Retriv:', error);
@@ -87,7 +89,7 @@ export class Router implements IRouter {
           provider: 'local',
           reason: 'Found existing code solution in local database',
           details: {
-            retrivResults: retrivResults
+            retrivResults
           }
         };
       }
@@ -129,9 +131,9 @@ export class Router implements IRouter {
         estimatedCost: costEstimate.paid.cost.total,
         estimatedTime: calculateEstimatedTime(decision),
         details: {
-          status: 'In Progress',
+          status: JobStatus.IN_PROGRESS,
           progress: 0,
-          taskAnalysis: hasSubtasks ? taskAnalysis : undefined
+          taskAnalysis: taskAnalysis ? taskAnalysis.decomposedTask : undefined
         }
       };
     } catch (error) {
@@ -184,14 +186,14 @@ export class Router implements IRouter {
       if (!job) {
         return {
           success: false,
-          status: 'Not Found',
+          status: 'Not Found' as const,
           message: `Job with ID ${jobId} not found`,
           jobId
         };
       }
       
       // Check if the job can be cancelled
-      if (job.status === 'Completed' || job.status === 'Cancelled' || job.status === 'Failed') {
+      if ([JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED].includes(job.status)) {
         return {
           success: false,
           status: job.status,
@@ -205,7 +207,7 @@ export class Router implements IRouter {
       
       return {
         success: true,
-        status: 'Cancelled',
+        status: JobStatus.CANCELLED,
         message: `Job with ID ${jobId} has been cancelled`,
         jobId
       };
@@ -213,7 +215,7 @@ export class Router implements IRouter {
       logger.error('Error cancelling job:', error);
       return {
         success: false,
-        status: 'Error',
+        status: 'Error' as const,
         message: `Error cancelling job: ${error instanceof Error ? error.message : String(error)}`,
         jobId
       };

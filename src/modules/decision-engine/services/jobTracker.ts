@@ -5,12 +5,26 @@ import net from 'net';
 import EventEmitter from 'events';
 
 // Job status enum for better type safety
+// Internal enum for type safety
 export enum JobStatus {
   QUEUED = 'Queued',
   IN_PROGRESS = 'In Progress',
   COMPLETED = 'Completed',
   CANCELLED = 'Cancelled',
   FAILED = 'Failed'
+}
+
+// Type for external interface compatibility
+export type JobStatusString =
+  | 'Queued'
+  | 'In Progress'
+  | 'Completed'
+  | 'Cancelled'
+  | 'Failed';
+
+// Assert function for type safety
+export function isJobStatus(status: string): status is JobStatusString {
+  return Object.values(JobStatus).includes(status as JobStatus);
 }
 
 export interface Job {
