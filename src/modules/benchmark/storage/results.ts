@@ -8,20 +8,28 @@ import { BenchmarkResult, BenchmarkSummary } from '../../../types/index.js';
  */
 export async function saveResult(result: BenchmarkResult, resultsPath: string): Promise<void> {
   try {
-    // Create results directory if it doesn't exist
+    // Create base results directory if it doesn't exist
     await fs.mkdir(resultsPath, { recursive: true });
     
     // Create a filename based on the task ID and timestamp
     const timestamp = new Date().toISOString().replace(/:/g, '-');
-    const filename = `${result.taskId}-${timestamp}.json`;
-    const filePath = path.join(resultsPath, filename);
+    const sanitizedTaskId = result.taskId?.replace(/[/\\]/g, '-') || 'unknown';
+    const modelName = result.local.model?.replace(/[/\\]/g, '-') || 'unknown';
+    const taskDir = path.join(resultsPath, sanitizedTaskId);
+    
+    // Create task-specific subdirectory
+    await fs.mkdir(taskDir, { recursive: true });
+    
+    const filename = `${modelName}-${timestamp}.json`;
+    const filePath = path.join(taskDir, filename);
     
     // Write the result to disk
     await fs.writeFile(filePath, JSON.stringify(result, null, 2));
     
-    logger.info(`Saved benchmark result to ${filePath}`);
+    logger.info(`Saved benchmark result for ${result.local.model} with task ${result.taskId}`);
   } catch (error) {
     logger.error('Error saving benchmark result:', error);
+    throw error; // Re-throw to allow caller to handle the error
   }
 }
 
