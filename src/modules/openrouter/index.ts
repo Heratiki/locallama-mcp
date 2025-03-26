@@ -554,7 +554,7 @@ export const openRouterModule = {
       }
     }
     
-    logger.error('Unknown OpenRouter error');
+    logger.error(`Unknown OpenRouter error: ${error.message}`);
     return OpenRouterErrorType.UNKNOWN;
   },
 

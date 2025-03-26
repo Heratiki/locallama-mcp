@@ -257,5 +257,6 @@ class JobTracker extends EventEmitter {
 
 // Export async function to get singleton instance
 export const getJobTracker = async (): Promise<JobTracker> => {
-  return JobTracker.getInstance();
+  const instance = await JobTracker.getInstance();
+  return instance;
 };

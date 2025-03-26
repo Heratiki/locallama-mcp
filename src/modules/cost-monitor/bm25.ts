@@ -777,7 +777,7 @@ export class BM25Searcher {
     // 4. System Python with retriv installed
     // 5. Fallback to default 'python' command
     if (process.env.RETRIV_PYTHON_PATH) {
-      pythonExecutable = process.env.RETRIV_PYTHON_PATH.trim();
+      pythonExecutable = process.env.RETRIV_PYTHON_PATH.trim().split('#')[0].trim(); // Remove comment and trim
       logger.info(`Using Python executable from RETRIV_PYTHON_PATH: ${pythonExecutable}`);
       return pythonExecutable;
     }
