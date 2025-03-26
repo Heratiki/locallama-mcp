@@ -9,32 +9,39 @@ export function evaluateQuality(task: string, response: string): number {
     return 0;
   }
 
-  // 1. Relevance - analyze if the response addresses the task
+  // Calculate individual scores with more granular criteria
   const relevanceScore = calculateRelevanceScore(task, response);
-  
-  // 2. Completeness - analyze if the response is comprehensive
   const completenessScore = calculateCompletenessScore(task, response);
-  
-  // 3. Structure - analyze the formatting and structure of the response
   const structureScore = calculateStructureScore(task, response);
-  
-  // 4. Accuracy - analyze specific elements for accuracy
   const accuracyScore = calculateAccuracyScore(task, response);
-  
-  // 5. Content quality - analyze the quality of the content
   const contentQualityScore = calculateContentQualityScore(task, response);
   
-  // Weight the scores according to their importance
-  // Weights should add up to 1.0
-  const weightedScore = 
-    relevanceScore * 0.3 +
-    completenessScore * 0.25 +
-    structureScore * 0.15 +
-    accuracyScore * 0.2 +
-    contentQualityScore * 0.1;
+  // Apply different weights based on task type
+  const isCodeTask = /function|code|program|algorithm/i.test(task);
+  let weightedScore;
   
-  // Return normalized score between 0 and 1
-  return Math.min(Math.max(weightedScore, 0), 1);
+  if (isCodeTask) {
+    // For code tasks, prioritize accuracy and structure
+    weightedScore = 
+      relevanceScore * 0.2 +
+      completenessScore * 0.2 +
+      structureScore * 0.25 +
+      accuracyScore * 0.25 +
+      contentQualityScore * 0.1;
+  } else {
+    // For general tasks, prioritize relevance and completeness
+    weightedScore = 
+      relevanceScore * 0.3 +
+      completenessScore * 0.25 +
+      structureScore * 0.15 +
+      accuracyScore * 0.2 +
+      contentQualityScore * 0.1;
+  }
+
+  // Apply sigmoid normalization to avoid clustering around specific values
+  const normalizedScore = 1 / (1 + Math.exp(-5 * (weightedScore - 0.5)));
+  
+  return normalizedScore;
 }
 
 /**

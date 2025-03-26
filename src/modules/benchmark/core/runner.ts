@@ -8,6 +8,40 @@ import { callOllamaApi } from '../api/ollama.js';
 import { simulateOpenAiApi, simulateGenericApi } from '../api/simulation.js';
 import { evaluateQuality } from '../evaluation/quality.js';
 import { saveResult } from '../storage/results.js';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Maintain a set of benchmarked model IDs
+let benchmarkedModels = new Set<string>();
+
+interface TrackedModels {
+  models: string[];
+}
+
+// Load benchmarked models from disk
+function loadBenchmarkedModels(resultsPath: string): void {
+  const trackingFile = path.join(resultsPath, 'benchmarked_models.json');
+  try {
+    if (fs.existsSync(trackingFile)) {
+      const rawData = fs.readFileSync(trackingFile, 'utf8');
+      const data = JSON.parse(rawData) as TrackedModels;
+      benchmarkedModels = new Set<string>(data.models);
+    }
+  } catch (error) {
+    logger.error('Error loading benchmarked models:', error instanceof Error ? error.message : String(error));
+  }
+}
+
+// Save benchmarked models to disk
+function saveBenchmarkedModels(resultsPath: string): void {
+  const trackingFile = path.join(resultsPath, 'benchmarked_models.json');
+  try {
+    const data: TrackedModels = { models: Array.from(benchmarkedModels) };
+    fs.writeFileSync(trackingFile, JSON.stringify(data));
+  } catch (error) {
+    logger.error('Error saving benchmarked models:', error instanceof Error ? error.message : String(error));
+  }
+}
 
 /**
  * Run a benchmark for a specific model
@@ -141,22 +175,30 @@ export async function benchmarkTask(
   const config: BenchmarkConfig = { ...appConfig.benchmark, ...customConfig };
   const { taskId, task, contextLength, expectedOutputLength, complexity, skipPaidModel } = params;
   
+  // Load benchmarked models
+  loadBenchmarkedModels(config.resultsPath);
+  
   logger.info(`Benchmarking task ${taskId}: ${task.substring(0, 50)}...`);
   
   // Get available models
   const availableModels = await costMonitor.getAvailableModels();
   
+  // Filter out already benchmarked models unless specifically requested
+  const unbenchmarkedModels = params.localModel || params.paidModel ? 
+    availableModels :
+    availableModels.filter(m => !benchmarkedModels.has(m.id));
+
   // Determine which models to use
   const localModel = params.localModel 
-    ? availableModels.find(m => m.id === params.localModel && (m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama'))
-    : availableModels.find(m => m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama');
+    ? unbenchmarkedModels.find(m => m.id === params.localModel && (m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama'))
+    : unbenchmarkedModels.find(m => m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama');
   
   // For paid model, check if we should use a free model from OpenRouter
   let paidModel: Model | undefined;
   
   if (params.paidModel) {
     // If a specific paid model is requested, use it
-    paidModel = availableModels.find(m => m.id === params.paidModel && m.provider !== 'local' && m.provider !== 'lm-studio' && m.provider !== 'ollama');
+    paidModel = unbenchmarkedModels.find(m => m.id === params.paidModel && m.provider !== 'local' && m.provider !== 'lm-studio' && m.provider !== 'ollama');
   } else if ('isConfigured' in openRouterModule && typeof openRouterModule.isConfigured === 'function') {
     try {
       // Initialize OpenRouter module if needed
@@ -269,6 +311,11 @@ export async function benchmarkTask(
   
   // Save result if configured
   if (config.saveResults) {
+    benchmarkedModels.add(localModel.id);
+    if (paidModel) {
+      benchmarkedModels.add(paidModel.id);
+    }
+    saveBenchmarkedModels(config.resultsPath);
     await saveResult(result, config.resultsPath);
   }
   

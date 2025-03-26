@@ -1,4 +1,8 @@
 import { BenchmarkResult, BenchmarkSummary } from '../../../types/index.js';
+import { loadResults } from '../storage/results.js';
+import { logger } from '../../../utils/logger.js';
+import * as path from 'path';
+import * as fs from 'fs';
 
 /**
  * Generate a summary from benchmark results
@@ -101,4 +105,46 @@ export function generateSummary(results: BenchmarkResult[]): BenchmarkSummary {
   summary.comparison.costSavings = summary.paid.totalCost;
   
   return summary;
+}
+
+/**
+ * Load and combine all benchmark results from the results directory
+ */
+export async function loadAllResults(resultsPath: string): Promise<BenchmarkResult[]> {
+  const results: BenchmarkResult[] = [];
+  
+  // Read all subdirectories in the results path
+  const dirs = fs.readdirSync(resultsPath).filter(
+    (dir) => fs.statSync(path.join(resultsPath, dir)).isDirectory()
+  );
+  
+  // Load results from each subdirectory
+  for (const dir of dirs) {
+    const dirPath = path.join(resultsPath, dir);
+    try {
+      const dirResults = await loadResults(dirPath);
+      results.push(...dirResults);
+    } catch (error) {
+      logger.warn(`Failed to load results from ${dir}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  if (results.length === 0) {
+    logger.warn('No benchmark results found in any directory');
+  } else {
+    logger.info(`Loaded ${results.length} benchmark results from ${dirs.length} directories`);
+  }
+  
+  return results;
+}
+
+/**
+ * Generate a comprehensive summary from all available benchmark results
+ */
+export async function generateComprehensiveSummary(resultsPath: string): Promise<BenchmarkSummary> {
+  const allResults = await loadAllResults(resultsPath);
+  if (allResults.length === 0) {
+    throw new Error('No benchmark results found to summarize');
+  }
+  return generateSummary(allResults);
 }
