@@ -4,11 +4,10 @@ import { modelsDbService } from './modelsDb.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { COMPLEXITY_THRESHOLDS, ModelPerformanceData } from '../types/index.js';
 import { Model } from '../../../types/index.js';
-import { BenchmarkResult } from '../../../types/benchmark.js';
+import { BenchmarkResult, BenchmarkSummary } from '../../../types/benchmark.js';
 import { saveResult } from '../../benchmark/storage/results.js';
 import fs from 'fs/promises';
 import path from 'path';
-import { benchmarkModule } from '../../benchmark/index.js';
 
 // Add this interface at the top of the file with other types
 interface ComprehensiveBenchmarkResults {
@@ -28,6 +27,139 @@ interface ComprehensiveBenchmarkResults {
     averageQualityScore: number;
   };
 }
+
+// Define the benchmark utilities first
+const benchmarkUtils = {
+  /**
+   * Load benchmark results from a directory
+   */
+  async loadResults(benchmarkDir: string): Promise<BenchmarkResult[]> {
+    try {
+      const results: BenchmarkResult[] = [];
+      const files = await fs.readdir(benchmarkDir);
+      
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          const filePath = path.join(benchmarkDir, file);
+          const content = await fs.readFile(filePath, 'utf-8');
+          const result = JSON.parse(content) as BenchmarkResult;
+          results.push(result);
+        }
+      }
+      
+      return results;
+    } catch (error) {
+      logger.error('Failed to load benchmark results:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Generate summary from benchmark results
+   */
+  generateSummary(results: BenchmarkResult[]): BenchmarkSummary {
+    // Initialize summary data
+    const summary: BenchmarkSummary = {
+      taskCount: results.length,
+      avgContextLength: 0,
+      avgOutputLength: 0,
+      avgComplexity: 0,
+      local: {
+        avgTimeTaken: 0,
+        avgSuccessRate: 0,
+        avgQualityScore: 0,
+        totalTokenUsage: { prompt: 0, completion: 0, total: 0 }
+      },
+      paid: {
+        avgTimeTaken: 0,
+        avgSuccessRate: 0,
+        avgQualityScore: 0,
+        totalTokenUsage: { prompt: 0, completion: 0, total: 0 },
+        totalCost: 0
+      },
+      comparison: {
+        timeRatio: 0,
+        successRateDiff: 0,
+        qualityScoreDiff: 0,
+        costSavings: 0
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    // Calculate averages and totals
+    let localResultCount = 0;
+    let paidResultCount = 0;
+
+    for (const result of results) {
+      summary.avgContextLength += result.contextLength;
+      summary.avgOutputLength += result.outputLength;
+      summary.avgComplexity += result.complexity;
+
+      if (result.local) {
+        localResultCount++;
+        summary.local.avgTimeTaken += result.local.timeTaken;
+        summary.local.avgSuccessRate += result.local.successRate;
+        summary.local.avgQualityScore += result.local.qualityScore;
+        summary.local.totalTokenUsage.prompt += result.local.tokenUsage.prompt;
+        summary.local.totalTokenUsage.completion += result.local.tokenUsage.completion;
+        summary.local.totalTokenUsage.total += result.local.tokenUsage.total;
+      }
+
+      if (result.paid) {
+        paidResultCount++;
+        summary.paid.avgTimeTaken += result.paid.timeTaken;
+        summary.paid.avgSuccessRate += result.paid.successRate;
+        summary.paid.avgQualityScore += result.paid.qualityScore;
+        summary.paid.totalTokenUsage.prompt += result.paid.tokenUsage.prompt;
+        summary.paid.totalTokenUsage.completion += result.paid.tokenUsage.completion;
+        summary.paid.totalTokenUsage.total += result.paid.tokenUsage.total;
+        summary.paid.totalCost += result.paid.cost;
+      }
+    }
+
+    // Calculate final averages
+    if (results.length > 0) {
+      summary.avgContextLength /= results.length;
+      summary.avgOutputLength /= results.length;
+      summary.avgComplexity /= results.length;
+    }
+
+    if (localResultCount > 0) {
+      summary.local.avgTimeTaken /= localResultCount;
+      summary.local.avgSuccessRate /= localResultCount;
+      summary.local.avgQualityScore /= localResultCount;
+    }
+
+    if (paidResultCount > 0) {
+      summary.paid.avgTimeTaken /= paidResultCount;
+      summary.paid.avgSuccessRate /= paidResultCount;
+      summary.paid.avgQualityScore /= paidResultCount;
+    }
+
+    // Calculate comparisons
+    if (localResultCount > 0 && paidResultCount > 0) {
+      summary.comparison.timeRatio = summary.local.avgTimeTaken / summary.paid.avgTimeTaken;
+      summary.comparison.successRateDiff = summary.local.avgSuccessRate - summary.paid.avgSuccessRate;
+      summary.comparison.qualityScoreDiff = summary.local.avgQualityScore - summary.paid.avgQualityScore;
+      summary.comparison.costSavings = summary.paid.totalCost; // All cost saved when using local
+    }
+
+    return summary;
+  },
+
+  /**
+   * Save benchmark summary to a directory
+   */
+  async saveSummary(summary: BenchmarkSummary, benchmarkDir: string): Promise<void> {
+    try {
+      const summaryPath = path.join(benchmarkDir, 'summary.json');
+      await fs.writeFile(summaryPath, JSON.stringify(summary, null, 2));
+      logger.info('Saved benchmark summary to:', summaryPath);
+    } catch (error) {
+      logger.error('Failed to save benchmark summary:', error);
+    }
+  }
+};
 
 /**
  * Benchmark Service
@@ -598,17 +730,17 @@ export const benchmarkService = {
       const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
       
       // Load all benchmark results
-      const results = await benchmarkModule.loadResults(benchmarkDir);
+      const results = await benchmarkUtils.loadResults(benchmarkDir);
       if (results.length === 0) {
         logger.warn('No benchmark results found to summarize');
         return;
       }
 
       // Generate summary using the benchmark module's functionality
-      const summary = benchmarkModule.generateSummary(results);
+      const summary = benchmarkUtils.generateSummary(results);
 
       // Save the summary
-      await benchmarkModule.saveSummary(summary, benchmarkDir);
+      await benchmarkUtils.saveSummary(summary, benchmarkDir);
       
       logger.info('Generated and saved comprehensive benchmark summary');
     } catch (error) {
