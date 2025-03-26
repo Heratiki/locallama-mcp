@@ -128,18 +128,13 @@ export async function broadcastJobs(wss: WebSocketServer): Promise<void> {
   }
 
   try {
-    const supportsActiveJobs = 'getActiveJobs' in jobTracker;
-    
     // If getActiveJobs exists, use it, otherwise get all jobs through getJob
-    const activeJobs = supportsActiveJobs ? 
-      [] :  // Remove this line once getActiveJobs is added to IJobManager
-      []; // TODO: Implement alternative job fetching
-      
     const allJobs = await getAllJobsFromDb();
+    const activeJobs = allJobs.filter(job => job.status === 'pending' || job.status === 'in_progress');
     
-    const jobData = { 
-      activeJobs, 
-      allJobs 
+    const jobData = {
+      activeJobs,
+      allJobs
     };
 
     const promises = Array.from(wss.clients)

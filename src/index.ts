@@ -11,6 +11,8 @@ import { fileURLToPath } from 'url';
 import type { RouteTaskParams } from './modules/api-integration/routing/types.js';
 import type { CostEstimationParams } from './modules/api-integration/cost-estimation/types.js';
 import type { OpenRouterBenchmarkConfig } from './modules/api-integration/openrouter-integration/types.js';
+import { createLockFile, isLockFilePresent, removeLockFile, getLockFileInfo } from './utils/lock-file.js';
+import type { LockFileInfo } from './utils/lock-file.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -34,6 +36,7 @@ const version = packageJson.version;
  */
 export class LocalLamaMcpServer {
   private server: Server;
+  private isShuttingDown = false;
   
   constructor() {
     this.server = new Server(
@@ -58,12 +61,72 @@ export class LocalLamaMcpServer {
     // Error handling
     this.server.onerror = (error) => logger.error('[MCP Error]', error);
     
-    // Handle process termination - void the promise to fix the linting error
-    process.on('SIGINT', () => {
-      void this.server.close().then(() => {
-        process.exit(0);
+    // Handle process termination signals
+    this.setupProcessSignalHandlers();
+  }
+
+  /**
+   * Set up process signal handlers to ensure clean shutdown
+   */
+  private setupProcessSignalHandlers(): void {
+    const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+    
+    signals.forEach(signal => {
+      process.on(signal, () => {
+        if (this.isShuttingDown) return;
+        this.isShuttingDown = true;
+        
+        logger.info(`Received ${signal}, shutting down gracefully...`);
+        
+        // Use Promise.resolve to handle the async shutdown without issues in the event handler
+        Promise.resolve(this.shutdown())
+          .then(() => process.exit(0))
+          .catch(err => {
+            logger.error(`Error during shutdown after ${signal}:`, err);
+            process.exit(1);
+          });
       });
     });
+
+    // Handle uncaught exceptions and unhandled promise rejections
+    process.on('uncaughtException', (err) => {
+      logger.error('Uncaught exception:', err);
+      
+      if (this.isShuttingDown) return;
+      this.isShuttingDown = true;
+      
+      // Use Promise.resolve to handle the async shutdown without issues in the event handler
+      Promise.resolve(this.shutdown())
+        .then(() => process.exit(1))
+        .catch(() => process.exit(1));
+    });
+
+    process.on('unhandledRejection', (reason) => {
+      logger.error('Unhandled promise rejection:', reason);
+      
+      if (this.isShuttingDown) return;
+      this.isShuttingDown = true;
+      
+      // Use Promise.resolve to handle the async shutdown without issues in the event handler
+      Promise.resolve(this.shutdown())
+        .then(() => process.exit(1))
+        .catch(() => process.exit(1));
+    });
+  }
+
+  /**
+   * Clean shutdown procedure
+   */
+  private async shutdown(): Promise<void> {
+    logger.info('Shutting down LocalLama MCP Server...');
+    try {
+      await this.server.close();
+      logger.info('Server closed successfully');
+    } catch (err) {
+      logger.error('Error during server close:', err);
+    } finally {
+      removeLockFile();
+    }
   }
 
   /**
@@ -193,9 +256,26 @@ export class LocalLamaMcpServer {
       logger.error('Failed to import routing module:', error);
     });
   }
-  
+
   async run(): Promise<void> {
     try {
+      // Check if another instance is already running
+      if (isLockFilePresent()) {
+        const lockInfo: LockFileInfo | null = getLockFileInfo();
+        logger.info(`Another instance of LocalLama MCP Server is already running. Process: ${lockInfo?.pid || 'unknown'}, Started: ${lockInfo?.startTime || 'unknown'}. Exiting.`);
+        process.exit(0);
+        return;
+      }
+    } catch (error) {
+      logger.error('Error checking lock file:', error);
+      process.exit(1);
+      return;
+    }
+
+    try {
+      // Create lock file with current process info
+      createLockFile();
+
       // Initialize the decision engine
       const { decisionEngine } = await import('./modules/decision-engine/index.js');
       await decisionEngine.initialize();
@@ -206,9 +286,10 @@ export class LocalLamaMcpServer {
       logger.info('Starting LocalLama MCP Server...');
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
-      logger.info('LocalLama MCP Server running on stdio');
-    } catch (error) {
-      logger.error('Failed to start server:', error);
+      logger.info(`LocalLama MCP Server v${version} running on stdio (PID: ${process.pid})`);
+    } catch (error: unknown) {
+      logger.error('Failed to start server:', error instanceof Error ? error.message : String(error));
+      removeLockFile();
       process.exit(1);
     }
   }
@@ -216,4 +297,8 @@ export class LocalLamaMcpServer {
 
 // Initialize and run the server
 const server = new LocalLamaMcpServer();
-server.run().catch((error) => logger.error('Unhandled error during server execution:', error));
+server.run().catch((error: unknown) => {
+  logger.error('Unhandled error during server execution:', error instanceof Error ? error.message : String(error));
+  removeLockFile();
+  process.exit(1);
+});

@@ -14,7 +14,31 @@ import { Model } from '../../../types/index.js';
 export const codeTaskCoordinator = {
   // Private properties
   _codeSearchEngine: null as CodeSearchEngine | null,
-  
+
+  /**
+   * Evaluate code quality based on simple heuristics
+   * @param decomposedTask The decomposed code task
+   * @returns A string describing the evaluation results
+   */
+  evaluateCodeQuality(decomposedTask: DecomposedCodeTask): string {
+    let issues = '';
+
+    for (const subtask of decomposedTask.subtasks) {
+      if (!subtask.description) {
+        issues += `Subtask "${subtask.id}" is missing a description. `;
+      }
+      if (subtask.complexity > 0.8) {
+        issues += `Subtask "${subtask.id}" has high complexity (${subtask.complexity.toFixed(2)}). `;
+      }
+    }
+
+    if (issues === '') {
+      return 'No code quality issues found.';
+    } else {
+      return `Potential code quality issues found: ${issues}`;
+    }
+  },
+
   /**
    * Initialize the code search engine
    * @param workspacePath The root path of the workspace to index
@@ -105,7 +129,11 @@ export const codeTaskCoordinator = {
       // Step 1: Decompose the task into subtasks
       const decomposedTask = await codeTaskAnalyzer.decompose(task, options);
       logger.info(`Decomposed task into ${decomposedTask.subtasks.length} subtasks`);
-      
+
+      // Step 1.5: Perform basic code evaluation
+      const codeEvaluation = this.evaluateCodeQuality(decomposedTask);
+      logger.info(`Code evaluation: ${codeEvaluation}`);
+
       // Step 2: Resolve any circular dependencies
       const resolvedTask = dependencyMapper.resolveCircularDependencies(decomposedTask);
       
