@@ -7,40 +7,17 @@ import { callLmStudioApi } from '../api/lm-studio.js';
 import { callOllamaApi } from '../api/ollama.js';
 import { simulateOpenAiApi, simulateGenericApi } from '../api/simulation.js';
 import { evaluateQuality } from '../evaluation/quality.js';
-import { saveResult } from '../storage/results.js';
-import * as fs from 'fs';
-import * as path from 'path';
+import { codeEvaluationService } from '../../decision-engine/services/codeEvaluationService.js';
+import { saveBenchmarkResult, getRecentModelResults } from '../storage/benchmarkDb.js';
 
-// Maintain a set of benchmarked model IDs
-let benchmarkedModels = new Set<string>();
+// Track model failure counts in memory
+const modelFailures = new Map<string, number>();
 
-interface TrackedModels {
-  models: string[];
-}
-
-// Load benchmarked models from disk
-function loadBenchmarkedModels(resultsPath: string): void {
-  const trackingFile = path.join(resultsPath, 'benchmarked_models.json');
-  try {
-    if (fs.existsSync(trackingFile)) {
-      const rawData = fs.readFileSync(trackingFile, 'utf8');
-      const data = JSON.parse(rawData) as TrackedModels;
-      benchmarkedModels = new Set<string>(data.models);
-    }
-  } catch (error) {
-    logger.error('Error loading benchmarked models:', error instanceof Error ? error.message : String(error));
-  }
-}
-
-// Save benchmarked models to disk
-function saveBenchmarkedModels(resultsPath: string): void {
-  const trackingFile = path.join(resultsPath, 'benchmarked_models.json');
-  try {
-    const data: TrackedModels = { models: Array.from(benchmarkedModels) };
-    fs.writeFileSync(trackingFile, JSON.stringify(data));
-  } catch (error) {
-    logger.error('Error saving benchmarked models:', error instanceof Error ? error.message : String(error));
-  }
+// Track model failure and get count
+function trackModelFailure(modelId: string): number {
+  const currentFailures = modelFailures.get(modelId) || 0;
+  modelFailures.set(modelId, currentFailures + 1);
+  return currentFailures + 1;
 }
 
 /**
@@ -128,6 +105,32 @@ export async function runModelBenchmark(
         }
       }
       
+      if (!success) {
+        const failureCount = trackModelFailure(model.id);
+        
+        // After 3 failures, try code evaluation service
+        if (failureCount >= 3) {
+          logger.info(`Model ${model.id} has failed ${failureCount} times, attempting detailed code evaluation`);
+          try {
+            const evaluationResult = await codeEvaluationService.evaluateCodeQuality(
+              task,
+              response.text || '',
+              'general',
+              { useModel: true, detailedAnalysis: true }
+            );
+            
+            // If we get a valid evaluation, use it
+            if (typeof evaluationResult === 'object' && evaluationResult.modelEvaluation) {
+              success = evaluationResult.modelEvaluation.isValid;
+              qualityScore = evaluationResult.modelEvaluation.qualityScore;
+              logger.info(`Code evaluation service evaluation: Valid=${success}, Quality=${qualityScore}`);
+            }
+          } catch (evalError) {
+            logger.error('Code evaluation service failed:', evalError);
+          }
+        }
+      }
+
       const endTime = Date.now();
       const timeTaken = endTime - startTime;
       
@@ -175,50 +178,45 @@ export async function benchmarkTask(
   const config: BenchmarkConfig = { ...appConfig.benchmark, ...customConfig };
   const { taskId, task, contextLength, expectedOutputLength, complexity, skipPaidModel } = params;
   
-  // Load benchmarked models
-  loadBenchmarkedModels(config.resultsPath);
-  
   logger.info(`Benchmarking task ${taskId}: ${task.substring(0, 50)}...`);
   
   // Get available models
   const availableModels = await costMonitor.getAvailableModels();
   
-  // Filter out already benchmarked models unless specifically requested
-  const unbenchmarkedModels = params.localModel || params.paidModel ? 
-    availableModels :
-    availableModels.filter(m => !benchmarkedModels.has(m.id));
-
   // Determine which models to use
   const localModel = params.localModel 
-    ? unbenchmarkedModels.find(m => m.id === params.localModel && (m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama'))
-    : unbenchmarkedModels.find(m => m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama');
+    ? availableModels.find(m => m.id === params.localModel && (m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama'))
+    : availableModels.find(m => m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama');
   
   // For paid model, check if we should use a free model from OpenRouter
   let paidModel: Model | undefined;
+  let skipBenchmark = false;
   
   if (params.paidModel) {
-    // If a specific paid model is requested, use it
-    paidModel = unbenchmarkedModels.find(m => m.id === params.paidModel && m.provider !== 'local' && m.provider !== 'lm-studio' && m.provider !== 'ollama');
+    paidModel = availableModels.find(m => m.id === params.paidModel && m.provider !== 'local' && m.provider !== 'lm-studio' && m.provider !== 'ollama');
   } else if ('isConfigured' in openRouterModule && typeof openRouterModule.isConfigured === 'function') {
     try {
-      // Initialize OpenRouter module if needed
       if (Object.keys(openRouterModule.modelTracking.models).length === 0) {
         await openRouterModule.initialize();
       }
       
-      // Get free models
       const freeModels = await costMonitor.getFreeModels();
       
       if (freeModels.length > 0) {
-        // Find the best free model for this task
-        const bestFreeModel = freeModels.find(m => {
-          // Check if the model can handle the context length
-          return m.contextWindow && m.contextWindow >= (contextLength + expectedOutputLength);
-        });
+        const bestFreeModel = freeModels.find(m => 
+          m.contextWindow && m.contextWindow >= (contextLength + expectedOutputLength)
+        );
         
         if (bestFreeModel) {
-          paidModel = bestFreeModel;
-          logger.info(`Using free model ${bestFreeModel.id} from OpenRouter`);
+          // Check if this model has been recently benchmarked
+          const recentResults = await getRecentModelResults(bestFreeModel.id);
+          if (recentResults && recentResults.benchmarkCount > 0) {
+            logger.info(`Model ${bestFreeModel.id} was recently benchmarked (${recentResults.benchmarkCount} times), skipping`);
+            skipBenchmark = true;
+          } else {
+            paidModel = bestFreeModel;
+            logger.info(`Using free model ${bestFreeModel.id} from OpenRouter`);
+          }
         }
       }
     } catch (error) {
@@ -229,8 +227,51 @@ export async function benchmarkTask(
   if (!localModel) {
     throw new Error('No local model available for benchmarking');
   }
-  
-  // Initialize result
+
+  // Check if local model was recently benchmarked
+  const localRecentResults = await getRecentModelResults(localModel.id);
+  if (localRecentResults && localRecentResults.benchmarkCount > 0) {
+    logger.info(`Local model ${localModel.id} was recently benchmarked (${localRecentResults.benchmarkCount} times), using cached results`);
+    
+    // Initialize result with cached performance data
+    const result: BenchmarkResult = {
+      taskId,
+      task,
+      contextLength,
+      outputLength: expectedOutputLength,
+      complexity,
+      local: {
+        model: localModel.id,
+        timeTaken: 0,
+        successRate: localRecentResults.avgSuccessRate,
+        qualityScore: localRecentResults.avgQualityScore,
+        tokenUsage: {
+          prompt: contextLength,
+          completion: expectedOutputLength,
+          total: contextLength + expectedOutputLength
+        },
+        output: ''
+      },
+      paid: {
+        model: paidModel?.id || 'gpt-3.5-turbo',
+        timeTaken: 0,
+        successRate: 0,
+        qualityScore: 0,
+        tokenUsage: {
+          prompt: 0,
+          completion: 0,
+          total: 0
+        },
+        cost: 0,
+        output: ''
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    return result;
+  }
+
+  // Initialize result for new benchmark
   const result: BenchmarkResult = {
     taskId,
     task,
@@ -245,9 +286,9 @@ export async function benchmarkTask(
       tokenUsage: {
         prompt: 0,
         completion: 0,
-        total: 0,
+        total: 0
       },
-      output: '',
+      output: ''
     },
     paid: {
       model: paidModel?.id || 'gpt-3.5-turbo',
@@ -257,15 +298,15 @@ export async function benchmarkTask(
       tokenUsage: {
         prompt: 0,
         completion: 0,
-        total: 0,
+        total: 0
       },
       cost: 0,
-      output: '',
+      output: ''
     },
-    timestamp: new Date().toISOString(),
+    timestamp: new Date().toISOString()
   };
   
-  // Run benchmark for local model
+  // Run benchmark for local model if no recent results
   logger.info(`Benchmarking local model: ${localModel.id}`);
   const localResults = await runModelBenchmark(
     'local',
@@ -283,40 +324,41 @@ export async function benchmarkTask(
   result.local.output = localResults.output || '';
   result.outputLength = localResults.tokenUsage.completion;
   
-  // Run benchmark for paid model if available and not skipped
-  if (paidModel && !skipPaidModel) {
-    logger.info(`Benchmarking paid model: ${paidModel.id}`);
-    const paidResults = await runModelBenchmark(
-      'paid',
-      paidModel,
-      task,
-      contextLength,
-      expectedOutputLength,
-      config
-    );
-    
-    result.paid.timeTaken = paidResults.timeTaken;
-    result.paid.successRate = paidResults.successRate;
-    result.paid.qualityScore = paidResults.qualityScore;
-    result.paid.tokenUsage = paidResults.tokenUsage;
-    result.paid.output = paidResults.output || '';
-    result.paid.cost = paidResults.tokenUsage.prompt * (paidModel.costPerToken?.prompt || 0) + 
-                     paidResults.tokenUsage.completion * (paidModel.costPerToken?.completion || 0);
-    
-    // Use the paid model's output length if it's available
-    if (paidResults.tokenUsage.completion > 0) {
-      result.outputLength = paidResults.tokenUsage.completion;
+  // Run benchmark for paid model if available, not skipped, and no recent results
+  if (paidModel && !skipPaidModel && !skipBenchmark) {
+    const paidRecentResults = await getRecentModelResults(paidModel.id);
+    if (paidRecentResults && paidRecentResults.benchmarkCount > 0) {
+      logger.info(`Paid model ${paidModel.id} was recently benchmarked (${paidRecentResults.benchmarkCount} times), using cached results`);
+      result.paid.successRate = paidRecentResults.avgSuccessRate;
+      result.paid.qualityScore = paidRecentResults.avgQualityScore;
+    } else {
+      logger.info(`Benchmarking paid model: ${paidModel.id}`);
+      const paidResults = await runModelBenchmark(
+        'paid',
+        paidModel,
+        task,
+        contextLength,
+        expectedOutputLength,
+        config
+      );
+      
+      result.paid.timeTaken = paidResults.timeTaken;
+      result.paid.successRate = paidResults.successRate;
+      result.paid.qualityScore = paidResults.qualityScore;
+      result.paid.tokenUsage = paidResults.tokenUsage;
+      result.paid.output = paidResults.output || '';
+      result.paid.cost = paidResults.tokenUsage.prompt * (paidModel.costPerToken?.prompt || 0) + 
+                       paidResults.tokenUsage.completion * (paidModel.costPerToken?.completion || 0);
+      
+      if (paidResults.tokenUsage.completion > 0) {
+        result.outputLength = paidResults.tokenUsage.completion;
+      }
     }
   }
   
-  // Save result if configured
+  // Save result to SQLite database
   if (config.saveResults) {
-    benchmarkedModels.add(localModel.id);
-    if (paidModel) {
-      benchmarkedModels.add(paidModel.id);
-    }
-    saveBenchmarkedModels(config.resultsPath);
-    await saveResult(result, config.resultsPath);
+    await saveBenchmarkResult(result);
   }
   
   return result;

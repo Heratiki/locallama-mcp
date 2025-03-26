@@ -13,8 +13,14 @@ import { simulateOpenAiApi, simulateGenericApi } from './api/simulation.js';
 // Import evaluation tools
 import { evaluateQuality } from './evaluation/quality.js';
 
-// Import storage utilities
-import { saveResult, saveSummary, loadResults, loadSummaries } from './storage/results.js';
+// Import SQLite storage
+import { 
+  initBenchmarkDb, 
+  saveBenchmarkResult, 
+  getRecentModelResults, 
+  cleanupOldResults 
+} from './storage/benchmarkDb.js';
+
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -33,16 +39,19 @@ async function benchmarkTasks(
 ) {
   logger.info(`Benchmarking ${tasks.length} tasks`);
   
+  // Initialize SQLite database
+  await initBenchmarkDb();
+  
   // Run tasks sequentially or in parallel
   const results = await Promise.all(
     tasks.map(task => benchmarkTask(task, config))
   );
   
-  // Generate and save summary
+  // Generate summary
   const summary = generateSummary(results);
-  if (config.saveResults) {
-    await saveSummary(summary, config.resultsPath);
-  }
+  
+  // Cleanup old results (keep last 30 days by default)
+  await cleanupOldResults();
   
   return summary;
 }
@@ -54,7 +63,7 @@ async function benchmarkTasks(
  * Features:
  * - API integration with LM Studio, Ollama, and OpenRouter
  * - Quality evaluation metrics
- * - Result storage and analysis
+ * - SQLite-based result storage and analysis
  * - Configurable benchmarking parameters
  */
 export const benchmarkModule = {
@@ -80,8 +89,10 @@ export const benchmarkModule = {
   },
   
   // Storage utilities
-  saveResult,
-  saveSummary,
-  loadResults,
-  loadSummaries
+  storage: {
+    init: initBenchmarkDb,
+    save: saveBenchmarkResult,
+    getRecentResults: getRecentModelResults,
+    cleanup: cleanupOldResults
+  }
 };
