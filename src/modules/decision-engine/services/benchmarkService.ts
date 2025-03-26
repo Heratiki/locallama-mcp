@@ -39,25 +39,48 @@ function normalizeTaskName(taskName: string): string {
   return taskName.toLowerCase().replace(/\s+/g, '-');
 }
 
+/**
+ * Capitalize each word in a string
+ */
+function capitalizeWords(str: string): string {
+  return str.replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // Define the benchmark utilities first
 const benchmarkUtils = {
   /**
-   * Load benchmark results from a directory
+   * Load benchmark results from a directory, recursively scanning subdirectories
    */
   async loadResults(benchmarkDir: string): Promise<BenchmarkResult[]> {
     try {
       const results: BenchmarkResult[] = [];
-      const files = await fs.readdir(benchmarkDir);
       
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filePath = path.join(benchmarkDir, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const result = JSON.parse(content) as BenchmarkResult;
-          results.push(result);
+      // Function to recursively scan directories
+      async function scanDirectory(dir: string) {
+        const files = await fs.readdir(dir);
+        
+        for (const file of files) {
+          const fullPath = path.join(dir, file);
+          const stats = await fs.stat(fullPath);
+          
+          if (stats.isDirectory()) {
+            // Recursively scan subdirectories
+            await scanDirectory(fullPath);
+          } else if (file.endsWith('.json') && !file.startsWith('summary')) {
+            try {
+              const content = await fs.readFile(fullPath, 'utf-8');
+              const result = JSON.parse(content) as BenchmarkResult;
+              results.push(result);
+              logger.debug(`Loaded benchmark result from ${fullPath}`);
+            } catch (error) {
+              logger.error(`Failed to parse benchmark result: ${fullPath}`, error);
+            }
+          }
         }
       }
       
+      await scanDirectory(benchmarkDir);
+      logger.info(`Loaded ${results.length} benchmark results from ${benchmarkDir}`);
       return results;
     } catch (error) {
       logger.error('Failed to load benchmark results:', error);
@@ -66,12 +89,12 @@ const benchmarkUtils = {
   },
 
   /**
-   * Check if a benchmark directory exists, supporting both naming conventions
+   * Check if a benchmark directory exists, supporting multiple naming conventions
    * 
    * @param baseDir Base directory for benchmarks
    * @param modelId Model ID
-   * @param taskName Task name (will check both formats)
-   * @returns True if directory exists in either naming format
+   * @param taskName Task name (will check all formats)
+   * @returns True if directory exists in any naming format
    */
   async benchmarkDirectoryExists(
     baseDir: string, 
@@ -84,26 +107,30 @@ const benchmarkUtils = {
       // Check if model directory exists
       await fs.access(modelDir);
       
-      // Normalized format (lowercase with hyphens)
-      const normalizedTaskDir = path.join(modelDir, normalizeTaskName(taskName));
+      // All possible naming formats to check
+      const possibleTaskNames = [
+        normalizeTaskName(taskName),              // normalized format (simple-function)
+        taskName,                                 // original format (simple-function)
+        taskName.replace(/-/g, ' '),              // space-separated (simple function)
+        capitalizeWords(taskName.replace(/-/g, ' ')), // capitalized (Simple function)
+        taskName.split('-')[0],                   // first word only (simple)
+        capitalizeWords(taskName.split('-')[0])   // capitalized first word (Simple)
+      ];
       
-      // Legacy format (capitalized with spaces)
-      const legacyTaskDir = path.join(modelDir, taskName);
-      
-      try {
-        // Try normalized format first
-        await fs.access(normalizedTaskDir);
-        return true;
-      } catch {
+      // Check all possible directory names
+      for (const name of possibleTaskNames) {
         try {
-          // Try legacy format as fallback
-          await fs.access(legacyTaskDir);
+          const taskDir = path.join(modelDir, name);
+          await fs.access(taskDir);
+          logger.debug(`Found benchmark directory: ${taskDir}`);
           return true;
         } catch {
-          // Neither format exists
-          return false;
+          // This format doesn't exist, try next one
         }
       }
+      
+      // None of the formats exist
+      return false;
     } catch {
       // Model directory doesn't exist
       return false;
@@ -815,8 +842,90 @@ export const benchmarkService = {
         // Find the most recent comprehensive results file
         const comprehensiveFiles = files.filter(file => file.startsWith('comprehensive-results-'));
         if (comprehensiveFiles.length === 0) {
-          logger.warn('No comprehensive benchmark results found');
-          return;
+          logger.info('No comprehensive benchmark results file found. Generating one from existing results...');
+          
+          // Load existing benchmark results and generate a comprehensive results file
+          const results = await benchmarkUtils.loadResults(benchmarkDir);
+          if (results.length > 0) {
+            const comprehensiveResults: ComprehensiveBenchmarkResults = {
+              timestamp: new Date().toISOString(),
+              models: {},
+              summary: {
+                totalModels: 0,
+                averageSuccessRate: 0,
+                averageQualityScore: 0
+              }
+            };
+            
+            // Group results by model
+            const modelResults = new Map<string, BenchmarkResult[]>();
+            for (const result of results) {
+              if (result.local) {
+                const modelId = result.local.model;
+                if (!modelResults.has(modelId)) {
+                  modelResults.set(modelId, []);
+                }
+                modelResults.get(modelId)!.push(result);
+              }
+            }
+            
+            // Calculate aggregate metrics for each model
+            let totalSuccessRate = 0;
+            let totalQualityScore = 0;
+            let modelCount = 0;
+            
+            for (const [modelId, modelResultList] of modelResults.entries()) {
+              let successRateSum = 0;
+              let qualityScoreSum = 0;
+              let responseTimeSum = 0;
+              let complexityScoreSum = 0;
+              
+              for (const result of modelResultList) {
+                successRateSum += result.local.successRate;
+                qualityScoreSum += result.local.qualityScore;
+                responseTimeSum += result.local.timeTaken;
+                complexityScoreSum += result.complexity;
+              }
+              
+              // Calculate averages
+              const avgSuccessRate = successRateSum / modelResultList.length;
+              const avgQualityScore = qualityScoreSum / modelResultList.length;
+              const avgResponseTime = responseTimeSum / modelResultList.length;
+              const avgComplexityScore = complexityScoreSum / modelResultList.length;
+              
+              // Add to comprehensive results
+              comprehensiveResults.models[modelId] = {
+                successRate: avgSuccessRate,
+                qualityScore: avgQualityScore,
+                avgResponseTime: avgResponseTime,
+                benchmarkCount: modelResultList.length,
+                complexityScore: avgComplexityScore
+              };
+              
+              // Add to totals for summary
+              totalSuccessRate += avgSuccessRate;
+              totalQualityScore += avgQualityScore;
+              modelCount++;
+            }
+            
+            // Set summary data
+            if (modelCount > 0) {
+              comprehensiveResults.summary!.totalModels = modelCount;
+              comprehensiveResults.summary!.averageSuccessRate = totalSuccessRate / modelCount;
+              comprehensiveResults.summary!.averageQualityScore = totalQualityScore / modelCount;
+            }
+            
+            // Save comprehensive results
+            const timestamp = new Date().toISOString().replace(/:/g, '-');
+            const comprehensiveResultsPath = path.join(benchmarkDir, `comprehensive-results-${timestamp}.json`);
+            await fs.writeFile(comprehensiveResultsPath, JSON.stringify(comprehensiveResults, null, 2));
+            
+            logger.info(`Generated comprehensive benchmark results from ${results.length} individual results`);
+            return;
+          } else {
+            logger.warn('No benchmark results found to generate comprehensive summary');
+            return;
+          }
         }
         
         // Sort by timestamp (newest first)
@@ -826,9 +935,40 @@ export const benchmarkService = {
         // Read and parse the benchmark results
         const filePath = path.join(benchmarkDir, latestFile);
         const data = await fs.readFile(filePath, 'utf8');
-        JSON.parse(data) as ComprehensiveBenchmarkResults;
+        const benchmarkResults = JSON.parse(data) as ComprehensiveBenchmarkResults;
         
-        logger.info('Updated model performance profiles from benchmark results');
+        // Now use the benchmark results to update model profiles in database
+        if (benchmarkResults && benchmarkResults.models) {
+          const modelsDb = modelsDbService.getDatabase();
+          let updatedCount = 0;
+          
+          for (const [modelId, modelStats] of Object.entries(benchmarkResults.models)) {
+            // Only update if the model exists in database
+            if (modelsDb.models[modelId]) {
+              // Update the model with benchmark data
+              modelsDb.models[modelId] = {
+                ...modelsDb.models[modelId],
+                successRate: modelStats.successRate,
+                qualityScore: modelStats.qualityScore,
+                avgResponseTime: modelStats.avgResponseTime,
+                complexityScore: modelStats.complexityScore,
+                // Only update benchmark count if it's higher
+                benchmarkCount: Math.max(
+                  (modelsDb.models[modelId] as ModelPerformanceData).benchmarkCount || 0, 
+                  modelStats.benchmarkCount
+                )
+              };
+              
+              // Save the updated model data
+              modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+              updatedCount++;
+            }
+          }
+          
+          logger.info(`Updated performance profiles for ${updatedCount} models from benchmark results`);
+        } else {
+          logger.warn('No model data found in comprehensive benchmark results');
+        }
       } catch (error) {
         logger.warn('Could not read benchmark directory:', error);
       }
@@ -851,15 +991,93 @@ export const benchmarkService = {
         return;
       }
 
+      logger.info(`Found ${results.length} benchmark results for summarization`);
+
       // Generate summary using the benchmark module's functionality
       const summary = benchmarkUtils.generateSummary(results);
 
       // Save the summary
       await benchmarkUtils.saveSummary(summary, benchmarkDir);
       
-      logger.info('Generated and saved comprehensive benchmark summary');
+      // Also create a comprehensive results file for easier model-centric access
+      const comprehensiveResults: ComprehensiveBenchmarkResults = {
+        timestamp: new Date().toISOString(),
+        models: {},
+        summary: {
+          totalModels: 0,
+          averageSuccessRate: 0,
+          averageQualityScore: 0
+        }
+      };
+      
+      // Group results by model
+      const modelResults = new Map<string, BenchmarkResult[]>();
+      for (const result of results) {
+        if (result.local) {
+          const modelId = result.local.model;
+          if (!modelResults.has(modelId)) {
+            modelResults.set(modelId, []);
+          }
+          modelResults.get(modelId)!.push(result);
+        }
+      }
+      
+      // Calculate aggregate metrics for each model
+      let totalSuccessRate = 0;
+      let totalQualityScore = 0;
+      let modelCount = 0;
+      
+      for (const [modelId, modelResultList] of modelResults.entries()) {
+        let successRateSum = 0;
+        let qualityScoreSum = 0;
+        let responseTimeSum = 0;
+        let complexityScoreSum = 0;
+        
+        for (const result of modelResultList) {
+          successRateSum += result.local.successRate;
+          qualityScoreSum += result.local.qualityScore;
+          responseTimeSum += result.local.timeTaken;
+          complexityScoreSum += result.complexity;
+        }
+        
+        // Calculate averages
+        const avgSuccessRate = successRateSum / modelResultList.length;
+        const avgQualityScore = qualityScoreSum / modelResultList.length;
+        const avgResponseTime = responseTimeSum / modelResultList.length;
+        const avgComplexityScore = complexityScoreSum / modelResultList.length;
+        
+        // Add to comprehensive results
+        comprehensiveResults.models[modelId] = {
+          successRate: avgSuccessRate,
+          qualityScore: avgQualityScore,
+          avgResponseTime: avgResponseTime,
+          benchmarkCount: modelResultList.length,
+          complexityScore: avgComplexityScore
+        };
+        
+        logger.debug(`Model ${modelId}: ${modelResultList.length} results, quality=${avgQualityScore.toFixed(2)}, success=${avgSuccessRate.toFixed(2)}`);
+        
+        // Add to totals for summary
+        totalSuccessRate += avgSuccessRate;
+        totalQualityScore += avgQualityScore;
+        modelCount++;
+      }
+      
+      // Set summary data
+      if (modelCount > 0) {
+        comprehensiveResults.summary!.totalModels = modelCount;
+        comprehensiveResults.summary!.averageSuccessRate = totalSuccessRate / modelCount;
+        comprehensiveResults.summary!.averageQualityScore = totalQualityScore / modelCount;
+      }
+      
+      // Save comprehensive results
+      const timestamp = new Date().toISOString().replace(/:/g, '-');
+      const comprehensiveResultsPath = path.join(benchmarkDir, `comprehensive-results-${timestamp}.json`);
+      await fs.writeFile(comprehensiveResultsPath, JSON.stringify(comprehensiveResults, null, 2));
+      
+      logger.info(`Generated and saved comprehensive benchmark summary for ${modelCount} models`);
     } catch (error) {
       logger.error('Error generating comprehensive summary:', error);
     }
-  },
+  }
 };
