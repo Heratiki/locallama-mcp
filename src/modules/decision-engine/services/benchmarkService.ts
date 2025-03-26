@@ -9,6 +9,49 @@ import fs from 'fs/promises';
 import path from 'path';
 
 // Add this interface at the top of the file with other types
+/**
+ * Represents the comprehensive results of benchmarking one or more AI models.
+ * 
+ * @remarks
+ * This interface is designed to store various performance metrics collected
+ * over a set of benchmarks, including success rates, quality and complexity
+ * scores, as well as average response times. An optional summary can be
+ * provided, offering quick insights into overall metrics across all models.
+ *
+ * @property timestamp
+ * The date and time at which these benchmark results were recorded.
+ *
+ * @property models
+ * An object containing individual benchmark metrics for each model, keyed by
+ * the model identifier.
+ *
+ * @property models.[modelId].successRate
+ * The ratio of successful responses to total attempts for a particular model.
+ *
+ * @property models.[modelId].qualityScore
+ * A numerical measure of the response quality for a particular model.
+ *
+ * @property models.[modelId].avgResponseTime
+ * The average time (in milliseconds) taken by a particular model to produce a response.
+ *
+ * @property models.[modelId].benchmarkCount
+ * The total number of benchmark tests executed for a particular model.
+ *
+ * @property models.[modelId].complexityScore
+ * A score reflecting the computational or task complexity handled by a particular model.
+ *
+ * @property summary
+ * An optional section summarizing the results across all tested models.
+ *
+ * @property summary.totalModels
+ * The total number of models included in the benchmark.
+ *
+ * @property summary.averageSuccessRate
+ * The overall average success rate spanning all tested models.
+ *
+ * @property summary.averageQualityScore
+ * The overall average quality score spanning all tested models.
+ */
 interface ComprehensiveBenchmarkResults {
   timestamp: string;
   models: {
@@ -27,6 +70,13 @@ interface ComprehensiveBenchmarkResults {
   };
 }
 
+/**
+ * Represents the internal state of a benchmarking process, including rate-limiting status.
+ *
+ * @property isRateLimited - Indicates whether the current state has triggered a rate limit.
+ * @property lastRateLimitTime - The most recent timestamp when a rate limit was applied.
+ * @property failedAttempts - The count of consecutive failed benchmark attempts.
+ */
 interface BenchmarkState {
   isRateLimited: boolean;
   lastRateLimitTime?: Date;
@@ -57,6 +107,50 @@ function capitalizeWords(str: string): string {
 }
 
 // Define the benchmark utilities first
+/**
+ * A utility object containing methods for loading and processing benchmark results,
+ * checking the existence of benchmark directories, generating summaries based on
+ * benchmark data, and saving those summaries to disk.
+ *
+ * @remarks
+ * This utility operates by interfacing with the file system, reading benchmark
+ * result files, parsing their contents into structured objects, and computing
+ * metrics to derive useful insights. It also accommodates variations in directory
+ * naming conventions and provides convenience methods for persisting summary data.
+ *
+ * @public
+ *
+ * @typedef BenchmarkResult
+ * Describes the structure of a single benchmark result.
+ *
+ * @typedef BenchmarkSummary
+ * Defines the summary statistics computed across multiple benchmark results.
+ *
+ * @function loadResults
+ * Reads benchmark result files recursively from a specified directory, ignoring
+ * summary files.
+ * @param benchmarkDir - The top-level directory containing benchmark JSON files.
+ * @returns An array of parsed benchmark results.
+ *
+ * @function benchmarkDirectoryExists
+ * Determines whether a directory for a specific model ID and task name exists under
+ * the base benchmark directory. It checks various possible naming conventions.
+ * @param baseDir - Path to the base directory containing benchmark data.
+ * @param modelId - Identifier for the model, used to locate the correct directory.
+ * @param taskName - The name of the task to match against different naming patterns.
+ * @returns True if at least one matching directory is found, false otherwise.
+ *
+ * @function generateSummary
+ * Calculates aggregate metrics over an array of benchmark results, including
+ * average time, success rate, quality score, token usage, and potential cost savings.
+ * @param results - Array of benchmark results to summarize.
+ * @returns A summarized object containing both local and paid performance metrics.
+ *
+ * @function saveSummary
+ * Writes a generated benchmark summary to a JSON file in the provided directory.
+ * @param summary - The benchmark summary object to persist.
+ * @param benchmarkDir - Directory where the summary.json file should be written.
+ */
 const benchmarkUtils = {
   /**
    * Load benchmark results from a directory, recursively scanning subdirectories
