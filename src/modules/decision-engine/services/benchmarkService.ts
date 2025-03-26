@@ -3,7 +3,6 @@ import { openRouterModule } from '../../openrouter/index.js';
 import { modelsDbService } from './modelsDb.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { COMPLEXITY_THRESHOLDS, ModelPerformanceData } from '../types/index.js';
-import { Model } from '../../../types/index.js';
 import { BenchmarkResult, BenchmarkSummary } from '../../../types/benchmark.js';
 import { saveResult } from '../../benchmark/storage/results.js';
 import fs from 'fs/promises';
@@ -351,7 +350,7 @@ export const benchmarkService = {
       }
       
       // Save the database - modelsDbService doesn't have a save method, use updateModelData instead
-      modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+      await modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
     } catch (error) {
       logger.error(`Error benchmarking model ${modelId}:`, error);
     }
@@ -366,6 +365,9 @@ export const benchmarkService = {
     logger.info('Starting benchmark of free models');
     
     try {
+      // Ensure the models database is initialized
+      await modelsDbService.initialize();
+      
       // Get free models
       const freeModels = await costMonitor.getFreeModels();
       if (freeModels.length === 0) {
@@ -413,62 +415,79 @@ export const benchmarkService = {
         }
       ];
       
-      // Get the number of models to benchmark per run from environment or default to 5
-      const maxModelsPerRun = process.env.MAX_MODELS_TO_BENCHMARK ?
-        parseInt(process.env.MAX_MODELS_TO_BENCHMARK, 10) : 5;
-      
-      // Get the models database
+      // Check which models have already been benchmarked
       const modelsDb = modelsDbService.getDatabase();
+      const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
+      const modelBenchmarkStatus = new Map<string, Set<string>>();
       
-      // Check which models have been benchmarked within the last 7 days
-      const recentlyBenchmarkedModels = new Set<string>();
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // First check if models have been benchmarked based on persistence data
+      logger.info('Checking for existing benchmark results...');
       
-      for (const [modelId, modelData] of Object.entries(modelsDb.models)) {
-        const perfData = modelData as ModelPerformanceData;
-        if (perfData.lastBenchmarked) {
-          const lastBenchmarked = new Date(perfData.lastBenchmarked);
-          if (lastBenchmarked > sevenDaysAgo) {
-            recentlyBenchmarkedModels.add(modelId);
+      for (const model of freeModels) {
+        const modelId = model.id;
+        modelBenchmarkStatus.set(modelId, new Set<string>());
+        
+        // Check if model exists in database and has been benchmarked
+        const modelData = modelsDb.models[modelId] as ModelPerformanceData;
+        if (modelData && modelData.benchmarkCount > 0 && modelData.lastBenchmarked) {
+          // Assume all tasks have been benchmarked if the model has benchmark data
+          for (const task of benchmarkTasks) {
+            modelBenchmarkStatus.get(modelId)!.add(task.name);
+            logger.debug(`Found existing benchmark data in database for model ${modelId}, task ${task.name}`);
+          }
+          continue;
+        }
+        
+        // If not in database, check on disk
+        for (const task of benchmarkTasks) {
+          // Check all possible naming variations in benchmark directories
+          const hasExistingBenchmark = await benchmarkUtils.benchmarkDirectoryExists(
+            benchmarkDir,
+            modelId,
+            task.name
+          );
+          
+          if (hasExistingBenchmark) {
+            modelBenchmarkStatus.get(modelId)!.add(task.name);
+            logger.debug(`Found existing benchmark directory for model ${modelId}, task ${task.name}`);
           }
         }
       }
       
-      // Prioritize models that haven't been benchmarked recently
-      const unbenchmarkedModels = freeModels.filter(model => !recentlyBenchmarkedModels.has(model.id));
+      // Count models with complete benchmarks (all tasks benchmarked)
+      const fullyBenchmarkedModels = Array.from(modelBenchmarkStatus.entries())
+        .filter(([_, tasks]) => tasks.size === benchmarkTasks.length)
+        .map(([modelId]) => modelId);
       
-      logger.info(`Found ${unbenchmarkedModels.length} unbenchmarked models out of ${freeModels.length} total free models`);
+      logger.info(`Found ${fullyBenchmarkedModels.length} models with complete benchmarks out of ${freeModels.length} total models`);
       
-      // If we have unbenchmarked models, prioritize those
-      let modelsToBenchmark: Model[] = [];
-      if (unbenchmarkedModels.length > 0) {
-        modelsToBenchmark = unbenchmarkedModels.slice(0, maxModelsPerRun);
-        logger.info(`Benchmarking ${modelsToBenchmark.length} previously unbenchmarked models`);
-      } else {
-        // If all models have been benchmarked recently, prioritize older benchmarks
-        const modelsWithBenchmarkDates = freeModels
-          .filter(model => modelsDb.models[model.id])
-          .map(model => ({
-            model,
-            lastBenchmarked: new Date((modelsDb.models[model.id] as ModelPerformanceData).lastBenchmarked || 0)
-          }))
-          .sort((a, b) => a.lastBenchmarked.getTime() - b.lastBenchmarked.getTime());
+      // If all models are fully benchmarked, just generate the summary
+      if (fullyBenchmarkedModels.length === freeModels.length) {
+        logger.info('All models already have complete benchmarks, no need to run benchmarks');
         
-        modelsToBenchmark = modelsWithBenchmarkDates
-          .slice(0, maxModelsPerRun)
-          .map(item => item.model);
+        // Generate comprehensive summary from all benchmark results
+        await this.generateComprehensiveSummary();
         
-        logger.info(`All models have been benchmarked within 7 days. Benchmarking ${modelsToBenchmark.length} oldest benchmarked models`);
+        // Update model performance profiles
+        await this.updateModelPerformanceProfiles();
+        return;
       }
       
-      // If we somehow have no models to benchmark (shouldn't happen), just take the first few
-      if (modelsToBenchmark.length === 0) {
-        modelsToBenchmark = freeModels.slice(0, maxModelsPerRun);
-        logger.info(`Fallback: Benchmarking ${modelsToBenchmark.length} models`);
-      }
+      // Get the number of models to benchmark per run from environment or default to 5
+      const maxModelsPerRun = process.env.MAX_MODELS_TO_BENCHMARK ?
+        parseInt(process.env.MAX_MODELS_TO_BENCHMARK, 10) : 5;
       
-      logger.info(`Benchmarking ${modelsToBenchmark.length} models out of ${freeModels.length} available free models`);
+      // Prioritize models that haven't been benchmarked completely
+      const unbenchmarkedModels = freeModels.filter(
+        model => !fullyBenchmarkedModels.includes(model.id)
+      );
+      
+      logger.info(`Found ${unbenchmarkedModels.length} models needing benchmarking out of ${freeModels.length} total free models`);
+      
+      // Select models to benchmark in this run (up to maxModelsPerRun)
+      const modelsToBenchmark = unbenchmarkedModels.slice(0, maxModelsPerRun);
+      
+      logger.info(`Will benchmark ${modelsToBenchmark.length} models in this run`);
       logger.info(`Set MAX_MODELS_TO_BENCHMARK environment variable to test more models per run`);
       
       // Benchmark each model with each task
@@ -476,6 +495,12 @@ export const benchmarkService = {
         logger.info(`Benchmarking model: ${model.id}`);
         
         for (const task of benchmarkTasks) {
+          // Skip if this task has already been benchmarked for this model
+          if (modelBenchmarkStatus.get(model.id)?.has(task.name)) {
+            logger.info(`Skipping task ${task.name} for model ${model.id} - benchmark already exists`);
+            continue;
+          }
+          
           logger.info(`Task: ${task.name} (complexity: ${task.complexity})`);
           
           try {
@@ -662,7 +687,7 @@ export const benchmarkService = {
             
             // Save the database after each benchmark to preserve progress
             // Use updateModelData instead of the non-existent save method
-            modelsDbService.updateModelData(model.id, modelsDb.models[model.id]);
+            await modelsDbService.updateModelData(model.id, modelsDb.models[model.id]);
             
           } catch (error) {
             logger.error(`Error benchmarking ${model.id} with task ${task.name}:`, error);
@@ -681,7 +706,7 @@ export const benchmarkService = {
                 benchmarkCount
               } as ModelPerformanceData;
               
-              modelsDbService.updateModelData(model.id, modelsDb.models[model.id]);
+              await modelsDbService.updateModelData(model.id, modelsDb.models[model.id]);
             }
           }
           
@@ -960,7 +985,7 @@ export const benchmarkService = {
               };
               
               // Save the updated model data
-              modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+              await modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
               updatedCount++;
             }
           }
