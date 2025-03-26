@@ -47,6 +47,62 @@ LocalLama MCP Server is designed to reduce token usage and costs by dynamically 
 - Generates detailed reports for analysis and decision-making
 - Includes new tools for benchmarking free models and updating prompting strategies
 
+## Tools
+
+The following tools are available in the LocalLama MCP Server:
+
+*   `route_task`: Route a coding task to either a local LLM or a paid API based on cost and complexity.
+    *   **Input:** `task`, `context_length`, `expected_output_length`, `complexity`, `priority`, `preemptive`
+*   `retriv_init`: Initialize and configure Retriv for code search and indexing.
+    *   **Input:** `directories`, `exclude_patterns`, `chunk_size`, `force_reindex`, `bm25_options`, `install_dependencies`
+*   `cancel_job`: Cancel a running job.
+    *   **Input:** `job_id`
+*   `preemptive_route_task`: Quickly route a coding task without making API calls (faster but less accurate).
+    *   **Input:** `task`, `context_length`, `expected_output_length`, `complexity`, `priority`
+*   `get_cost_estimate`: Get an estimate of the cost for a task.
+    *   **Input:** `context_length`, `expected_output_length`, `model`
+*   `benchmark_task`: Benchmark the performance of local LLMs vs paid APIs for a specific task.
+    *   **Input:** `task_id`, `task`, `context_length`, `expected_output_length`, `complexity`, `local_model`, `paid_model`, `runs_per_task`
+*   `benchmark_tasks`: Benchmark the performance of local LLMs vs paid APIs for multiple tasks.
+    *   **Input:** `tasks`, `runs_per_task`, `parallel`, `max_parallel_tasks`
+
+The following tools are only available if Python and the `retriv` module are installed:
+
+*   `retriv_search`: Search code using Retriv search engine.
+    *   **Input:** `query`, `limit`
+
+The following tools are only available if the OpenRouter API key is configured:
+
+*   `get_free_models`: Get a list of free models available from OpenRouter.
+    *   **Input:** None
+*   `clear_openrouter_tracking`: Clear OpenRouter tracking data and force an update.
+    *   **Input:** None
+*   `benchmark_free_models`: Benchmark the performance of free models from OpenRouter.
+    *   **Input:** `tasks`, `runs_per_task`, `parallel`, `max_parallel_tasks`
+*   `set_model_prompting_strategy`: Update the prompting strategy for an OpenRouter model.
+     *   **Input:** `task`, `context_length`, `expected_output_length`, `priority`, `complexity`, `preemptive`
+
+## Resources
+
+The following resources are available in the LocalLama MCP Server:
+
+**Static Resources:**
+
+*   `locallama://status`: Current status of the LocalLama MCP Server.
+*   `locallama://models`: List of available local LLM models.
+*   `locallama://jobs/active`: List of currently active jobs.
+*   `locallama://memory-bank`: List of files in the memory bank directory (only available if the `memory-bank` directory exists).
+*   `locallama://openrouter/models`: List of available models from OpenRouter (only available if the OpenRouter API key is configured).
+*   `locallama://openrouter/free-models`: List of free models available from OpenRouter (only available if the OpenRouter API key is configured).
+*   `locallama://openrouter/status`: Status of the OpenRouter integration (only available if the OpenRouter API key is configured).
+
+**Resource Templates:**
+
+*   `locallama://usage/{api}`: Token usage and cost statistics for a specific API.
+*   `locallama://jobs/progress/{jobId}`: Progress information for a specific job.
+*   `locallama://openrouter/model/{modelId}`: Details about a specific OpenRouter model (only available if the OpenRouter API key is configured).
+*   `locallama://openrouter/prompting-strategy/{modelId}`: Prompting strategy for a specific OpenRouter model (only available if the OpenRouter API key is configured).
+
 ## Installation
 
 ```bash
@@ -59,6 +115,9 @@ npm install
 
 # Build the project
 npm run build
+
+# Install retriv dependencies (if you want to use retriv)
+pip install retriv>=0.3.1 numpy>=1.22.0 scikit-learn>=1.0.2 scipy>=1.8.0
 ```
 
 ### Python Setup for Retriv (Code Search)
