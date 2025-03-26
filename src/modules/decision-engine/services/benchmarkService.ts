@@ -27,6 +27,17 @@ interface ComprehensiveBenchmarkResults {
   };
 }
 
+interface BenchmarkState {
+  isRateLimited: boolean;
+  lastRateLimitTime?: Date;
+  failedAttempts: number;
+}
+
+const benchmarkState: BenchmarkState = {
+  isRateLimited: false,
+  failedAttempts: 0
+};
+
 /**
  * Normalize task name to a consistent format (lowercase with hyphens)
  * This ensures consistent folder naming across benchmark runs
@@ -362,6 +373,18 @@ export const benchmarkService = {
    * to make better decisions in the future
    */
   async benchmarkFreeModels(): Promise<void> {
+    if (benchmarkState.isRateLimited) {
+      const timeSinceLimit = benchmarkState.lastRateLimitTime ? 
+        (new Date().getTime() - benchmarkState.lastRateLimitTime.getTime()) / 1000 : 0;
+      
+      if (timeSinceLimit < 3600) { // Wait at least 1 hour after rate limit
+        logger.warn(`Skipping benchmarks - rate limited (${Math.round(timeSinceLimit)}s ago)`);
+        return;
+      }
+      benchmarkState.isRateLimited = false;
+      benchmarkState.failedAttempts = 0;
+    }
+
     logger.info('Starting benchmark of free models');
     
     try {
@@ -690,6 +713,28 @@ export const benchmarkService = {
             await modelsDbService.updateModelData(model.id, modelsDb.models[model.id]);
             
           } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            
+            // Check for rate limit errors
+            if (errorMsg.toLowerCase().includes('rate limit') || 
+                errorMsg.toLowerCase().includes('quota') ||
+                (error instanceof Object && 'code' in error && error.code === 429)) {
+              
+              benchmarkState.isRateLimited = true;
+              benchmarkState.lastRateLimitTime = new Date();
+              benchmarkState.failedAttempts++;
+              
+              logger.warn(`Rate limit detected, stopping benchmarks. Failed attempts: ${benchmarkState.failedAttempts}`);
+              
+              // If we've hit rate limits multiple times, wait longer before retrying
+              if (benchmarkState.failedAttempts >= 3) {
+                logger.warn('Multiple rate limits encountered, skipping remaining benchmarks');
+                return;
+              }
+              
+              break; // Exit the model loop
+            }
+
             logger.error(`Error benchmarking ${model.id} with task ${task.name}:`, error);
             
             // Mark the model as failed in the database
