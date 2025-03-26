@@ -28,6 +28,17 @@ interface ComprehensiveBenchmarkResults {
   };
 }
 
+/**
+ * Normalize task name to a consistent format (lowercase with hyphens)
+ * This ensures consistent folder naming across benchmark runs
+ * 
+ * @param taskName The task name to normalize
+ * @returns Normalized task name (lowercase with hyphens)
+ */
+function normalizeTaskName(taskName: string): string {
+  return taskName.toLowerCase().replace(/\s+/g, '-');
+}
+
 // Define the benchmark utilities first
 const benchmarkUtils = {
   /**
@@ -51,6 +62,51 @@ const benchmarkUtils = {
     } catch (error) {
       logger.error('Failed to load benchmark results:', error);
       return [];
+    }
+  },
+
+  /**
+   * Check if a benchmark directory exists, supporting both naming conventions
+   * 
+   * @param baseDir Base directory for benchmarks
+   * @param modelId Model ID
+   * @param taskName Task name (will check both formats)
+   * @returns True if directory exists in either naming format
+   */
+  async benchmarkDirectoryExists(
+    baseDir: string, 
+    modelId: string, 
+    taskName: string
+  ): Promise<boolean> {
+    const modelDir = path.join(baseDir, modelId.replace(/\//g, '-'));
+    
+    try {
+      // Check if model directory exists
+      await fs.access(modelDir);
+      
+      // Normalized format (lowercase with hyphens)
+      const normalizedTaskDir = path.join(modelDir, normalizeTaskName(taskName));
+      
+      // Legacy format (capitalized with spaces)
+      const legacyTaskDir = path.join(modelDir, taskName);
+      
+      try {
+        // Try normalized format first
+        await fs.access(normalizedTaskDir);
+        return true;
+      } catch {
+        try {
+          // Try legacy format as fallback
+          await fs.access(legacyTaskDir);
+          return true;
+        } catch {
+          // Neither format exists
+          return false;
+        }
+      }
+    } catch {
+      // Model directory doesn't exist
+      return false;
     }
   },
 
@@ -292,9 +348,10 @@ export const benchmarkService = {
       
       logger.info(`Found ${freeModels.length} free models to benchmark`);
       
-      // Define test tasks with varying complexity
+      // Define test tasks with normalized names and varying complexity
       const benchmarkTasks = [
         {
+          // Use normalized name format (lowercase with hyphens)
           name: 'simple-function',
           task: 'Write a function to calculate the factorial of a number.',
           complexity: 0.2,
@@ -311,6 +368,7 @@ export const benchmarkService = {
           }
         },
         {
+          // Use normalized name format (lowercase with hyphens)
           name: 'medium-algorithm',
           task: 'Implement a binary search algorithm and explain its time complexity.',
           complexity: 0.5,
@@ -413,6 +471,7 @@ export const benchmarkService = {
               
               // Create a benchmark result record
               const taskResult: BenchmarkResult = {
+                // Use normalized task name for consistent file saving
                 taskId: `${task.name}-${model.id}`,
                 task: task.task,
                 contextLength: task.task.length,
@@ -529,6 +588,7 @@ export const benchmarkService = {
               
               // Create a benchmark result record for the failed attempt
               const failedResult: BenchmarkResult = {
+                // Use normalized task name for consistent file saving
                 taskId: `${task.name}-${model.id}-failed`,
                 task: task.task,
                 contextLength: task.task.length,

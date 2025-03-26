@@ -7,6 +7,17 @@ import * as fs from 'fs';
 
 const DB_PATH = process.env.BENCHMARK_DB_PATH || './data/benchmark-results.db';
 
+/**
+ * Normalize task name to a consistent format (lowercase with hyphens)
+ * This ensures consistent naming across benchmark runs
+ * 
+ * @param taskName The task name to normalize
+ * @returns Normalized task name (lowercase with hyphens)
+ */
+function normalizeTaskName(taskName: string): string {
+  return taskName.toLowerCase().replace(/\s+/g, '-');
+}
+
 interface TokenUsage {
   prompt: number;
   completion: number;
@@ -94,18 +105,48 @@ export async function saveBenchmarkResult(result: BenchmarkResult): Promise<void
   try {
     await db.run('BEGIN TRANSACTION');
 
+    // Normalize taskId for consistency
+    // Check if normalization is needed
+    const originalTaskId = result.taskId;
+    let taskId = originalTaskId;
+    
+    // Normalize taskId if it contains spaces or uppercase letters
+    if (/\s/.test(taskId) || /[A-Z]/.test(taskId)) {
+      // Extract parts and normalize the task name part
+      const parts = taskId.split('-');
+      
+      if (parts.length > 1) {
+        // If it's already in the format "taskname-modelid", normalize the task name part
+        parts[0] = normalizeTaskName(parts[0]);
+        taskId = parts.join('-');
+      } else {
+        // If it's a simple string, normalize the whole thing
+        taskId = normalizeTaskName(taskId);
+      }
+    }
+    
+    // Update taskId in the result object
+    const normalizedResult = { ...result, taskId };
+
     // Save task information
     await db.run(
       'INSERT OR REPLACE INTO benchmark_tasks (taskId, task, contextLength, outputLength, complexity, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-      [result.taskId, result.task, result.contextLength, result.outputLength, result.complexity, result.timestamp]
+      [
+        normalizedResult.taskId, 
+        normalizedResult.task, 
+        normalizedResult.contextLength, 
+        normalizedResult.outputLength, 
+        normalizedResult.complexity, 
+        normalizedResult.timestamp
+      ]
     );
 
     // Save local model result
-    await saveModelResult(db, result.taskId, result.local, true, result.timestamp);
+    await saveModelResult(db, normalizedResult.taskId, normalizedResult.local, true, normalizedResult.timestamp);
 
     // Save paid model result if available
-    if (result.paid.model) {
-      await saveModelResult(db, result.taskId, result.paid, false, result.timestamp);
+    if (normalizedResult.paid.model) {
+      await saveModelResult(db, normalizedResult.taskId, normalizedResult.paid, false, normalizedResult.timestamp);
     }
 
     await db.run('COMMIT');
@@ -201,5 +242,128 @@ export async function cleanupOldResults(days: number = 30): Promise<void> {
   } catch (error) {
     await db.run('ROLLBACK');
     logger.error('Failed to cleanup old results:', error);
+  }
+}
+
+/**
+ * Get results for a specific task, supporting both naming conventions
+ */
+export async function getTaskResults(taskName: string): Promise<BenchmarkResult[]> {
+  const db = await initBenchmarkDb();
+  if (!db) return [];
+
+  try {
+    // Normalize task name for querying
+    const normalizedTaskName = normalizeTaskName(taskName);
+    
+    // Create pattern to match either the normalized name or the original name
+    const taskPattern = `%${normalizedTaskName}%`;
+    const originalTaskPattern = `%${taskName}%`;
+
+    // Query for benchmark tasks matching either pattern
+    const tasks = await db.all<Array<{taskId: string}>>(
+      `SELECT taskId FROM benchmark_tasks 
+       WHERE taskId LIKE ? OR taskId LIKE ?`,
+      [taskPattern, originalTaskPattern]
+    );
+
+    if (!tasks || tasks.length === 0) {
+      return [];
+    }
+
+    // Get all task IDs that matched
+    const taskIds = tasks.map(t => t.taskId);
+    
+    // Define a proper type for the SQL query results
+    interface SqlBenchmarkResult {
+      taskId: string;
+      task: string;
+      contextLength: number;
+      outputLength: number;
+      complexity: number;
+      timestamp: string;
+      local_model: string;
+      local_timeTaken: number;
+      local_successRate: number;
+      local_qualityScore: number;
+      local_promptTokens: number;
+      local_completionTokens: number;
+      local_totalTokens: number;
+      local_output: string;
+      paid_model: string;
+      paid_timeTaken: number;
+      paid_successRate: number;
+      paid_qualityScore: number;
+      paid_promptTokens: number;
+      paid_completionTokens: number;
+      paid_totalTokens: number;
+      paid_cost: number;
+      paid_output: string;
+    }
+    
+    // Build a query to fetch all results for these tasks
+    const placeholders = taskIds.map(() => '?').join(',');
+    const results = await db.all<SqlBenchmarkResult[]>(
+      `SELECT t.*, 
+        mr_local.model AS local_model,
+        mr_local.timeTaken AS local_timeTaken,
+        mr_local.successRate AS local_successRate,
+        mr_local.qualityScore AS local_qualityScore,
+        mr_local.promptTokens AS local_promptTokens,
+        mr_local.completionTokens AS local_completionTokens,
+        mr_local.totalTokens AS local_totalTokens,
+        mr_local.output AS local_output,
+        mr_paid.model AS paid_model,
+        mr_paid.timeTaken AS paid_timeTaken,
+        mr_paid.successRate AS paid_successRate,
+        mr_paid.qualityScore AS paid_qualityScore,
+        mr_paid.promptTokens AS paid_promptTokens,
+        mr_paid.completionTokens AS paid_completionTokens,
+        mr_paid.totalTokens AS paid_totalTokens,
+        mr_paid.cost AS paid_cost,
+        mr_paid.output AS paid_output
+      FROM benchmark_tasks t
+      LEFT JOIN model_results mr_local ON t.taskId = mr_local.taskId AND mr_local.isLocal = 1
+      LEFT JOIN model_results mr_paid ON t.taskId = mr_paid.taskId AND mr_paid.isLocal = 0
+      WHERE t.taskId IN (${placeholders})`,
+      taskIds
+    );
+
+    return results.map(row => ({
+      taskId: row.taskId,
+      task: row.task,
+      contextLength: row.contextLength,
+      outputLength: row.outputLength,
+      complexity: row.complexity,
+      local: {
+        model: row.local_model || '',
+        timeTaken: row.local_timeTaken || 0,
+        successRate: row.local_successRate || 0,
+        qualityScore: row.local_qualityScore || 0,
+        tokenUsage: {
+          prompt: row.local_promptTokens || 0,
+          completion: row.local_completionTokens || 0,
+          total: row.local_totalTokens || 0
+        },
+        output: row.local_output || ''
+      },
+      paid: {
+        model: row.paid_model || '',
+        timeTaken: row.paid_timeTaken || 0,
+        successRate: row.paid_successRate || 0,
+        qualityScore: row.paid_qualityScore || 0,
+        tokenUsage: {
+          prompt: row.paid_promptTokens || 0,
+          completion: row.paid_completionTokens || 0,
+          total: row.paid_totalTokens || 0
+        },
+        cost: row.paid_cost || 0,
+        output: row.paid_output || ''
+      },
+      timestamp: row.timestamp
+    }));
+  } catch (error) {
+    logger.error('Failed to get task results:', error);
+    return [];
   }
 }
