@@ -59,9 +59,10 @@ export class Router implements IRouter {
       
       if (allowsAnyAPI) {
         try {
-          taskAnalysis = await decisionEngine.analyzeCodeTask(params.task);
-          hasSubtasks = taskAnalysis && taskAnalysis.executionOrder && taskAnalysis.executionOrder.length > 0;
-          logger.info(`Task analysis complete. Found ${hasSubtasks ? taskAnalysis.executionOrder.length : 0} subtasks.`);
+          const analysisResult = await decisionEngine.analyzeCodeTask(params.task);
+          taskAnalysis = analysisResult;
+          hasSubtasks = Boolean(analysisResult?.executionOrder?.length);
+          logger.info(`Task analysis complete. Found ${hasSubtasks ? analysisResult.executionOrder.length : 0} subtasks.`);
         } catch (error) {
           logger.warn('Error analyzing task:', error);
           // Continue with normal processing if task analysis fails
