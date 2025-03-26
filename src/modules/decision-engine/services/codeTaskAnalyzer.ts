@@ -343,84 +343,41 @@ export const codeTaskAnalyzer = {
       const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) ||
                         response.match(/\{[\s\S]*?\}/);
       
-      /*
-      Author: Roo
-      Date: March 11, 2025, 8:29:49 PM
-      Original code preserved below - modified to ensure JSON-parsed subtask IDs are always strings
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const parsed = JSON.parse(jsonStr) as unknown;
-        
-        // Validate that parsed data matches CodeComplexityResult structure
-        if (
-          typeof parsed === 'object' && parsed !== null &&
-          typeof (parsed as any).overallComplexity === 'number' &&
-          typeof (parsed as any).factors === 'object' &&
-          typeof (parsed as any).explanation === 'string'
-        ) {
-          return parsed as CodeComplexityResult;
-        }
-        
-        // If validation fails, continue to fallback parsing
-      }
-      */
-      
-      if (jsonMatch) {
-        const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const parsed: unknown = JSON.parse(jsonStr);
-        
-        // Ensure all subtask IDs are strings
-        // Define minimal type for raw subtask data
-        type RawSubtask = {
-          id?: string | number;
-          [key: string]: unknown;
-        };
-        
-        if (Array.isArray(parsed)) {
-          return parsed.map((subtask: RawSubtask) => ({
-            ...subtask,
-            id: subtask.id ? String(subtask.id) : uuidv4(),
-          }));
-        } else if (isSubtasksWrapper(parsed)) {
-          // Handle case where JSON contains a wrapper object with subtasks array
-          return parsed.subtasks.map((subtask: RawSubtask) => ({
-            ...subtask,
-            id: subtask.id ? String(subtask.id) : uuidv4(),
-          }));
-        }
-          return []; // Return empty array if JSON doesn't match expected format
-        }
-        
-        // Fallback to heuristic parsing if JSON extraction fails
-      /*
-      Author: Roo
-      Date: March 11, 2025, 8:29:12 PM
-      Original code preserved below - modified to ensure subtask.id is always a string
-      const sections = response.split(/\n\s*\d+\.\s+/);
-      return sections
-        .filter(section => section.trim().length > 0)
-        .map((section, index) => {
-          const descriptionMatch = section.match(/(?:Title|Description|Task):\s*(.+?)(?:\n|$)/i);
-          const complexityMatch = section.match(/Complexity:\s*(\d+(?:\.\d+)?)/i);
-          const tokensMatch = section.match(/Tokens?:\s*(\d+)/i);
-          const dependenciesMatch = section.match(/Dependencies?:\s*(.+?)(?:\n|$)/i);
-          const typeMatch = section.match(/Type:\s*(\w+)/i);
+        try {
+          const parsed: unknown = JSON.parse(jsonStr);
           
-          return {
-            id: uuidv4(),
-            description: descriptionMatch ? descriptionMatch[1].trim() : section.trim().split('\n')[0],
-            complexity: complexityMatch ? parseFloat(complexityMatch[1]) : 0.5,
-            estimatedTokens: tokensMatch ? parseInt(tokensMatch[1]) : 1000,
-            dependencies: dependenciesMatch ?
-              dependenciesMatch[1].split(',').map(d => d.trim()) : [],
-            codeType: typeMatch ? typeMatch[1].toLowerCase() : 'other'
+          // Ensure all subtask IDs are strings
+          // Define minimal type for raw subtask data
+          type RawSubtask = {
+            id?: string | number;
+            [key: string]: unknown;
           };
-        });
-      */
-      
-      // Parse sections with string ID validation
+          
+          if (Array.isArray(parsed)) {
+            return parsed.map((subtask: RawSubtask) => ({
+              ...subtask,
+              id: subtask.id ? String(subtask.id) : uuidv4(),
+            }));
+          } else if (isSubtasksWrapper(parsed)) {
+            // Handle case where JSON contains a wrapper object with subtasks array
+            return parsed.subtasks.map((subtask: RawSubtask) => ({
+              ...subtask,
+              id: subtask.id ? String(subtask.id) : uuidv4(),
+            }));
+          } else {
+            logger.warn('JSON does not match expected subtasks format');
+            return []; // Return empty array if JSON doesn't match expected format
+          }
+        } catch (jsonError: unknown) {
+          logger.warn(`Failed to parse JSON: ${String(jsonError)}`);
+        }
+      }
+        
+      // Fallback to heuristic parsing if JSON extraction fails
       const sections = response.split(/\n\s*\d+\.\s+/);
-      return sections
+      const subtasks = sections
         .filter(section => section.trim().length > 0)
         .map(section => {
           const descriptionMatch = section.match(/(?:Title|Description|Task):\s*(.+?)(?:\n|$)/i);
@@ -443,6 +400,7 @@ export const codeTaskAnalyzer = {
             codeType: typeMatch ? typeMatch[1].toLowerCase() : 'other'
           };
         });
+      return subtasks;
     } catch (error) {
       logger.error('Error parsing subtasks from response:', error);
       // Return a basic subtask if parsing fails
