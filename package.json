@@ -5,9 +5,9 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/utils/lock-file.js dist/utils/",
     "start": "node dist/index.js",
-    "dev": "tsc -w & node --watch dist/index.js",
+    "dev": "tsc -w & (cp -r src/utils/lock-file.js dist/utils/ && node --watch dist/index.js)",
     "test": "jest --config=jest.config.js",
     "test:watch": "jest --config=jest.config.js --watch",
     "lint": "eslint src --ext .ts",

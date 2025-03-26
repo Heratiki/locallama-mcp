@@ -4,6 +4,8 @@ import { modelsDbService } from './modelsDb.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { COMPLEXITY_THRESHOLDS, ModelPerformanceData } from '../types/index.js';
 import { Model } from '../../../types/index.js';
+import { BenchmarkResult } from '../../../types/benchmark.js';
+import { saveResult } from '../../benchmark/storage/results.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -323,6 +325,49 @@ export const benchmarkService = {
                 } as ModelPerformanceData;
               }
               
+              // Create a benchmark result record
+              const benchmarkResult: BenchmarkResult = {
+                taskId: `${task.name}-${model.id}`,
+                task: task.task,
+                contextLength: task.task.length,
+                outputLength: result.text ? result.text.length : 0,
+                complexity: task.complexity,
+                local: {
+                  model: model.id,
+                  timeTaken: responseTime,
+                  successRate: isWorkingCode ? 1 : 0,
+                  qualityScore: qualityScore,
+                  tokenUsage: {
+                    prompt: result.usage?.prompt_tokens || task.task.length / 4,
+                    completion: result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0),
+                    total: (result.usage?.prompt_tokens || task.task.length / 4) + (result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0))
+                  },
+                  output: result.text || ''
+                },
+                paid: {
+                  model: 'none',
+                  timeTaken: 0,
+                  successRate: 0,
+                  qualityScore: 0,
+                  tokenUsage: {
+                    prompt: 0,
+                    completion: 0, 
+                    total: 0
+                  },
+                  cost: 0,
+                  output: ''
+                },
+                timestamp: new Date().toISOString()
+              };
+              
+              // Save the benchmark result to the benchmark-results folder
+              try {
+                await saveResult(benchmarkResult, path.join(process.cwd(), 'benchmark-results'));
+                logger.info(`Saved benchmark result for ${model.id} with task ${task.name} to benchmark-results folder`);
+              } catch (saveError) {
+                logger.error(`Error saving benchmark result for ${model.id}: ${String(saveError)}`);
+              }
+              
               logger.info(`Benchmarked ${model.id} with task ${task.name}: Working code=${isWorkingCode}, Quality=${qualityScore.toFixed(2)}, Time=${responseTime}ms`);
             } else {
               // Model failed to produce a response
@@ -355,6 +400,49 @@ export const benchmarkService = {
                   lastBenchmarked: new Date().toISOString(),
                   benchmarkCount
                 } as ModelPerformanceData;
+              }
+              
+              // Create a benchmark result record for the failed attempt
+              const benchmarkResult: BenchmarkResult = {
+                taskId: `${task.name}-${model.id}-failed`,
+                task: task.task,
+                contextLength: task.task.length,
+                outputLength: 0,
+                complexity: task.complexity,
+                local: {
+                  model: model.id,
+                  timeTaken: responseTime,
+                  successRate: 0,
+                  qualityScore: 0,
+                  tokenUsage: {
+                    prompt: result?.usage?.prompt_tokens || task.task.length / 4,
+                    completion: 0,
+                    total: result?.usage?.prompt_tokens || task.task.length / 4
+                  },
+                  output: result?.text || ''
+                },
+                paid: {
+                  model: 'none',
+                  timeTaken: 0,
+                  successRate: 0,
+                  qualityScore: 0,
+                  tokenUsage: {
+                    prompt: 0,
+                    completion: 0, 
+                    total: 0
+                  },
+                  cost: 0,
+                  output: ''
+                },
+                timestamp: new Date().toISOString()
+              };
+              
+              // Save the benchmark result to the benchmark-results folder
+              try {
+                await saveResult(benchmarkResult, path.join(process.cwd(), 'benchmark-results'));
+                logger.info(`Saved failed benchmark result for ${model.id} with task ${task.name} to benchmark-results folder`);
+              } catch (saveError) {
+                logger.error(`Error saving failed benchmark result for ${model.id}: ${String(saveError)}`);
               }
               
               logger.warn(`Model ${model.id} failed to produce a valid response for task ${task.name}`);
