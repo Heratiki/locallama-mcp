@@ -295,29 +295,35 @@ export const benchmarkService = {
       // Define test tasks with varying complexity
       const benchmarkTasks = [
         {
-          name: 'Simple function',
+          name: 'simple-function',
           task: 'Write a function to calculate the factorial of a number.',
           complexity: 0.2,
           codeCheck: (response: string) => {
-            // Using the more comprehensive quality evaluation function
-            return this.evaluateCodeQuality(
+            // Using the more comprehensive quality evaluation function with gradual scoring
+            const score = this.evaluateCodeQuality(
               'Write a function to calculate the factorial of a number.',
               response,
               'factorial'
-            ) >= 0.6; // Threshold of 0.6 for a "good" implementation
+            );
+            
+            // Return true if meets minimum threshold but preserve actual score
+            return score >= 0.5; // Lowered threshold for more granular results
           }
         },
         {
-          name: 'Medium algorithm',
+          name: 'medium-algorithm',
           task: 'Implement a binary search algorithm and explain its time complexity.',
           complexity: 0.5,
           codeCheck: (response: string) => {
-            // Using the more comprehensive quality evaluation function
-            return this.evaluateCodeQuality(
+            // Using the more comprehensive quality evaluation function with gradual scoring
+            const score = this.evaluateCodeQuality(
               'Implement a binary search algorithm and explain its time complexity.',
               response,
               'binary-search'
-            ) >= 0.6; // Threshold of 0.6 for a "good" implementation
+            );
+            
+            // Return true if meets minimum threshold but preserve actual score
+            return score >= 0.5; // Lowered threshold for more granular results
           }
         }
       ];
@@ -329,42 +335,46 @@ export const benchmarkService = {
       // Get the models database
       const modelsDb = modelsDbService.getDatabase();
       
-      // Check which models have already been benchmarked
-      const benchmarkedModels = new Set<string>();
+      // Check which models have been benchmarked within the last 7 days
+      const recentlyBenchmarkedModels = new Set<string>();
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
       for (const [modelId, modelData] of Object.entries(modelsDb.models)) {
         const perfData = modelData as ModelPerformanceData;
-        if (perfData.benchmarkCount > 0) {
-          benchmarkedModels.add(modelId);
+        if (perfData.lastBenchmarked) {
+          const lastBenchmarked = new Date(perfData.lastBenchmarked);
+          if (lastBenchmarked > sevenDaysAgo) {
+            recentlyBenchmarkedModels.add(modelId);
+          }
         }
       }
       
-      // Prioritize models that haven't been benchmarked yet
-      const unbenchmarkedModels = freeModels.filter(model => !benchmarkedModels.has(model.id));
+      // Prioritize models that haven't been benchmarked recently
+      const unbenchmarkedModels = freeModels.filter(model => !recentlyBenchmarkedModels.has(model.id));
       
       logger.info(`Found ${unbenchmarkedModels.length} unbenchmarked models out of ${freeModels.length} total free models`);
       
       // If we have unbenchmarked models, prioritize those
       let modelsToBenchmark: Model[] = [];
       if (unbenchmarkedModels.length > 0) {
-        // Take up to maxModelsPerRun unbenchmarked models
         modelsToBenchmark = unbenchmarkedModels.slice(0, maxModelsPerRun);
         logger.info(`Benchmarking ${modelsToBenchmark.length} previously unbenchmarked models`);
       } else {
-        // If all models have been benchmarked at least once, prioritize models with the fewest benchmarks
-        const modelsWithBenchmarkCounts = freeModels
+        // If all models have been benchmarked recently, prioritize older benchmarks
+        const modelsWithBenchmarkDates = freeModels
           .filter(model => modelsDb.models[model.id])
           .map(model => ({
             model,
-            benchmarkCount: (modelsDb.models[model.id] as ModelPerformanceData).benchmarkCount || 0
+            lastBenchmarked: new Date((modelsDb.models[model.id] as ModelPerformanceData).lastBenchmarked || 0)
           }))
-          .sort((a, b) => a.benchmarkCount - b.benchmarkCount);
+          .sort((a, b) => a.lastBenchmarked.getTime() - b.lastBenchmarked.getTime());
         
-        // Take the models with the fewest benchmarks
-        modelsToBenchmark = modelsWithBenchmarkCounts
+        modelsToBenchmark = modelsWithBenchmarkDates
           .slice(0, maxModelsPerRun)
           .map(item => item.model);
         
-        logger.info(`All models have been benchmarked at least once. Benchmarking ${modelsToBenchmark.length} models with the fewest benchmark runs`);
+        logger.info(`All models have been benchmarked within 7 days. Benchmarking ${modelsToBenchmark.length} oldest benchmarked models`);
       }
       
       // If we somehow have no models to benchmark (shouldn't happen), just take the first few
@@ -380,45 +390,70 @@ export const benchmarkService = {
       for (const model of modelsToBenchmark) {
         logger.info(`Benchmarking model: ${model.id}`);
         
-        // Check if we've already benchmarked this model recently (within 7 days)
-        const modelData = modelsDb.models[model.id] as ModelPerformanceData;
-        if (modelData && modelData.lastBenchmarked) {
-          const lastBenchmarked = new Date(modelData.lastBenchmarked);
-          const now = new Date();
-          const daysSinceLastBenchmark = (now.getTime() - lastBenchmarked.getTime()) / (1000 * 60 * 60 * 24);
-          
-          if (daysSinceLastBenchmark < 7 && modelData.benchmarkCount >= 3) {
-            logger.info(`Skipping benchmark for ${model.id} - already benchmarked ${modelData.benchmarkCount} times, last on ${modelData.lastBenchmarked}`);
-            continue;
-          }
-        }
-        
         for (const task of benchmarkTasks) {
           logger.info(`Task: ${task.name} (complexity: ${task.complexity})`);
           
           try {
-            // Call the model using OpenRouter with a longer timeout
             const startTime = Date.now();
             const result = await openRouterModule.callOpenRouterApi(
               model.id,
               task.task,
-              120000 // 2 minute timeout to give models enough time to complete
+              120000 // 2 minute timeout
             );
             const endTime = Date.now();
             const responseTime = endTime - startTime;
             
-            // Check if the response contains working code
             let qualityScore = 0;
             let isWorkingCode = false;
             
             if (result && result.success && result.text) {
-              // Check if the code works using the task-specific checker
+              // Check if the code works and get quality score
+              qualityScore = openRouterModule.evaluateQuality(task.task, result.text);
               isWorkingCode = task.codeCheck(result.text);
               
-              // Calculate quality score based on the response
-              qualityScore = isWorkingCode ?
-                openRouterModule.evaluateQuality(task.task, result.text) : 0.1;
-              
+              // Create a benchmark result record
+              const taskResult: BenchmarkResult = {
+                taskId: `${task.name}-${model.id}`,
+                task: task.task,
+                contextLength: task.task.length,
+                outputLength: result.text ? result.text.length : 0,
+                complexity: task.complexity,
+                local: {
+                  model: model.id,
+                  timeTaken: responseTime,
+                  successRate: isWorkingCode ? 1 : 0,
+                  qualityScore: qualityScore,
+                  tokenUsage: {
+                    prompt: result.usage?.prompt_tokens || task.task.length / 4,
+                    completion: result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0),
+                    total: (result.usage?.prompt_tokens || task.task.length / 4) + (result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0))
+                  },
+                  output: result.text || ''
+                },
+                paid: {
+                  model: 'none',
+                  timeTaken: 0,
+                  successRate: 0,
+                  qualityScore: 0,
+                  tokenUsage: {
+                    prompt: 0,
+                    completion: 0, 
+                    total: 0
+                  },
+                  cost: 0,
+                  output: ''
+                },
+                timestamp: new Date().toISOString()
+              };
+
+              // Save the benchmark result
+              try {
+                await saveResult(taskResult, path.join(process.cwd(), 'benchmark-results'));
+                logger.info(`Saved benchmark result for ${model.id} with task ${task.name} to benchmark-results folder`);
+              } catch (saveError) {
+                logger.error(`Error saving benchmark result for ${model.id}: ${String(saveError)}`);
+              }
+
               // Update the model data
               if (!modelsDb.models[model.id]) {
                 // Initialize model data if it doesn't exist
@@ -458,49 +493,6 @@ export const benchmarkService = {
                 } as ModelPerformanceData;
               }
               
-              // Create a benchmark result record
-              const benchmarkResult: BenchmarkResult = {
-                taskId: `${task.name}-${model.id}`,
-                task: task.task,
-                contextLength: task.task.length,
-                outputLength: result.text ? result.text.length : 0,
-                complexity: task.complexity,
-                local: {
-                  model: model.id,
-                  timeTaken: responseTime,
-                  successRate: isWorkingCode ? 1 : 0,
-                  qualityScore: qualityScore,
-                  tokenUsage: {
-                    prompt: result.usage?.prompt_tokens || task.task.length / 4,
-                    completion: result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0),
-                    total: (result.usage?.prompt_tokens || task.task.length / 4) + (result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0))
-                  },
-                  output: result.text || ''
-                },
-                paid: {
-                  model: 'none',
-                  timeTaken: 0,
-                  successRate: 0,
-                  qualityScore: 0,
-                  tokenUsage: {
-                    prompt: 0,
-                    completion: 0, 
-                    total: 0
-                  },
-                  cost: 0,
-                  output: ''
-                },
-                timestamp: new Date().toISOString()
-              };
-              
-              // Save the benchmark result to the benchmark-results folder
-              try {
-                await saveResult(benchmarkResult, path.join(process.cwd(), 'benchmark-results'));
-                logger.info(`Saved benchmark result for ${model.id} with task ${task.name} to benchmark-results folder`);
-              } catch (saveError) {
-                logger.error(`Error saving benchmark result for ${model.id}: ${String(saveError)}`);
-              }
-              
               logger.info(`Benchmarked ${model.id} with task ${task.name}: Working code=${isWorkingCode}, Quality=${qualityScore.toFixed(2)}, Time=${responseTime}ms`);
             } else {
               // Model failed to produce a response
@@ -536,7 +528,7 @@ export const benchmarkService = {
               }
               
               // Create a benchmark result record for the failed attempt
-              const benchmarkResult: BenchmarkResult = {
+              const failedResult: BenchmarkResult = {
                 taskId: `${task.name}-${model.id}-failed`,
                 task: task.task,
                 contextLength: task.task.length,
@@ -570,9 +562,9 @@ export const benchmarkService = {
                 timestamp: new Date().toISOString()
               };
               
-              // Save the benchmark result to the benchmark-results folder
+              // Save the failed benchmark result
               try {
-                await saveResult(benchmarkResult, path.join(process.cwd(), 'benchmark-results'));
+                await saveResult(failedResult, path.join(process.cwd(), 'benchmark-results'));
                 logger.info(`Saved failed benchmark result for ${model.id} with task ${task.name} to benchmark-results folder`);
               } catch (saveError) {
                 logger.error(`Error saving failed benchmark result for ${model.id}: ${String(saveError)}`);
@@ -636,52 +628,115 @@ export const benchmarkService = {
    */
   evaluateCodeQuality(task: string, response: string, taskType: string = 'general'): number {
     try {
-      // Simplified evaluation for benchmarking
       let score = 0;
-      // const responseLower = response.toLowerCase(); // TODO: Check if this is used elsewhere in the codebase
+      const responseLower = response.toLowerCase();
+      
+      // Check if response contains actual code and validate language format
+      const codePatterns = {
+        hasFunction: /\b(?:function|def|class|const|let|var)\b/.test(response),
+        hasCodeBlock: /```[\s\S]*?```/.test(response) || 
+                     /^[ ]{4}[\s\S]+/m.test(response) || 
+                     /<code>[\s\S]*?<\/code>/.test(response),
+        hasDocs: /(?:\/\*[\s\S]*?\*\/|\/\/.*|#.*|"""[\s\S]*?"""|'''[\s\S]*?''')/.test(response)
+      };
 
-      // Check if the response contains code
-      const hasCode = response.includes('function') ||
-                      response.includes('def ') ||
-                      response.includes('class ') ||
-                      response.includes('const ') ||
-                      response.includes('let ') ||
-                      response.includes('var ');
-
-      // Check for code blocks (markdown or other formats)
-      const hasCodeBlocks = response.includes('```') ||
-                            response.includes('    ') || // Indented code
-                            response.includes('<code>');
-
-      // Basic quality scoring
-      if (hasCode) score += 0.3;
-      if (hasCodeBlocks) score += 0.2;
-
-      // Task-specific checks
-      if (taskType === 'factorial') {
-        if (response.includes('factorial') && 
-            (response.includes('*') || response.includes('product')) &&
-            (response.includes('if') || response.includes('return'))) {
-          score += 0.4;
-        }
-      } else if (taskType === 'binary-search') {
-        if (response.includes('binarySearch') && 
-            response.includes('mid') &&
-            (response.includes('log') || response.includes('complexity'))) {
-          score += 0.4;
-        }
+      if (!codePatterns.hasFunction || !codePatterns.hasCodeBlock) {
+        return 0.1; // Minimal score for any response with no proper code
       }
 
-      // Penalize very short responses
-      if (response.length < 100) {
-        score *= (response.length / 100);
+      // Base score for proper code formatting
+      score += 0.2;
+      if (codePatterns.hasDocs) score += 0.1;
+
+      // Task-specific scoring
+      switch(taskType) {
+        case 'factorial': {
+          // Check for factorial implementation
+          if (responseLower.includes('factorial')) {
+            score += 0.1;
+            
+            // Base case handling
+            if (/(?:n\s*(?:==|<=)\s*[01]|if\s*\(\s*n\s*(?:==|<=)\s*[01]\))/.test(response)) {
+              score += 0.1;
+            }
+            
+            // Proper recursion or iteration
+            if (/(for|while).*\b(n|i)\b.*\*/.test(response) || 
+                /return.*factorial.*\(.*n\s*-\s*1.*\)/.test(response)) {
+              score += 0.2;
+            }
+            
+            // Input validation
+            if (/(?:if|throw|raise).*(?:<\s*0|negative)/.test(response)) {
+              score += 0.1;
+            }
+            
+            // Example usage or test case
+            if (/(?:console\.log|print|assert).*factorial/.test(response)) {
+              score += 0.1;
+            }
+          }
+          break;
+        }
+
+        case 'binary-search': {
+          // Check for binary search core components
+          const binarySearchPatterns = {
+            hasCoreLogic: /(?:mid|middle)\s*=.*(?:\/\s*2|>>\s*1)/.test(response), // Fixed escape chars
+            hasPointers: /(?:left|low|right|high)\s*=/.test(response),
+            hasComparison: /(?:if|while).*(?:>|<|==)/.test(response),
+            hasComplexity: /[oO]\s*\(\s*log\s*[nN]\s*\)/.test(response),
+            hasExplanation: /(?:time|space)\s*complex/i.test(response)
+          };
+
+          if (responseLower.includes('binary') && responseLower.includes('search')) {
+            score += 0.1;
+            
+            // Core algorithm components
+            if (binarySearchPatterns.hasCoreLogic) score += 0.2;
+            if (binarySearchPatterns.hasPointers) score += 0.1;
+            if (binarySearchPatterns.hasComparison) score += 0.1;
+            
+            // Complexity analysis
+            if (binarySearchPatterns.hasComplexity) score += 0.2;
+            if (binarySearchPatterns.hasExplanation) score += 0.1;
+            
+            // Example or test case
+            if (/(?:example|test).*\[.*\]/.test(response)) {
+              score += 0.1;
+            }
+          }
+          break;
+        }
+
+        default: {
+          // General code quality scoring
+          // Documentation quality
+          const docScore = codePatterns.hasDocs ? 0.2 : 0;
+          score += docScore;
+          
+          // Error handling
+          if (/(?:try|catch|throw|raise)/.test(response)) {
+            score += 0.2;
+          }
+          
+          // Input validation
+          if (/if.*(?:undefined|null|typeof|instanceof)/.test(response)) {
+            score += 0.2;
+          }
+          
+          // Example usage
+          if (/(?:example|test)/.test(response)) {
+            score += 0.2;
+          }
+        }
       }
 
       // Cap score between 0 and 1
       return Math.min(1, Math.max(0, score));
     } catch (error) {
-      logger.error(`Error evaluating code quality for task ${task}:`, error);
-      return 0; // Return a default score in case of error
+      logger.error(`Error evaluating code quality for task ${taskType}:`, error);
+      return 0.1; // Return minimal score on error
     }
   },
 

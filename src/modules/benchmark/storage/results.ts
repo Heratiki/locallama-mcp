@@ -2,36 +2,44 @@ import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../../../utils/logger.js';
 import { BenchmarkResult, BenchmarkSummary } from '../../../types/index.js';
+import crypto from 'crypto';
 
 /**
  * Save a benchmark result to disk
  */
-export async function saveResult(result: BenchmarkResult, resultsPath: string): Promise<void> {
+export const saveResult = async (result: BenchmarkResult, baseDir: string): Promise<void> => {
   try {
-    // Create base results directory if it doesn't exist
-    await fs.mkdir(resultsPath, { recursive: true });
+    // Create a simpler folder structure: baseDir/modelId/taskType/
+    const modelId = result.local.model.replace(/[/:]/g, '-');
+    const taskType = result.taskId.split('-')[0]; // Gets 'simple' or 'medium'
     
-    // Create a filename based on the task ID and timestamp
-    const timestamp = new Date().toISOString().replace(/:/g, '-');
-    const sanitizedTaskId = result.taskId?.replace(/[/\\]/g, '-') || 'unknown';
-    const modelName = result.local.model?.replace(/[/\\]/g, '-') || 'unknown';
-    const taskDir = path.join(resultsPath, sanitizedTaskId);
+    // Create folder structure
+    const resultDir = path.join(
+      baseDir,
+      modelId,
+      taskType
+    );
     
-    // Create task-specific subdirectory
-    await fs.mkdir(taskDir, { recursive: true });
+    await fs.mkdir(resultDir, { recursive: true });
     
-    const filename = `${modelName}-${timestamp}.json`;
-    const filePath = path.join(taskDir, filename);
+    // Save with timestamp in filename, but use a hash of the test parameters 
+    // to allow for detecting duplicate benchmark attempts
+    const testHash = crypto.createHash('md5')
+      .update(`${result.task}-${result.complexity}`)
+      .digest('hex')
+      .substring(0, 8);
+      
+    const filename = `benchmark-${testHash}.json`;
     
-    // Write the result to disk
-    await fs.writeFile(filePath, JSON.stringify(result, null, 2));
-    
-    logger.info(`Saved benchmark result for ${result.local.model} with task ${result.taskId}`);
+    await fs.writeFile(
+      path.join(resultDir, filename),
+      JSON.stringify(result, null, 2)
+    );
   } catch (error) {
     logger.error('Error saving benchmark result:', error);
-    throw error; // Re-throw to allow caller to handle the error
+    throw error;
   }
-}
+};
 
 /**
  * Save a benchmark summary to disk
