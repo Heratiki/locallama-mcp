@@ -195,9 +195,14 @@ export class LocalLamaMcpServer {
   }
   
   async run(): Promise<void> {
-    // Set up resource and tool handlers
-    await setupResourceHandlers(this.server);
     try {
+      // Initialize the decision engine
+      const { decisionEngine } = await import('./modules/decision-engine/index.js');
+      await decisionEngine.initialize();
+
+      // Set up resource and tool handlers
+      await setupResourceHandlers(this.server);
+      
       logger.info('Starting LocalLama MCP Server...');
       const transport = new StdioServerTransport();
       await this.server.connect(transport);

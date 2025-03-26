@@ -392,7 +392,7 @@ def process_index_command(command_data):
                     try:
                         sample_query = "documentation" if any("documentation" in doc["text"].lower() for doc in text_documents) else text_documents[0]["text"].split()[0]
                         log_message(f"Testing retrieval with sample query: '{sample_query}'")
-                        results = retriever.search(sample_query, cutoff=1, return_docs=True)
+                        results = retriever.search(sample_query, top_k=1)
                         log_message(f"Sample query returned {len(results)} results")
                     except Exception as e:
                         log_message(f"Sample query failed: {str(e)}", "WARNING")

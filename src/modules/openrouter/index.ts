@@ -665,10 +665,10 @@ export const openRouterModule = {
       }
       logger.warn('Invalid response from OpenRouter API:', response.data);
       return { success: false, error: OpenRouterErrorType.INVALID_REQUEST };
-    } catch {
+    } catch (error) {
       logger.error('Unknown OpenRouter error');
-      this.handleOpenRouterError(new Error('Unknown error'));
-      return { success: false, error: OpenRouterErrorType.UNKNOWN };
+      this.handleOpenRouterError(error as Error);
+      throw error; // Re-throw the original error
     }
   },
 
