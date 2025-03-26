@@ -8,6 +8,7 @@ import { BenchmarkResult } from '../../../types/benchmark.js';
 import { saveResult } from '../../benchmark/storage/results.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { benchmarkModule } from '../../benchmark/index.js';
 
 // Add this interface at the top of the file with other types
 interface ComprehensiveBenchmarkResults {
@@ -492,6 +493,9 @@ export const benchmarkService = {
 
     // Update model performance profiles after benchmarking
     await this.updateModelPerformanceProfiles();
+    
+    // Generate comprehensive summary from all benchmark results
+    await this.generateComprehensiveSummary();
   },
 
   /**
@@ -584,5 +588,31 @@ export const benchmarkService = {
     } catch (error) {
       logger.error('Error updating model performance profiles:', error);
     }
-  }
+  },
+
+  /**
+   * Generate comprehensive summary from all benchmark results
+   */
+  async generateComprehensiveSummary(): Promise<void> {
+    try {
+      const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
+      
+      // Load all benchmark results
+      const results = await benchmarkModule.loadResults(benchmarkDir);
+      if (results.length === 0) {
+        logger.warn('No benchmark results found to summarize');
+        return;
+      }
+
+      // Generate summary using the benchmark module's functionality
+      const summary = benchmarkModule.generateSummary(results);
+
+      // Save the summary
+      await benchmarkModule.saveSummary(summary, benchmarkDir);
+      
+      logger.info('Generated and saved comprehensive benchmark summary');
+    } catch (error) {
+      logger.error('Error generating comprehensive summary:', error);
+    }
+  },
 };
