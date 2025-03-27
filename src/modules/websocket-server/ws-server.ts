@@ -7,6 +7,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, getAllJobsFromDb } from './db.js';
 import { logger } from '../../utils/logger.js';
+import { benchmarkModule } from '../benchmark/index.js';
+import { config } from '../../config/index.js';
 
 // Map internal job status to API job status
 const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' => {
@@ -54,9 +56,20 @@ function isPortAvailable(port: number): Promise<boolean> {
   });
 }
 
-interface WebSocketMessage {
+// Message type definitions
+interface WebSocketCancelMessage {
   type: 'cancel_job';
   jobId: string;
+}
+
+interface RpcMessage {
+  jsonrpc: '2.0';
+  id: number;
+  method: string;
+  params?: {
+    command?: string;
+    arguments?: Record<string, unknown>;
+  };
 }
 
 async function startWebSocketServer() {
@@ -71,12 +84,24 @@ async function startWebSocketServer() {
 
     ws.on('message', (rawMessage: Buffer | string) => {
       try {
-        const messageStr = Buffer.isBuffer(rawMessage) ? rawMessage.toString('utf-8') : rawMessage.toString();
-        const message = JSON.parse(messageStr) as WebSocketMessage;
+        let messageStr = Buffer.isBuffer(rawMessage) ? rawMessage.toString('utf-8') : rawMessage.toString();
         
-        if (message && typeof message === 'object' && 
-            'type' in message && message.type === 'cancel_job' &&
-            'jobId' in message && typeof message.jobId === 'string') {
+        // Handle array-wrapped messages from wscat
+        try {
+          const parsed = JSON.parse(messageStr) as unknown;
+          if (Array.isArray(parsed)) {
+            // If it's an array, try to use the first element
+            messageStr = typeof parsed[0] === 'string' ? parsed[0] : JSON.stringify(parsed[0]);
+          }
+        } catch {
+          // If parsing fails, keep original messageStr
+        }
+
+        const message = JSON.parse(messageStr) as unknown;
+        
+        if (isRpcMessage(message)) {
+          void handleRpcMessage(message, ws);
+        } else if (isCancelMessage(message)) {
           void cancelJob(message.jobId);
         } else {
           logger.warn('Received invalid message format:', messageStr);
@@ -184,6 +209,74 @@ async function cancelJob(jobId: string): Promise<void> {
 }
 
 let wss: WebSocketServer;
+
+function isRpcMessage(message: unknown): message is RpcMessage {
+  return typeof message === 'object' && message !== null &&
+         'jsonrpc' in message && (message as RpcMessage).jsonrpc === '2.0' &&
+         'method' in message && typeof (message as RpcMessage).method === 'string';
+}
+
+function isCancelMessage(message: unknown): message is WebSocketCancelMessage {
+  return typeof message === 'object' && message !== null &&
+         'type' in message && (message as WebSocketCancelMessage).type === 'cancel_job' &&
+         'jobId' in message && typeof (message as WebSocketCancelMessage).jobId === 'string';
+}
+
+async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<void> {
+  try {
+    if (message.method === 'executeCommand') {
+      const { command, arguments: args } = message.params ?? {};
+      
+      // Handle benchmark command
+      if (command === 'benchmark_tasks') {
+        logger.info('Received benchmark command:', args);
+        
+        try {
+          // Convert the task to benchmark params
+          const task = {
+            taskId: 'benchmark-test',
+            task: 'Write a function to calculate fibonacci numbers',
+            contextLength: 1000,
+            expectedOutputLength: 500,
+            complexity: 0.5
+          };
+
+          // Run the benchmark
+          const result = await benchmarkModule.benchmarkTask(task, config.benchmark);
+          
+          // Send back the results
+          ws.send(JSON.stringify({
+            jsonrpc: '2.0',
+            id: message.id,
+            result: result
+          }));
+        } catch (benchmarkError) {
+          logger.error('Error running benchmark:', benchmarkError);
+          ws.send(JSON.stringify({
+            jsonrpc: '2.0',
+            id: message.id,
+            error: {
+              code: -32001,
+              message: 'Benchmark failed',
+              data: benchmarkError instanceof Error ? benchmarkError.message : String(benchmarkError)
+            }
+          }));
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Error handling RPC message:', error);
+    ws.send(JSON.stringify({
+      jsonrpc: '2.0',
+      id: message.id,
+      error: {
+        code: -32000,
+        message: 'Internal error',
+        data: error instanceof Error ? error.message : String(error)
+      }
+    }));
+  }
+}
 
 (async () => {
   try {

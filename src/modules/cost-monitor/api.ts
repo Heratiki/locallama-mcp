@@ -112,7 +112,7 @@ export async function getAvailableModels(): Promise<Model[]> {
 
   // Try to get models from LM Studio
   try {
-    const url = new URL('/models', config.lmStudioEndpoint).toString();
+    const url = new URL('/v1/models', config.lmStudioEndpoint).toString();
     logger.debug(`Attempting to connect to LM Studio at: ${url}`);
 
     const lmStudioResponse = await axios.get<{ data: LMStudioModel[] }>(url, {
