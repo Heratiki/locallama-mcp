@@ -5,6 +5,8 @@ import { costMonitor } from '../../cost-monitor/index.js';
 import { COMPLEXITY_THRESHOLDS, ModelPerformanceData } from '../types/index.js';
 import { BenchmarkResult, BenchmarkSummary } from '../../../types/benchmark.js';
 import { saveResult } from '../../benchmark/storage/results.js';
+import { callLmStudioApi } from '../../benchmark/api/lm-studio.js';
+import { callOllamaApi } from '../../benchmark/api/ollama.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -637,11 +639,33 @@ export const benchmarkService = {
           
           try {
             const startTime = Date.now();
-            const result = await openRouterModule.callOpenRouterApi(
-              model.id,
-              task.task,
-              120000 // 2 minute timeout
-            );
+            
+            let result;
+            // Call the appropriate API based on model provider
+            if (model.provider === 'lm-studio') {
+              logger.info(`Calling LM Studio API for model ${model.id}`);
+              result = await callLmStudioApi(
+                model.id,
+                task.task,
+                120000 // 2 minute timeout
+              );
+            } else if (model.provider === 'ollama') {
+              logger.info(`Calling Ollama API for model ${model.id}`);
+              result = await callOllamaApi(
+                model.id,
+                task.task,
+                120000 // 2 minute timeout
+              );
+            } else {
+              // Default to OpenRouter for other providers
+              logger.info(`Calling OpenRouter API for model ${model.id}`);
+              result = await openRouterModule.callOpenRouterApi(
+                model.id,
+                task.task,
+                120000 // 2 minute timeout
+              );
+            }
+            
             const endTime = Date.now();
             const responseTime = endTime - startTime;
             
