@@ -1,6 +1,9 @@
 import { logger } from '../../utils/logger.js';
 import { tokenManager, CodeTaskContext } from './tokenManager.js';
 import { CodeSubtask } from '../decision-engine/types/codeTask.js';
+import fs from 'fs';
+import path from 'path';
+import { config } from '../../config/index.js';
 
 /**
  * Interface for cached code information
@@ -437,6 +440,51 @@ export const codeCache = {
     this.cache.clear();
     this.patternCache.clear();
   },
+
+  /**
+   * Load cache from file on startup
+   */
+  async loadCache() {
+    const cacheFilePath = path.join(config.cacheDir, 'code-cache.json');
+    const patternCacheFilePath = path.join(config.cacheDir, 'pattern-cache.json');
+    try {
+      if (fs.existsSync(cacheFilePath)) {
+        const cacheData = await fs.promises.readFile(cacheFilePath, 'utf-8');
+        codeCache.cache = new Map<string, CachedCodeEntry>(JSON.parse(cacheData) as Iterable<[string, CachedCodeEntry]>);
+        logger.info('Code cache loaded from file');
+      } else {
+        logger.info('No code cache file found, starting with empty cache');
+      }
+    } catch (e) {
+      logger.error('Error loading code cache:', e);
+    }
+    try {
+      if (fs.existsSync(patternCacheFilePath)) {
+        const patternCacheData = await fs.promises.readFile(patternCacheFilePath, 'utf-8');
+        codeCache.patternCache = new Map<string, Set<string>>(JSON.parse(patternCacheData) as Iterable<[string, Set<string>]>);
+        logger.info('Pattern cache loaded from file');
+      } else {
+        logger.info('No pattern cache file found, starting with empty cache');
+      }
+    } catch (e) {
+      logger.error('Error loading pattern cache:', e);
+    }
+  },
+
+  /**
+   * Save cache to file
+   */
+  async saveCache() {
+    const cacheFilePath = path.join(config.cacheDir, 'code-cache.json');
+    const patternCacheFilePath = path.join(config.cacheDir, 'pattern-cache.json');
+    try {
+      await fs.promises.writeFile(cacheFilePath, JSON.stringify(Array.from(codeCache.cache.entries())), 'utf-8');
+      await fs.promises.writeFile(patternCacheFilePath, JSON.stringify(Array.from(codeCache.patternCache.entries())), 'utf-8');
+      logger.info('Code cache saved to file');
+    } catch (e) {
+      logger.error('Error saving code cache:', e);
+    }
+  },
   
   /**
    * Generate a cache key for a code snippet
@@ -739,5 +787,34 @@ export const codeCache = {
     });
     
     return context;
+  },
+  
+  /**
+   * Call loadCache on startup
+   */
+  initialize: async () => {
+    await codeCache.loadCache();
   }
 };
+
+// Call saveCache on shutdown
+process.on('SIGINT', () => {
+  codeCache.saveCache()
+    .then(() => {
+      process.exit();
+    })
+    .catch((err) => {
+      logger.error('Error saving code cache on SIGINT:', err);
+      process.exit(1);
+    });
+});
+process.on('SIGTERM', () => {
+  codeCache.saveCache()
+    .then(() => {
+      process.exit();
+    })
+    .catch((err) => {
+      logger.error('Error saving code cache on SIGTERM:', err);
+      process.exit(1);
+    });
+});

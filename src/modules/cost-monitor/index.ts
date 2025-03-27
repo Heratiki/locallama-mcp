@@ -747,3 +747,8 @@ export const costMonitor = {
 // Export types
 export type { TokenUsage, CodeTaskContext, CodeSearchResult, BM25Options };
 export { CodeSearchEngine, BM25Searcher };
+
+// Initialize code cache on startup
+costMonitor.codeCache.initialize().catch(err => {
+  logger.error('Error initializing code cache:', err);
+});
