@@ -1,6 +1,11 @@
 import { config } from '../config/index.js';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
+
+// Constants for log rotation
+const MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_LOG_FILES = 5;
 
 /**
  * Log levels
@@ -41,12 +46,54 @@ function ensureLogDirectory(logFile: string): void {
 }
 
 /**
+ * Rotate log files if needed
+ */
+function rotateLogFiles(logFile: string): void {
+  try {
+    if (!fs.existsSync(logFile)) return;
+
+    const stats = fs.statSync(logFile);
+    if (stats.size < MAX_LOG_SIZE_BYTES) return;
+
+    // Rotate existing backup files
+    for (let i = MAX_LOG_FILES - 1; i >= 1; i--) {
+      const oldFile = `${logFile}.${i}.gz`;
+      const newFile = `${logFile}.${i + 1}.gz`;
+      if (fs.existsSync(oldFile)) {
+        fs.renameSync(oldFile, newFile);
+      }
+    }
+
+    // Compress current log file
+    const currentContent = fs.readFileSync(logFile);
+    const compressed = zlib.gzipSync(currentContent);
+    fs.writeFileSync(`${logFile}.1.gz`, compressed);
+
+    // Clear current log file
+    fs.writeFileSync(logFile, '');
+
+    // Remove oldest log file if it exists
+    const oldestLog = `${logFile}.${MAX_LOG_FILES}.gz`;
+    if (fs.existsSync(oldestLog)) {
+      fs.unlinkSync(oldestLog);
+    }
+  } catch (error) {
+    process.stderr.write(`Error rotating log files: ${String(error)}\n`);
+  }
+}
+
+/**
  * Write message to log file if configured
  */
 function writeToLogFile(message: string): void {
   if (config.logFile) {
-    ensureLogDirectory(config.logFile);
-    fs.appendFileSync(config.logFile, message + '\n');
+    try {
+      ensureLogDirectory(config.logFile);
+      rotateLogFiles(config.logFile);
+      fs.appendFileSync(config.logFile, message + '\n');
+    } catch (error) {
+      process.stderr.write(`Error writing to log file: ${String(error)}\n`);
+    }
   }
 }
 
@@ -69,63 +116,44 @@ function formatLogMessage(level: string, message: string, args: LogArgs): string
 }
 
 /**
+ * Write message to console
+ */
+function writeToConsole(level: string, message: string): void {
+  const output = level === 'ERROR' ? process.stderr : process.stdout;
+  output.write(message + '\n');
+}
+
+/**
  * Enhanced logger utility with file logging support
  */
 export const logger = {
-  // Using unknown[] instead of any[] for better type safety
-  error: (message: string, ...args: LogArgs): void => {
-    if (currentLogLevel >= LogLevel.ERROR) {
-      const formattedMessage = formatLogMessage('ERROR', message, args);
-      // eslint-disable-next-line no-console
-      console.error(formattedMessage);
-      writeToLogFile(formattedMessage);
-    }
+  error(...args: LogArgs): void {
+    const message = formatLogMessage('ERROR', args[0] as string, args.slice(1));
+    writeToConsole('ERROR', message);
+    writeToLogFile(message);
   },
-  
-  warn: (message: string, ...args: LogArgs): void => {
+
+  warn(...args: LogArgs): void {
     if (currentLogLevel >= LogLevel.WARN) {
-      const formattedMessage = formatLogMessage('WARN', message, args);
-      // eslint-disable-next-line no-console
-      console.warn(formattedMessage);
-      writeToLogFile(formattedMessage);
+      const message = formatLogMessage('WARN', args[0] as string, args.slice(1));
+      writeToConsole('WARN', message);
+      writeToLogFile(message);
     }
   },
-  
-  info: (message: string, ...args: LogArgs): void => {
+
+  info(...args: LogArgs): void {
     if (currentLogLevel >= LogLevel.INFO) {
-      const formattedMessage = formatLogMessage('INFO', message, args);
-      // eslint-disable-next-line no-console
-      console.info(formattedMessage);
-      writeToLogFile(formattedMessage);
+      const message = formatLogMessage('INFO', args[0] as string, args.slice(1));
+      writeToConsole('INFO', message);
+      writeToLogFile(message);
     }
   },
-  
-  debug: (message: string, ...args: LogArgs): void => {
+
+  debug(...args: LogArgs): void {
     if (currentLogLevel >= LogLevel.DEBUG) {
-      const formattedMessage = formatLogMessage('DEBUG', message, args);
-      // eslint-disable-next-line no-console
-      console.debug(formattedMessage);
-      writeToLogFile(formattedMessage);
+      const message = formatLogMessage('DEBUG', args[0] as string, args.slice(1));
+      writeToConsole('DEBUG', message);
+      writeToLogFile(message);
     }
-  },
-  
-  /**
-   * Log a message with a specific log level
-   */
-  log: (level: LogLevel, message: string, ...args: LogArgs): void => {
-    switch (level) {
-      case LogLevel.ERROR:
-        logger.error(message, ...args);
-        break;
-      case LogLevel.WARN:
-        logger.warn(message, ...args);
-        break;
-      case LogLevel.INFO:
-        logger.info(message, ...args);
-        break;
-      case LogLevel.DEBUG:
-        logger.debug(message, ...args);
-        break;
-    }
-  },
+  }
 };
