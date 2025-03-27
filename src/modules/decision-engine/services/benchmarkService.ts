@@ -485,14 +485,29 @@ export const benchmarkService = {
       // Ensure the models database is initialized
       await modelsDbService.initialize();
       
-      // Get free models
+      // Get free models from OpenRouter
       const freeModels = await costMonitor.getFreeModels();
-      if (freeModels.length === 0) {
+      
+      // Get available models to check for LM Studio models
+      const availableModels = await costMonitor.getAvailableModels();
+      
+      // Find LM Studio models and add them to the free models pool
+      const lmStudioModels = availableModels.filter(m => m.provider === 'lm-studio');
+      
+      // Combine OpenRouter free models with LM Studio models
+      let allFreeModels = [...freeModels];
+      
+      if (lmStudioModels.length > 0) {
+        logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool for benchmarking`);
+        allFreeModels = [...lmStudioModels, ...freeModels];
+      }
+      
+      if (allFreeModels.length === 0) {
         logger.warn('No free models available to benchmark');
         return;
       }
       
-      logger.info(`Found ${freeModels.length} free models to benchmark`);
+      logger.info(`Found ${allFreeModels.length} free models to benchmark`);
       
       // Define test tasks with normalized names and varying complexity
       const benchmarkTasks = [
@@ -540,7 +555,7 @@ export const benchmarkService = {
       // First check if models have been benchmarked based on persistence data
       logger.info('Checking for existing benchmark results...');
       
-      for (const model of freeModels) {
+      for (const model of allFreeModels) {
         const modelId = model.id;
         modelBenchmarkStatus.set(modelId, new Set<string>());
         
@@ -576,10 +591,10 @@ export const benchmarkService = {
         .filter(([_, tasks]) => tasks.size === benchmarkTasks.length)
         .map(([modelId]) => modelId);
       
-      logger.info(`Found ${fullyBenchmarkedModels.length} models with complete benchmarks out of ${freeModels.length} total models`);
+      logger.info(`Found ${fullyBenchmarkedModels.length} models with complete benchmarks out of ${allFreeModels.length} total models`);
       
       // If all models are fully benchmarked, just generate the summary
-      if (fullyBenchmarkedModels.length === freeModels.length) {
+      if (fullyBenchmarkedModels.length === allFreeModels.length) {
         logger.info('All models already have complete benchmarks, no need to run benchmarks');
         
         // Generate comprehensive summary from all benchmark results
@@ -595,11 +610,11 @@ export const benchmarkService = {
         parseInt(process.env.MAX_MODELS_TO_BENCHMARK, 10) : 5;
       
       // Prioritize models that haven't been benchmarked completely
-      const unbenchmarkedModels = freeModels.filter(
+      const unbenchmarkedModels = allFreeModels.filter(
         model => !fullyBenchmarkedModels.includes(model.id)
       );
       
-      logger.info(`Found ${unbenchmarkedModels.length} models needing benchmarking out of ${freeModels.length} total free models`);
+      logger.info(`Found ${unbenchmarkedModels.length} models needing benchmarking out of ${allFreeModels.length} total free models`);
       
       // Select models to benchmark in this run (up to maxModelsPerRun)
       const modelsToBenchmark = unbenchmarkedModels.slice(0, maxModelsPerRun);

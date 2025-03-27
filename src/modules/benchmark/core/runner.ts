@@ -57,6 +57,9 @@ export async function runModelBenchmark(
     try {
       logger.debug(`Run ${i + 1}/${config.runsPerTask} for ${model.id}`);
       
+      // Add enhanced logging for debugging
+      logger.info(`Executing benchmark run ${i + 1}/${config.runsPerTask} for model ${model.id} (provider: ${model.provider}) with task: ${task.substring(0, 30)}...`);
+      
       // Measure response time
       const startTime = Date.now();
       
@@ -68,6 +71,7 @@ export async function runModelBenchmark(
       let completionTokens = 0;
       
       if (model.provider === 'lm-studio') {
+        logger.info(`Calling LM Studio API for model ${model.id}`);
         response = await callLmStudioApi(model.id, task, config.taskTimeout);
         success = response.success;
         qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
@@ -134,6 +138,9 @@ export async function runModelBenchmark(
       const endTime = Date.now();
       const timeTaken = endTime - startTime;
       
+      // Log detailed results of each run
+      logger.info(`Benchmark run ${i+1} for ${model.id} completed: Success=${success}, Quality=${qualityScore.toFixed(2)}, Time=${timeTaken}ms`);
+      
       // Update results
       totalTimeTaken += timeTaken;
       if (success) {
@@ -153,6 +160,9 @@ export async function runModelBenchmark(
   const avgTimeTaken = totalTimeTaken / config.runsPerTask;
   const successRate = successCount / config.runsPerTask;
   const avgQualityScore = totalQualityScore / config.runsPerTask;
+  
+  // Add summary logging
+  logger.info(`Benchmark complete for ${model.id} (${model.provider}): Success=${successRate.toFixed(2)}, Quality=${avgQualityScore.toFixed(2)}, Avg Time=${avgTimeTaken.toFixed(0)}ms`);
   
   // Average the token usage
   tokenUsage.prompt = Math.round(tokenUsage.prompt / config.runsPerTask);
@@ -200,10 +210,20 @@ export async function benchmarkTask(
         await openRouterModule.initialize();
       }
       
+      // Get free models from OpenRouter
       const freeModels = await costMonitor.getFreeModels();
       
-      if (freeModels.length > 0) {
-        const bestFreeModel = freeModels.find(m => 
+      // Find LM Studio models and add them to the free models pool
+      const lmStudioModels = availableModels.filter(m => m.provider === 'lm-studio');
+      if (lmStudioModels.length > 0) {
+        logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool`);
+        
+        // Combine OpenRouter free models with LM Studio models 
+        // Prioritize LM Studio models by putting them first in the list
+        const combinedFreeModels = [...lmStudioModels, ...freeModels];
+        
+        // Find a model that can handle the context + output length
+        const bestFreeModel = combinedFreeModels.find(m => 
           m.contextWindow && m.contextWindow >= (contextLength + expectedOutputLength)
         );
         
@@ -215,7 +235,26 @@ export async function benchmarkTask(
             skipBenchmark = true;
           } else {
             paidModel = bestFreeModel;
-            logger.info(`Using free model ${bestFreeModel.id} from OpenRouter`);
+            logger.info(`Using model ${bestFreeModel.id} (provider: ${bestFreeModel.provider}) for benchmarking`);
+          }
+        }
+      } else {
+        // No LM Studio models found, use just OpenRouter free models
+        if (freeModels.length > 0) {
+          const bestFreeModel = freeModels.find(m => 
+            m.contextWindow && m.contextWindow >= (contextLength + expectedOutputLength)
+          );
+          
+          if (bestFreeModel) {
+            // Check if this model has been recently benchmarked
+            const recentResults = await getRecentModelResults(bestFreeModel.id);
+            if (recentResults && recentResults.benchmarkCount > 0) {
+              logger.info(`Model ${bestFreeModel.id} was recently benchmarked (${recentResults.benchmarkCount} times), skipping`);
+              skipBenchmark = true;
+            } else {
+              paidModel = bestFreeModel;
+              logger.info(`Using free model ${bestFreeModel.id} from OpenRouter`);
+            }
           }
         }
       }
