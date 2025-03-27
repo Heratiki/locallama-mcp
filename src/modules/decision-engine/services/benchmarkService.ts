@@ -943,15 +943,20 @@ export const benchmarkService = {
   evaluateCodeQuality(task: string, response: string, taskType: string = 'general'): number {
     try {
       let score = 0;
-      const responseLower = response.toLowerCase();
+      
+      // Pre-process response to handle "thinking" model responses (like deepseek-r1)
+      // Strip out thinking sections and other special tokens that might interfere with evaluation
+      const cleanedResponse = this.cleanModelResponse(response);
+      
+      const responseLower = cleanedResponse.toLowerCase();
       
       // Check if response contains actual code and validate language format
       const codePatterns = {
-        hasFunction: /\b(?:function|def|class|const|let|var)\b/.test(response),
-        hasCodeBlock: /```[\s\S]*?```/.test(response) || 
-                     /^[ ]{4}[\s\S]+/m.test(response) || 
-                     /<code>[\s\S]*?<\/code>/.test(response),
-        hasDocs: /(?:\/\*[\s\S]*?\*\/|\/\/.*|#.*|"""[\s\S]*?"""|'''[\s\S]*?''')/.test(response)
+        hasFunction: /\b(?:function|def|class|const|let|var)\b/.test(cleanedResponse),
+        hasCodeBlock: /```[\s\S]*?```/.test(cleanedResponse) || 
+                     /^[ ]{4}[\s\S]+/m.test(cleanedResponse) || 
+                     /<code>[\s\S]*?<\/code>/.test(cleanedResponse),
+        hasDocs: /(?:\/\*[\s\S]*?\*\/|\/\/.*|#.*|"""[\s\S]*?"""|'''[\s\S]*?''')/.test(cleanedResponse)
       };
 
       if (!codePatterns.hasFunction || !codePatterns.hasCodeBlock) {
@@ -1052,6 +1057,35 @@ export const benchmarkService = {
       logger.error(`Error evaluating code quality for task ${taskType}:`, error);
       return 0.1; // Return minimal score on error
     }
+  },
+  
+  /**
+   * Clean model response by removing thinking sections and other special tokens
+   * This helps with evaluating responses from models like deepseek-r1 that include thinking steps
+   */
+  cleanModelResponse(response: string): string {
+    if (!response) return '';
+    
+    let cleanedResponse = response;
+    
+    // Remove thinking sections (used by deepseek-r1 and similar models)
+    cleanedResponse = cleanedResponse.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+    
+    // Remove internal dialogue indicators 
+    cleanedResponse = cleanedResponse.replace(/\[internal dialogue\][\s\S]*?\[\/internal dialogue\]/gi, '');
+    cleanedResponse = cleanedResponse.replace(/\[thinking\][\s\S]*?\[\/thinking\]/gi, '');
+    
+    // Remove <answer> tags sometimes used by these models
+    cleanedResponse = cleanedResponse.replace(/<answer>/gi, '');
+    cleanedResponse = cleanedResponse.replace(/<\/answer>/gi, '');
+    
+    // Remove any other common special tokens that might appear
+    cleanedResponse = cleanedResponse.replace(/<\|[\w\s]+\|>/g, ''); // e.g. <|thinking|>
+    
+    // Trim excess whitespace that might be left after removing sections
+    cleanedResponse = cleanedResponse.trim();
+    
+    return cleanedResponse;
   },
 
   /**
