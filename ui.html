@@ -46,7 +46,7 @@
     .status-connected { background-color: #28a745; }
     .status-error { background-color: #dc3545; }
     
-    .tool-button {
+    .benchmark-button {
       margin: 5px;
       min-width: 120px;
     }
@@ -73,18 +73,85 @@
       border: 1px solid #dee2e6;
       border-top: none;
     }
+    
+    .benchmark-results {
+      margin-top: 20px;
+    }
+    
+    .progress-bar {
+      height: 25px;
+    }
+    
+    .model-select-container {
+      margin-bottom: 20px;
+    }
+    
+    .result-card {
+      margin-bottom: 15px;
+    }
+    
+    .benchmark-task {
+      margin-bottom: 25px;
+      border-left: 4px solid #007bff;
+      padding-left: 15px;
+    }
+    
+    .code-output {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      font-size: 0.9em;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .metric-label {
+      font-weight: bold;
+      display: inline-block;
+      width: 120px;
+    }
+    
+    .metric-value {
+      font-weight: bold;
+      color: #007bff;
+    }
+    
+    .provider-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      margin-left: 8px;
+      background-color: #e9ecef;
+    }
+    
+    .thinking-toggle {
+      cursor: pointer;
+      color: #6c757d;
+      text-decoration: underline;
+      margin-top: 5px;
+      display: inline-block;
+    }
+    
+    .thinking-content {
+      background-color: #f0f8ff;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 5px;
+      font-style: italic;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1 class="mb-4">LocalLama MCP Interface</h1>
+    <h1 class="mb-4">LocalLama MCP Benchmark Interface</h1>
     
     <ul class="nav nav-tabs" id="mainTabs" role="tablist">
       <li class="nav-item">
-        <a class="nav-link active" id="models-tab" data-bs-toggle="tab" href="#models" role="tab">Models</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="tools-tab" data-bs-toggle="tab" href="#tools" role="tab">Tools</a>
+        <a class="nav-link active" id="benchmarks-tab" data-bs-toggle="tab" href="#benchmarks" role="tab">Benchmark Results</a>
       </li>
       <li class="nav-item">
         <a class="nav-link" id="jobs-tab" data-bs-toggle="tab" href="#jobs" role="tab">Jobs</a>
@@ -92,68 +159,42 @@
     </ul>
     
     <div class="tab-content">
-      <div class="tab-pane fade show active" id="models" role="tabpanel">
-        <div class="row mb-3">
+      <div class="tab-pane fade show active" id="benchmarks" role="tabpanel">
+        <div class="row mb-3 mt-3">
           <div class="col">
-            <input type="text" id="modelSearch" class="form-control" placeholder="Search models...">
+            <h3>Model Benchmark Results</h3>
+            <p>Select a model to view its benchmark results or run new benchmarks.</p>
           </div>
           <div class="col-auto">
-            <div class="btn-group">
-              <button class="btn btn-outline-secondary" onclick="filterModels('all')">All</button>
-              <button class="btn btn-outline-secondary" onclick="filterModels('free')">Free</button>
-              <button class="btn btn-outline-secondary" onclick="filterModels('paid')">Paid</button>
-            </div>
+            <button class="btn btn-primary" onclick="runAllBenchmarks()">
+              Run All Benchmarks
+            </button>
           </div>
         </div>
-        <div id="modelList"></div>
-      </div>
-      
-      <div class="tab-pane fade" id="tools" role="tabpanel">
-        <div class="row">
-          <div class="col-md-4">
-            <div class="card">
-              <div class="card-header">
-                <h5 class="mb-0">Task Routing</h5>
-              </div>
-              <div class="card-body">
-                <form id="routeForm">
-                  <div class="mb-3">
-                    <label class="form-label">Task Description</label>
-                    <textarea class="form-control" id="taskDescription" rows="3"></textarea>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">Context Length</label>
-                    <input type="number" class="form-control" id="contextLength" value="1000">
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">Priority</label>
-                    <select class="form-control" id="priority">
-                      <option value="quality">Quality</option>
-                      <option value="speed">Speed</option>
-                      <option value="cost">Cost</option>
-                    </select>
-                  </div>
-                  <button type="submit" class="btn btn-primary">Route Task</button>
-                </form>
-              </div>
-            </div>
+        
+        <div class="model-select-container">
+          <label for="benchmarkModelSelect" class="form-label">Select Model:</label>
+          <div class="input-group">
+            <select class="form-select" id="benchmarkModelSelect" onchange="loadModelBenchmarks()">
+              <option value="" selected>Choose a model...</option>
+              <!-- Models will be loaded here -->
+            </select>
+            <button class="btn btn-outline-primary" type="button" id="filterToggle" onclick="toggleProviderFilter()">
+              Filter: All
+            </button>
           </div>
-          
-          <div class="col-md-8">
-            <div class="card">
-              <div class="card-header">
-                <h5 class="mb-0">Available Tools</h5>
-              </div>
-              <div class="card-body" id="toolsList">
-                <!-- Tools will be populated here -->
-              </div>
-            </div>
+        </div>
+        
+        <div id="benchmarkResults" class="benchmark-results">
+          <!-- Results will appear here -->
+          <div class="alert alert-info">
+            Select a model to view its benchmark results
           </div>
         </div>
       </div>
       
       <div class="tab-pane fade" id="jobs" role="tabpanel">
-        <div class="card">
+        <div class="card mt-3">
           <div class="card-header">
             <h5 class="mb-0">Active Jobs</h5>
           </div>
@@ -167,10 +208,31 @@
   
   <div id="status-indicator" class="status-indicator status-connecting">Connecting...</div>
   
+  <!-- Benchmark modal -->
+  <div class="modal fade" id="benchmarkModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Benchmarking in Progress</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="benchmarkModalText">Running benchmark for <span id="benchmarkModelName"></span>...</p>
+          <div class="progress">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let ws;
-    let modelsList = [];
+    let benchmarkedModels = [];
+    let currentFilter = 'all';
+    let benchmarkResults = {};
+    let benchmarkModal;
 
     async function initializeWebSocket() {
       try {
@@ -182,8 +244,8 @@
           statusIndicator.textContent = 'Connected';
           statusIndicator.className = 'status-indicator status-connected';
           // Request initial data
-          sendCommand('models');
-          sendCommand('list tools');
+          fetchBenchmarkedModels();
+          fetchActiveJobs();
         });
 
         ws.addEventListener('error', (error) => {
@@ -208,106 +270,319 @@
       try {
         const message = JSON.parse(event.data);
         
-        if (message.result && message.result.contents) {
-          message.result.contents.forEach(content => {
-            if (content.uri === 'locallama://models') {
-              modelsList = JSON.parse(content.text);
-              displayModels(modelsList);
-            } else if (content.uri === 'locallama://tools') {
-              displayTools(JSON.parse(content.text));
-            }
-          });
+        if (message.type === 'benchmarkedModels') {
+          benchmarkedModels = message.models;
+          populateModelSelect();
+        } else if (message.type === 'benchmarkResults') {
+          benchmarkResults = message.results;
+          displayBenchmarkResults(message.modelId);
+          
+          // Close modal if it's open
+          if (benchmarkModal && benchmarkModal._isShown) {
+            benchmarkModal.hide();
+          }
+        } else if (message.type === 'activeJobs') {
+          displayActiveJobs(message.jobs);
+        } else if (message.type === 'benchmarkStarted') {
+          showBenchmarkModal(message.modelId);
+        } else if (message.type === 'benchmarkCompleted') {
+          if (benchmarkModal && benchmarkModal._isShown) {
+            benchmarkModal.hide();
+          }
+          fetchBenchmarkedModels();
+          fetchModelBenchmarks(message.modelId);
         }
       } catch (error) {
         console.error('Error processing message:', error);
       }
     }
 
-    function displayModels(models) {
-      const modelList = document.getElementById('modelList');
-      const providers = {};
+    function fetchBenchmarkedModels() {
+      sendCommand('getBenchmarkedModels');
+    }
+
+    function fetchModelBenchmarks(modelId) {
+      sendCommand(`getModelBenchmarks ${modelId}`);
+    }
+
+    function fetchActiveJobs() {
+      sendCommand('getActiveJobs');
+    }
+
+    function populateModelSelect() {
+      const select = document.getElementById('benchmarkModelSelect');
       
-      // Group models by provider
-      models.forEach(model => {
-        const provider = model.provider || 'unknown';
-        if (!providers[provider]) {
-          providers[provider] = [];
+      // Clear current options except the first one
+      while (select.options.length > 1) {
+        select.options.remove(1);
+      }
+      
+      // Filter models based on current filter
+      let filteredModels = benchmarkedModels;
+      if (currentFilter !== 'all') {
+        filteredModels = benchmarkedModels.filter(model => model.provider === currentFilter);
+      }
+      
+      // Sort models by provider then name
+      filteredModels.sort((a, b) => {
+        if (a.provider !== b.provider) {
+          return a.provider.localeCompare(b.provider);
         }
-        providers[provider].push(model);
+        return a.name.localeCompare(b.name);
       });
       
-      // Create HTML for each provider section
-      let html = '';
-      Object.entries(providers).forEach(([provider, providerModels]) => {
-        html += `
-          <div class="provider-section">
-            <h3>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h3>
-            <div class="model-grid">
+      // Add options for each model
+      filteredModels.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.text = `${model.name} (${model.provider})`;
+        option.dataset.provider = model.provider;
+        select.add(option);
+      });
+    }
+
+    function toggleProviderFilter() {
+      const filterButton = document.getElementById('filterToggle');
+      const providers = [...new Set(benchmarkedModels.map(model => model.provider))];
+      
+      // Find the next filter in the cycle
+      let nextFilterIndex = 0;
+      if (currentFilter === 'all') {
+        nextFilterIndex = 0;
+      } else {
+        nextFilterIndex = providers.indexOf(currentFilter) + 1;
+        if (nextFilterIndex >= providers.length) {
+          nextFilterIndex = -1;  // Back to 'all'
+        }
+      }
+      
+      // Set the new filter
+      currentFilter = nextFilterIndex === -1 ? 'all' : providers[nextFilterIndex];
+      
+      // Update the button text
+      filterButton.textContent = `Filter: ${currentFilter === 'all' ? 'All' : currentFilter}`;
+      
+      // Re-populate the model select
+      populateModelSelect();
+    }
+
+    function loadModelBenchmarks() {
+      const select = document.getElementById('benchmarkModelSelect');
+      const modelId = select.value;
+      
+      if (!modelId) {
+        document.getElementById('benchmarkResults').innerHTML = `
+          <div class="alert alert-info">
+            Select a model to view its benchmark results
+          </div>
         `;
+        return;
+      }
+      
+      fetchModelBenchmarks(modelId);
+    }
+
+    function displayBenchmarkResults(modelId) {
+      const resultsContainer = document.getElementById('benchmarkResults');
+      const results = benchmarkResults;
+      
+      if (!results || Object.keys(results).length === 0) {
+        resultsContainer.innerHTML = `
+          <div class="alert alert-warning">
+            No benchmark results found for this model
+          </div>
+        `;
+        return;
+      }
+      
+      // Get model info
+      const modelInfo = benchmarkedModels.find(m => m.id === modelId);
+      if (!modelInfo) {
+        return;
+      }
+      
+      // Build the results display
+      let html = `
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">${modelInfo.name} 
+              <span class="provider-badge">${modelInfo.provider}</span>
+            </h4>
+            <button class="btn btn-primary" onclick="rebenchmarkModel('${modelId}')">
+              Re-benchmark Model
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <div><span class="metric-label">Success Rate:</span> <span class="metric-value">${(results.successRate * 100).toFixed(1)}%</span></div>
+              </div>
+              <div class="col-md-4">
+                <div><span class="metric-label">Quality Score:</span> <span class="metric-value">${results.qualityScore.toFixed(2)}</span></div>
+              </div>
+              <div class="col-md-4">
+                <div><span class="metric-label">Avg Response:</span> <span class="metric-value">${results.avgResponseTime.toFixed(0)}ms</span></div>
+              </div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <div><span class="metric-label">Complexity:</span> <span class="metric-value">${results.complexityScore.toFixed(2)}</span></div>
+              </div>
+              <div class="col-md-4">
+                <div><span class="metric-label">Benchmark Count:</span> <span class="metric-value">${results.benchmarkCount}</span></div>
+              </div>
+              <div class="col-md-4">
+                <div><span class="metric-label">Last Benchmark:</span> <span class="metric-value">${new Date(results.lastBenchmarked).toLocaleDateString()}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Add task results if available
+      if (results.tasks && results.tasks.length > 0) {
+        html += `<h4>Benchmark Tasks</h4>`;
         
-        providerModels.forEach(model => {
-          const cost = model.costPerToken.prompt === "0" ? 'Free' : 
-            `$${model.costPerToken.prompt}/1K tokens`;
+        results.tasks.forEach((task, index) => {
+          const hasThinking = task.output && (
+            task.output.includes('<thinking>') || 
+            task.output.includes('[thinking]') || 
+            task.output.includes('<|thinking|>')
+          );
+          
+          let cleanOutput = task.output || '';
+          let thinkingOutput = '';
+          
+          if (hasThinking) {
+            // Extract thinking content
+            const thinkingMatches = cleanOutput.match(/<thinking>([\s\S]*?)<\/thinking>/);
+            if (thinkingMatches) {
+              thinkingOutput = thinkingMatches[1];
+              cleanOutput = cleanOutput.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+            }
+            
+            // Handle other thinking formats
+            const bracketThinkingMatches = cleanOutput.match(/\[thinking\]([\s\S]*?)\[\/thinking\]/i);
+            if (bracketThinkingMatches) {
+              thinkingOutput = bracketThinkingMatches[1];
+              cleanOutput = cleanOutput.replace(/\[thinking\][\s\S]*?\[\/thinking\]/gi, '');
+            }
+          }
           
           html += `
-            <div class="card model-card" onclick="selectModel('${model.id}')">
-              <div class="card-body">
-                <h5 class="card-title">${model.name}</h5>
-                <p class="card-text">
-                  <small class="text-muted">
-                    Context: ${model.contextWindow.toLocaleString()} tokens<br>
-                    Cost: ${cost}
-                  </small>
-                </p>
+            <div class="benchmark-task">
+              <h5>Task ${index + 1}: ${task.name}</h5>
+              <div class="task-prompt mb-2">
+                <strong>Prompt:</strong> ${task.prompt}
+              </div>
+              <div class="row mb-3">
+                <div class="col-md-3">
+                  <div><span class="metric-label">Success:</span> <span class="metric-value">${task.success ? 'Yes' : 'No'}</span></div>
+                </div>
+                <div class="col-md-3">
+                  <div><span class="metric-label">Quality:</span> <span class="metric-value">${task.qualityScore.toFixed(2)}</span></div>
+                </div>
+                <div class="col-md-3">
+                  <div><span class="metric-label">Time:</span> <span class="metric-value">${task.responseTime}ms</span></div>
+                </div>
+              </div>
+              <div class="output-section">
+                <strong>Output:</strong>
+                <div class="code-output">${cleanOutput}</div>
+                ${hasThinking ? `
+                  <a class="thinking-toggle" onclick="toggleThinking('thinking-${index}')">
+                    Show/hide thinking process
+                  </a>
+                  <div id="thinking-${index}" class="thinking-content">
+                    ${thinkingOutput}
+                  </div>
+                ` : ''}
               </div>
             </div>
           `;
         });
+      }
+      
+      resultsContainer.innerHTML = html;
+    }
+
+    function toggleThinking(id) {
+      const element = document.getElementById(id);
+      if (element.style.display === 'block') {
+        element.style.display = 'none';
+      } else {
+        element.style.display = 'block';
+      }
+    }
+
+    function displayActiveJobs(jobs) {
+      const jobsList = document.getElementById('jobsList');
+      
+      if (!jobs || jobs.length === 0) {
+        jobsList.innerHTML = '<div class="alert alert-info">No active jobs</div>';
+        return;
+      }
+      
+      let html = '';
+      jobs.forEach(job => {
+        let statusBadge = '';
+        switch (job.status) {
+          case 'running':
+            statusBadge = '<span class="badge bg-primary">Running</span>';
+            break;
+          case 'completed':
+            statusBadge = '<span class="badge bg-success">Completed</span>';
+            break;
+          case 'failed':
+            statusBadge = '<span class="badge bg-danger">Failed</span>';
+            break;
+          default:
+            statusBadge = `<span class="badge bg-secondary">${job.status}</span>`;
+        }
         
         html += `
+          <div class="card mb-2">
+            <div class="card-body">
+              <div class="d-flex justify-content-between">
+                <h5 class="card-title">${job.type}</h5>
+                ${statusBadge}
+              </div>
+              <p class="card-text">${job.description}</p>
+              <div class="text-muted small">Started: ${new Date(job.startTime).toLocaleString()}</div>
             </div>
           </div>
         `;
       });
       
-      modelList.innerHTML = html;
+      jobsList.innerHTML = html;
     }
 
-    function displayTools(tools) {
-      const toolsList = document.getElementById('toolsList');
-      let html = '<div class="row">';
-      
-      tools.forEach(tool => {
-        html += `
-          <div class="col-md-6 mb-3">
-            <button class="btn btn-outline-primary tool-button" 
-                    onclick="executeTool('${tool.name}')"
-                    title="${tool.description}">
-              ${tool.name}
-            </button>
-          </div>
-        `;
-      });
-      
-      html += '</div>';
-      toolsList.innerHTML = html;
-    }
-
-    function filterModels(type) {
-      const filtered = type === 'all' ? modelsList :
-        modelsList.filter(model => {
-          const isFree = model.costPerToken.prompt === "0";
-          return type === 'free' ? isFree : !isFree;
-        });
-      displayModels(filtered);
-    }
-
-    function selectModel(modelId) {
-      const model = modelsList.find(m => m.id === modelId);
-      if (model) {
-        // Implement model selection logic here
-        console.log('Selected model:', model);
+    function rebenchmarkModel(modelId) {
+      if (confirm('Are you sure you want to re-benchmark this model? This may take several minutes.')) {
+        sendCommand(`rebenchmarkModel ${modelId}`);
       }
+    }
+
+    function runAllBenchmarks() {
+      if (confirm('Are you sure you want to run benchmarks for all models? This may take a long time.')) {
+        sendCommand('runAllBenchmarks');
+      }
+    }
+
+    function showBenchmarkModal(modelId) {
+      const modelElement = document.getElementById('benchmarkModelName');
+      const model = benchmarkedModels.find(m => m.id === modelId);
+      
+      if (modelElement && model) {
+        modelElement.textContent = model.name;
+      }
+      
+      // Initialize modal if it doesn't exist
+      if (!benchmarkModal) {
+        benchmarkModal = new bootstrap.Modal(document.getElementById('benchmarkModal'));
+      }
+      
+      benchmarkModal.show();
     }
 
     function sendCommand(command) {
@@ -324,33 +599,13 @@
       }
     }
 
-    function executeTool(toolName) {
-      // Implement tool execution logic here
-      console.log('Executing tool:', toolName);
-    }
-
-    // Initialize search functionality
-    document.getElementById('modelSearch').addEventListener('input', (e) => {
-      const searchTerm = e.target.value.toLowerCase();
-      const filtered = modelsList.filter(model => 
-        model.name.toLowerCase().includes(searchTerm) ||
-        model.provider.toLowerCase().includes(searchTerm)
-      );
-      displayModels(filtered);
-    });
-
-    // Initialize route form submission
-    document.getElementById('routeForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const task = document.getElementById('taskDescription').value;
-      const contextLength = document.getElementById('contextLength').value;
-      const priority = document.getElementById('priority').value;
+    // Initialize the page
+    document.addEventListener('DOMContentLoaded', () => {
+      initializeWebSocket();
       
-      sendCommand(`route "${task}" ${contextLength} 200 0.7 ${priority}`);
+      // Set up refresh interval for jobs
+      setInterval(fetchActiveJobs, 10000); // Every 10 seconds
     });
-
-    // Start the WebSocket connection
-    initializeWebSocket();
   </script>
 </body>
 </html>
