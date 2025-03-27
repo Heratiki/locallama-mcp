@@ -236,11 +236,17 @@
 
     async function initializeWebSocket() {
       try {
-        ws = new WebSocket('ws://localhost:5000');
+        // First fetch the WebSocket port from the API
+        const response = await fetch('/ws-port');
+        const data = await response.json();
+        const wsPort = data.port;
+        
+        // Use the dynamic port from the server
+        ws = new WebSocket(`ws://localhost:${wsPort}`);
         const statusIndicator = document.getElementById('status-indicator');
 
         ws.addEventListener('open', () => {
-          console.log('WebSocket connection established');
+          console.log(`WebSocket connection established on port ${wsPort}`);
           statusIndicator.textContent = 'Connected';
           statusIndicator.className = 'status-indicator status-connected';
           // Request initial data
