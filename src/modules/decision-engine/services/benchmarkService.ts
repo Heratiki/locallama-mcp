@@ -278,40 +278,56 @@ const benchmarkUtils = {
     // Calculate averages and totals
     let localResultCount = 0;
     let paidResultCount = 0;
+    let totalContextLength = 0;
+    let totalOutputLength = 0;
+    let totalComplexity = 0;
+    let validContextCount = 0;
+    let validOutputCount = 0;
+    let validComplexityCount = 0;
 
     for (const result of results) {
-      summary.avgContextLength += result.contextLength;
-      summary.avgOutputLength += result.outputLength;
-      summary.avgComplexity += result.complexity;
+      // Only count non-null/non-undefined values
+      if (result.contextLength !== null && result.contextLength !== undefined) {
+        totalContextLength += result.contextLength;
+        validContextCount++;
+      }
+      
+      if (result.outputLength !== null && result.outputLength !== undefined) {
+        totalOutputLength += result.outputLength;
+        validOutputCount++;
+      }
+      
+      if (result.complexity !== null && result.complexity !== undefined) {
+        totalComplexity += result.complexity;
+        validComplexityCount++;
+      }
 
       if (result.local) {
         localResultCount++;
-        summary.local.avgTimeTaken += result.local.timeTaken;
-        summary.local.avgSuccessRate += result.local.successRate;
-        summary.local.avgQualityScore += result.local.qualityScore;
-        summary.local.totalTokenUsage.prompt += result.local.tokenUsage.prompt;
-        summary.local.totalTokenUsage.completion += result.local.tokenUsage.completion;
-        summary.local.totalTokenUsage.total += result.local.tokenUsage.total;
+        summary.local.avgTimeTaken += result.local.timeTaken || 0;
+        summary.local.avgSuccessRate += result.local.successRate || 0;
+        summary.local.avgQualityScore += result.local.qualityScore || 0;
+        summary.local.totalTokenUsage.prompt += result.local.tokenUsage?.prompt || 0;
+        summary.local.totalTokenUsage.completion += result.local.tokenUsage?.completion || 0;
+        summary.local.totalTokenUsage.total += result.local.tokenUsage?.total || 0;
       }
 
       if (result.paid) {
         paidResultCount++;
-        summary.paid.avgTimeTaken += result.paid.timeTaken;
-        summary.paid.avgSuccessRate += result.paid.successRate;
-        summary.paid.avgQualityScore += result.paid.qualityScore;
-        summary.paid.totalTokenUsage.prompt += result.paid.tokenUsage.prompt;
-        summary.paid.totalTokenUsage.completion += result.paid.tokenUsage.completion;
-        summary.paid.totalTokenUsage.total += result.paid.tokenUsage.total;
-        summary.paid.totalCost += result.paid.cost;
+        summary.paid.avgTimeTaken += result.paid.timeTaken || 0;
+        summary.paid.avgSuccessRate += result.paid.successRate || 0;
+        summary.paid.avgQualityScore += result.paid.qualityScore || 0;
+        summary.paid.totalTokenUsage.prompt += result.paid.tokenUsage?.prompt || 0;
+        summary.paid.totalTokenUsage.completion += result.paid.tokenUsage?.completion || 0;
+        summary.paid.totalTokenUsage.total += result.paid.tokenUsage?.total || 0;
+        summary.paid.totalCost += result.paid.cost || 0;
       }
     }
 
-    // Calculate final averages
-    if (results.length > 0) {
-      summary.avgContextLength /= results.length;
-      summary.avgOutputLength /= results.length;
-      summary.avgComplexity /= results.length;
-    }
+    // Calculate final averages, avoiding division by zero
+    summary.avgContextLength = validContextCount > 0 ? totalContextLength / validContextCount : 0;
+    summary.avgOutputLength = validOutputCount > 0 ? totalOutputLength / validOutputCount : 0;
+    summary.avgComplexity = validComplexityCount > 0 ? totalComplexity / validComplexityCount : 0;
 
     if (localResultCount > 0) {
       summary.local.avgTimeTaken /= localResultCount;
@@ -327,10 +343,18 @@ const benchmarkUtils = {
 
     // Calculate comparisons
     if (localResultCount > 0 && paidResultCount > 0) {
-      summary.comparison.timeRatio = summary.local.avgTimeTaken / summary.paid.avgTimeTaken;
+      // Avoid division by zero for timeRatio
+      summary.comparison.timeRatio = summary.paid.avgTimeTaken > 0 ? 
+        summary.local.avgTimeTaken / summary.paid.avgTimeTaken : 0;
+      
       summary.comparison.successRateDiff = summary.local.avgSuccessRate - summary.paid.avgSuccessRate;
       summary.comparison.qualityScoreDiff = summary.local.avgQualityScore - summary.paid.avgQualityScore;
       summary.comparison.costSavings = summary.paid.totalCost; // All cost saved when using local
+    } else if (localResultCount > 0) {
+      // If we only have local results, set comparison data appropriately
+      summary.comparison.successRateDiff = summary.local.avgSuccessRate;
+      summary.comparison.qualityScoreDiff = summary.local.avgQualityScore;
+      // timeRatio and costSavings remain 0
     }
 
     return summary;
