@@ -274,9 +274,42 @@
 
     function handleWebSocketMessage(event) {
       try {
+        console.log('Received WebSocket message:', event.data);
         const message = JSON.parse(event.data);
         
+        // Check for RPC response format (for legacy support)
+        if (message.jsonrpc === '2.0' && message.result) {
+          console.log('Received RPC response:', message);
+          
+          // Check if this is a model list response
+          if (message.result && Array.isArray(message.result.models)) {
+            benchmarkedModels = message.result.models;
+            populateModelSelect();
+            return;
+          }
+          
+          // Check if this is a benchmark result response
+          if (message.result && message.result.modelId) {
+            benchmarkResults = message.result.data;
+            displayBenchmarkResults(message.result.modelId);
+            
+            // Close modal if it's open
+            if (benchmarkModal && benchmarkModal._isShown) {
+              benchmarkModal.hide();
+            }
+            return;
+          }
+          
+          // Check if this is a jobs response
+          if (message.result && Array.isArray(message.result.jobs)) {
+            displayActiveJobs(message.result.jobs);
+            return;
+          }
+        }
+        
+        // Handle structured message types (new format)
         if (message.type === 'benchmarkedModels') {
+          console.log('Received benchmarked models:', message.models);
           benchmarkedModels = message.models;
           populateModelSelect();
         } else if (message.type === 'benchmarkResults') {
@@ -297,6 +330,8 @@
           }
           fetchBenchmarkedModels();
           fetchModelBenchmarks(message.modelId);
+        } else {
+          console.log('Unhandled message type:', message);
         }
       } catch (error) {
         console.error('Error processing message:', error);
