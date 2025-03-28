@@ -163,26 +163,43 @@ async function saveModelResult(
   isLocal: boolean,
   timestamp: string
 ): Promise<void> {
-  await db.run(
-    `INSERT INTO model_results 
-    (taskId, model, isLocal, timeTaken, successRate, qualityScore, 
-     promptTokens, completionTokens, totalTokens, cost, output, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      taskId,
-      result.model,
-      isLocal ? 1 : 0,
-      result.timeTaken,
-      result.successRate,
-      result.qualityScore,
-      result.tokenUsage.prompt,
-      result.tokenUsage.completion,
-      result.tokenUsage.total,
-      result.cost || 0,
-      result.output || '',
-      timestamp
-    ]
-  );
+  const startTime = Date.now();
+  
+  try {
+    await db.run(
+      `INSERT INTO model_results 
+      (taskId, model, isLocal, timeTaken, successRate, qualityScore, 
+       promptTokens, completionTokens, totalTokens, cost, output, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        taskId,
+        result.model,
+        isLocal ? 1 : 0,
+        result.timeTaken,
+        result.successRate,
+        result.qualityScore,
+        result.tokenUsage.prompt,
+        result.tokenUsage.completion,
+        result.tokenUsage.total,
+        result.cost || 0,
+        result.output || '',
+        timestamp
+      ]
+    );
+    
+    const endTime = Date.now();
+    const elapsedMs = endTime - startTime;
+    
+    // Log if the operation takes more than 1 second
+    if (elapsedMs > 1000) {
+      logger.warn(`Database operation for model ${result.model} took ${elapsedMs}ms to complete`);
+    } else if (elapsedMs > 100) {
+      logger.debug(`Database operation for model ${result.model} took ${elapsedMs}ms to complete`);
+    }
+  } catch (error) {
+    logger.error(`Error saving result for model ${result.model}:`, error);
+    throw error; // Re-throw to handle in the transaction
+  }
 }
 
 export async function getRecentModelResults(model: string, days: number = 7): Promise<ModelStats | null> {

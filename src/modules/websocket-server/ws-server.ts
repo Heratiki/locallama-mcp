@@ -612,14 +612,6 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
                 await benchmarkService.benchmarkService.benchmarkFreeModels();
                 logger.info(`Completed benchmarkFreeModels for model: ${modelId}`);
                 
-                logger.info(`Generating comprehensive summary for model: ${modelId}`);
-                await benchmarkService.benchmarkService.generateComprehensiveSummary();
-                
-                logger.info(`Updating model performance profiles for model: ${modelId}`);
-                await benchmarkService.benchmarkService.updateModelPerformanceProfiles();
-                
-                logger.info(`== BENCHMARK COMPLETE: Individual model ${modelId} ==`);
-                
                 // Notify client that benchmark is complete
                 ws.send(JSON.stringify({
                   jsonrpc: '2.0',
@@ -631,6 +623,17 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
                     modelId
                   }
                 }));
+                
+                // Run these operations asynchronously without blocking UI response
+                void Promise.resolve().then(async () => {
+                  logger.info(`Generating comprehensive summary for model: ${modelId}`);
+                  await benchmarkService.benchmarkService.generateComprehensiveSummary();
+                  
+                  logger.info(`Updating model performance profiles for model: ${modelId}`);
+                  await benchmarkService.benchmarkService.updateModelPerformanceProfiles();
+                  
+                  logger.info(`== BENCHMARK COMPLETE: Post-processing completed for ${modelId} ==`);
+                });
               } finally {
                 // Restore the original function using the same cast pattern
                 costMonitorAny.getFreeModels = originalGetFreeModels;
@@ -691,6 +694,17 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
                   status: 'completed'
                 }
               }));
+              
+              // Run these operations asynchronously without blocking UI response
+              void Promise.resolve().then(async () => {
+                logger.info(`Generating comprehensive summary for all models`);
+                await benchmarkService.benchmarkService.generateComprehensiveSummary();
+                
+                logger.info(`Updating model performance profiles for all models`);
+                await benchmarkService.benchmarkService.updateModelPerformanceProfiles();
+                
+                logger.info(`== BENCHMARK COMPLETE: Post-processing completed for all models ==`);
+              });
             } catch (err) {
               logger.error('Error running benchmarks:', err);
               ws.send(JSON.stringify({
