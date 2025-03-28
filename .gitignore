@@ -41,6 +41,7 @@ coverage/
 
 # Editor directories and files
 .idea/
+.venv
 .vscode/
 *.suo
 *.ntvs*
@@ -55,7 +56,45 @@ Thumbs.db
 *.temp
 .cache/
 temp/
+
+# Backup code
+backup-code/*
+
+# Debug files
 .clinerules-debug
 .roomodes
+.roo
+dev-docs
+
+# HTTP interaction files
 mcp-interact.http
+
+# Development plan files
+dev-plan/*
+
+# Integration plan files
+minions-integration-plan.yaml
+
+# Python version file
+.python-version
+
+# Additional documentation files
+additional documentation/advanced_retriever.md
+additional documentation/dense_retriever.md
+additional documentation/faq.md
+additional documentation/filters.md
+additional documentation/hybrid_retriever.md
+additional documentation/sparse_retriever.md
+additional documentation/speed.md
+additional documentation/text_preprocessing.md
+lint-output.txt
+insert-variables.sh
+.locallama_port
+locallama.log                 # Log file path (optional, logs to console if not set)
+data/jobs.db
+.env.backup
+bridge.js
+locallama.lock
+openrouter-models.json
+data/benchmark-results.db
 
