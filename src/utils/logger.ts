@@ -105,7 +105,7 @@ const currentLogLevel = getLogLevelFromString(config.logLevel);
 /**
  * Type for log arguments - using unknown is safer than any
  */
-type LogArgs = unknown[];
+export type LogArgs = unknown[];
 
 /**
  * Format log message with timestamp
