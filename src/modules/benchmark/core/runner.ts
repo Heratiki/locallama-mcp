@@ -2,7 +2,7 @@ import { config as appConfig } from '../../../config/index.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { openRouterModule } from '../../openrouter/index.js';
 import { logger } from '../../../utils/logger.js';
-import { BenchmarkConfig, BenchmarkResult, Model, BenchmarkTaskParams } from '../../../types/index.js';
+import { BenchmarkConfig, BenchmarkResult, BenchmarkRunResult, Model, BenchmarkTaskParams } from '../../../types/index.js';
 import { callLmStudioApi } from '../api/lm-studio.js';
 import { callOllamaApi } from '../api/ollama.js';
 import { simulateOpenAiApi, simulateGenericApi } from '../api/simulation.js';
@@ -40,6 +40,7 @@ export async function runModelBenchmark(
     total: number;
   };
   output?: string;
+  runs: BenchmarkRunResult[];
 }> {
   // Initialize results
   let totalTimeTaken = 0;
@@ -51,6 +52,8 @@ export async function runModelBenchmark(
     total: 0,
   };
   let output = '';
+  // Store all run results
+  const runs: BenchmarkRunResult[] = [];
   
   // Run multiple times to get average performance
   for (let i = 0; i < config.runsPerTask; i++) {
@@ -69,6 +72,7 @@ export async function runModelBenchmark(
       let qualityScore = 0;
       let promptTokens = 0;
       let completionTokens = 0;
+      let runOutput = '';
       
       if (model.provider === 'lm-studio') {
         logger.info(`Calling LM Studio API for model ${model.id}`);
@@ -78,7 +82,9 @@ export async function runModelBenchmark(
         promptTokens = response.usage?.prompt_tokens || contextLength;
         completionTokens = response.usage?.completion_tokens || expectedOutputLength;
         if (success) {
-          output = response.text || '';
+          runOutput = response.text || '';
+          // Store the latest successful output
+          output = runOutput;
         }
       } else if (model.provider === 'ollama') {
         response = await callOllamaApi(model.id, task, config.taskTimeout);
@@ -87,7 +93,9 @@ export async function runModelBenchmark(
         promptTokens = response.usage?.prompt_tokens || contextLength;
         completionTokens = response.usage?.completion_tokens || expectedOutputLength;
         if (success) {
-          output = response.text || '';
+          runOutput = response.text || '';
+          // Store the latest successful output
+          output = runOutput;
         }
       } else if (model.provider === 'openai') {
         response = await simulateOpenAiApi(task, config.taskTimeout);
@@ -96,7 +104,9 @@ export async function runModelBenchmark(
         promptTokens = response.usage?.prompt_tokens || contextLength;
         completionTokens = response.usage?.completion_tokens || expectedOutputLength;
         if (success) {
-          output = response.text || '';
+          runOutput = response.text || '';
+          // Store the latest successful output
+          output = runOutput;
         }
       } else {
         response = await simulateGenericApi(task, config.taskTimeout);
@@ -105,7 +115,9 @@ export async function runModelBenchmark(
         promptTokens = contextLength;
         completionTokens = expectedOutputLength;
         if (success) {
-          output = response.text || '';
+          runOutput = response.text || '';
+          // Store the latest successful output
+          output = runOutput;
         }
       }
       
@@ -128,18 +140,35 @@ export async function runModelBenchmark(
               success = evaluationResult.modelEvaluation.isValid;
               qualityScore = evaluationResult.modelEvaluation.qualityScore;
               logger.info(`Code evaluation service evaluation: Valid=${success}, Quality=${qualityScore}`);
+              if (success) {
+                runOutput = response.text || '';
+                // Store the latest successful output
+                output = runOutput;
+              }
             }
           } catch (evalError) {
             logger.error('Code evaluation service failed:', evalError);
           }
         }
       }
-
       const endTime = Date.now();
       const timeTaken = endTime - startTime;
       
       // Log detailed results of each run
       logger.info(`Benchmark run ${i+1} for ${model.id} completed: Success=${success}, Quality=${qualityScore.toFixed(2)}, Time=${timeTaken}ms`);
+      
+      // Store this run result
+      runs.push({
+        timeTaken,
+        success,
+        qualityScore,
+        tokenUsage: {
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: promptTokens + completionTokens
+        },
+        output: runOutput // Store output for each run 
+      });
       
       // Update results
       totalTimeTaken += timeTaken;
@@ -153,6 +182,19 @@ export async function runModelBenchmark(
       
     } catch (error) {
       logger.error(`Error in run ${i + 1} for ${model.id}:`, error);
+      
+      // Still add the failed run to the results
+      runs.push({
+        timeTaken: 0,
+        success: false,
+        qualityScore: 0,
+        tokenUsage: {
+          prompt: 0,
+          completion: 0,
+          total: 0
+        },
+        output: error instanceof Error ? error.message : String(error)
+      });
     }
   }
   
@@ -162,7 +204,7 @@ export async function runModelBenchmark(
   const avgQualityScore = totalQualityScore / config.runsPerTask;
   
   // Add summary logging
-  logger.info(`Benchmark complete for ${model.id} (${model.provider}): Success=${successRate.toFixed(2)}, Quality=${avgQualityScore.toFixed(2)}, Avg Time=${avgTimeTaken.toFixed(0)}ms`);
+  logger.info(`Benchmark complete for ${model.id} (${model.provider}): Success=${successRate.toFixed(2)}, Quality=${avgQualityScore.toFixed(2)}, Avg Time=${avgTimeTaken.toFixed(0)}ms, Completed ${runs.length} of ${config.runsPerTask} runs`);
   
   // Average the token usage
   tokenUsage.prompt = Math.round(tokenUsage.prompt / config.runsPerTask);
@@ -174,7 +216,8 @@ export async function runModelBenchmark(
     successRate,
     qualityScore: avgQualityScore,
     tokenUsage,
-    output
+    output,
+    runs // Return all run results
   };
 }
 
@@ -361,6 +404,7 @@ export async function benchmarkTask(
   result.local.qualityScore = localResults.qualityScore;
   result.local.tokenUsage = localResults.tokenUsage;
   result.local.output = localResults.output || '';
+  result.local.runs = localResults.runs; // Store all runs for the local model
   result.outputLength = localResults.tokenUsage.completion;
   
   // Run benchmark for paid model if available, not skipped, and no recent results
@@ -386,12 +430,9 @@ export async function benchmarkTask(
       result.paid.qualityScore = paidResults.qualityScore;
       result.paid.tokenUsage = paidResults.tokenUsage;
       result.paid.output = paidResults.output || '';
+      result.paid.runs = paidResults.runs; // Store all runs for the paid model
       result.paid.cost = paidResults.tokenUsage.prompt * (paidModel.costPerToken?.prompt || 0) + 
                        paidResults.tokenUsage.completion * (paidModel.costPerToken?.completion || 0);
-      
-      if (paidResults.tokenUsage.completion > 0) {
-        result.outputLength = paidResults.tokenUsage.completion;
-      }
     }
   }
   

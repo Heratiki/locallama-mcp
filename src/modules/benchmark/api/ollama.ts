@@ -35,6 +35,12 @@ export async function callOllamaApi(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
+    // Use temperature and other parameters from the default model config
+    const temperature = config.defaultModelConfig.temperature;
+    const maxTokens = config.defaultModelConfig.maxTokens;
+    
+    logger.debug(`Ollama API call for ${modelId} using temperature: ${temperature}, maxTokens: ${maxTokens}`);
+    
     const response = await axios.post<OllamaResponse>(
       `${config.ollamaEndpoint}/chat`,
       {
@@ -43,6 +49,10 @@ export async function callOllamaApi(
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: task }
         ],
+        options: {
+          temperature: temperature,
+          num_predict: maxTokens,
+        },
         stream: false,
       },
       {

@@ -42,6 +42,12 @@ export async function callLmStudioApi(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
+    // Use temperature and maxTokens from the default model config
+    const temperature = config.defaultModelConfig.temperature;
+    const maxTokens = config.defaultModelConfig.maxTokens;
+    
+    logger.debug(`LM Studio API call for ${modelId} using temperature: ${temperature}, maxTokens: ${maxTokens}`);
+    
     const response = await axios.post<LmStudioResponse>(
       `${config.lmStudioEndpoint}/chat/completions`,
       {
@@ -50,8 +56,8 @@ export async function callLmStudioApi(
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: task }
         ],
-        temperature: 0.7,
-        max_tokens: 1000,
+        temperature: temperature,
+        max_tokens: maxTokens,
       },
       {
         signal: controller.signal,

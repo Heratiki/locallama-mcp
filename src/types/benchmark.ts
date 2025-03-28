@@ -1,4 +1,31 @@
 /**
+ * Individual run result for a benchmark
+ */
+export interface BenchmarkRunResult {
+  /** Time taken in milliseconds */
+  timeTaken: number;
+  
+  /** Success (true/false) */
+  success: boolean;
+  
+  /** Quality score (0-1) */
+  qualityScore: number;
+  
+  /** Token usage */
+  tokenUsage: {
+    /** Number of prompt tokens */
+    prompt: number;
+    /** Number of completion tokens */
+    completion: number;
+    /** Total number of tokens */
+    total: number;
+  };
+  
+  /** Model output text */
+  output?: string;
+}
+
+/**
  * Benchmark result for a single task
  */
 export interface BenchmarkResult {
@@ -43,6 +70,9 @@ export interface BenchmarkResult {
     
     /** Model output text */
     output?: string;
+    
+    /** Individual run results */
+    runs?: BenchmarkRunResult[];
   };
   
   /** Paid API performance */
@@ -74,6 +104,9 @@ export interface BenchmarkResult {
     
     /** Model output text */
     output?: string;
+    
+    /** Individual run results */
+    runs?: BenchmarkRunResult[];
   };
   
   /** Timestamp of the benchmark */
