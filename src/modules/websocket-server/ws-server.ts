@@ -382,10 +382,27 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
                 const stats = await fs.promises.stat(taskPath);
                 
                 if (stats.isDirectory()) {
-                  // Check for result.json file
-                  const resultPath = path.join(taskPath, 'result.json');
                   try {
-                    const resultContent = await fs.promises.readFile(resultPath, 'utf-8');
+                    // First try result.json (the standard name)
+                    let resultPath = path.join(taskPath, 'result.json');
+                    let resultContent;
+                    
+                    try {
+                      resultContent = await fs.promises.readFile(resultPath, 'utf-8');
+                    } catch (readError) {
+                      // If result.json doesn't exist, try to find any benchmark-*.json file
+                      logger.debug(`result.json not found, looking for benchmark-*.json files: ${String(readError)}`);
+                      const files = await fs.promises.readdir(taskPath);
+                      const benchmarkFile = files.find(file => file.startsWith('benchmark-') && file.endsWith('.json'));
+                      
+                      if (benchmarkFile) {
+                        resultPath = path.join(taskPath, benchmarkFile);
+                        resultContent = await fs.promises.readFile(resultPath, 'utf-8');
+                      } else {
+                        throw new Error(`No benchmark files found in ${taskPath}`);
+                      }
+                    }
+                    
                     const resultData = JSON.parse(resultContent) as TaskResult;
                     
                     // Extract task info
@@ -397,8 +414,8 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
                       responseTime: resultData.local.timeTaken,
                       output: resultData.local.output
                     });
-                  } catch (readError) {
-                    logger.warn(`Could not read result for task ${taskDir}:`, readError);
+                  } catch (error) {
+                    logger.warn(`Could not read result for task ${taskDir}:`, error);
                   }
                 }
               }
@@ -484,61 +501,154 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
             }
           }));
           
-          // Check if this is a known model in our system
-          const isLmStudioModel = modelId.includes('lm-studio') || !modelId.includes('/');
-          const isOllamaModel = modelId.includes('ollama');
+          // Use benchmarkService to benchmark the model
+          const benchmarkService = await import('../../modules/decision-engine/services/benchmarkService.js');
+          const costMonitor = await import('../../modules/cost-monitor/index.js');
+          const fs = await import('fs/promises');
+          const path = await import('path');
           
-          // Create benchmark tasks
-          const tasks = [
-            {
-              taskId: 'simple-function',
-              task: 'Write a function to calculate the factorial of a number.',
-              contextLength: 100,
-              expectedOutputLength: 300,
-              complexity: 0.2
-            },
-            {
-              taskId: 'medium-algorithm',
-              task: 'Implement a binary search algorithm and explain its time complexity.',
-              contextLength: 150,
-              expectedOutputLength: 500,
-              complexity: 0.5
+          // Run the benchmark in the background to avoid blocking
+          void Promise.resolve().then(async () => {
+            try {
+              // Get available models
+              const availableModels = await costMonitor.costMonitor.getAvailableModels();
+              
+              // Find the exact model we want to benchmark
+              const model = availableModels.find(m => m.id === modelId);
+              
+              if (!model) {
+                throw new Error(`Model ${modelId} not found in available models`);
+              }
+              
+              logger.info(`=== Starting benchmark for specific model: ${modelId} ===`);
+              
+              // Remove existing benchmark results for this model to force a re-benchmark
+              // This is the key step: we need to delete existing benchmark files for this model
+              try {
+                const benchmarkDir = path.resolve(process.cwd(), 'benchmark-results');
+                
+                // Need to sanitize the model ID for directory name
+                // Replace both slashes and colons with hyphens
+                const sanitizedModelId = modelId.replace(/[/\\:]/g, '-');
+                const modelDir = path.join(benchmarkDir, sanitizedModelId);
+                
+                logger.info(`Checking for existing benchmark results in: ${modelDir}`);
+                
+                try {
+                  // Check if the directory exists before attempting to delete
+                  await fs.access(modelDir);
+                  
+                  // Directory exists, so recursively delete its contents
+                  const deleteRecursive = async (dir: string) => {
+                    const items = await fs.readdir(dir, { withFileTypes: true });
+                    
+                    for (const item of items) {
+                      const itemPath = path.join(dir, item.name);
+                      
+                      if (item.isDirectory()) {
+                        await deleteRecursive(itemPath);
+                        await fs.rmdir(itemPath);
+                      } else {
+                        await fs.unlink(itemPath);
+                      }
+                    }
+                  };
+                  
+                  await deleteRecursive(modelDir);
+                  await fs.rmdir(modelDir);
+                  
+                  logger.info(`Successfully removed existing benchmark results for model: ${modelId}`);
+                } catch (accessError) {
+                  // Directory doesn't exist, which is fine for our purposes
+                  logger.info(`No existing benchmark results found for model: ${modelId}`);
+                  logger.debug(`Reason: ${accessError instanceof Error ? accessError.message : String(accessError)}`);
+                }
+                
+                // Also remove this model's data from comprehensive results
+                try {
+                  const modelsDbService = await import('../../modules/decision-engine/services/modelsDb.js');
+                  const modelsDb = modelsDbService.modelsDbService.getDatabase();
+                  
+                  // Reset benchmark count and last benchmarked time
+                  if (modelsDb.models[modelId]) {
+                    logger.info(`Resetting benchmark data in database for model: ${modelId}`);
+                    modelsDb.models[modelId].benchmarkCount = 0;
+                    // Set to empty string instead of undefined to satisfy type constraints
+                    modelsDb.models[modelId].lastBenchmarked = '';
+                    await modelsDbService.modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+                  }
+                } catch (dbError) {
+                  logger.warn(`Error resetting database entry for model ${modelId}:`, dbError);
+                }
+              } catch (fsError) {
+                logger.warn(`Error removing existing benchmark results: ${String(fsError)}`);
+                // Continue with the benchmark even if we couldn't remove old results
+              }
+              
+              // After clearing existing results, proceed with the benchmark
+              
+              // Create a reference to the original function
+              const originalGetFreeModels = costMonitor.costMonitor.getFreeModels.bind(costMonitor.costMonitor);
+              
+              // Create a function that returns just our specific model
+              const singleModelFn = async () => {
+                await Promise.resolve();
+                logger.info(`Using customized getFreeModels to focus only on model: ${modelId}`);
+                return [model];
+              };
+              
+              // Patch the module
+              const costMonitorAny = costMonitor.costMonitor as {
+                getFreeModels: typeof singleModelFn;
+              };
+              
+              logger.info(`== BENCHMARK START: Individual model ${modelId} ==`);
+              
+              // Replace the function
+              costMonitorAny.getFreeModels = singleModelFn;
+              
+              try {
+                logger.info(`Running benchmarkFreeModels for model: ${modelId}`);
+                await benchmarkService.benchmarkService.benchmarkFreeModels();
+                logger.info(`Completed benchmarkFreeModels for model: ${modelId}`);
+                
+                logger.info(`Generating comprehensive summary for model: ${modelId}`);
+                await benchmarkService.benchmarkService.generateComprehensiveSummary();
+                
+                logger.info(`Updating model performance profiles for model: ${modelId}`);
+                await benchmarkService.benchmarkService.updateModelPerformanceProfiles();
+                
+                logger.info(`== BENCHMARK COMPLETE: Individual model ${modelId} ==`);
+                
+                // Notify client that benchmark is complete
+                ws.send(JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: Date.now(),
+                  result: {
+                    type: 'benchmarkCompleted',
+                    message: `Benchmark completed for model ${modelId}`,
+                    status: 'completed',
+                    modelId
+                  }
+                }));
+              } finally {
+                // Restore the original function using the same cast pattern
+                costMonitorAny.getFreeModels = originalGetFreeModels;
+                logger.info(`Restored original getFreeModels function after benchmark`);
+              }
+            } catch (err) {
+              logger.error(`Error in benchmark for ${modelId}:`, err);
+              ws.send(JSON.stringify({
+                jsonrpc: '2.0',
+                id: Date.now(),
+                error: {
+                  code: -32001,
+                  message: `Benchmark failed for model ${modelId}`,
+                  data: err instanceof Error ? err.message : String(err)
+                }
+              }));
             }
-          ];
-          
-          // Run benchmarks in background to avoid blocking
-          Promise.all(tasks.map(task => {
-            return benchmarkModule.benchmarkTask({
-              ...task,
-              localModel: isLmStudioModel || isOllamaModel ? modelId : undefined,
-              paidModel: !isLmStudioModel && !isOllamaModel ? modelId : undefined
-            }, config.benchmark);
-          }))
-          .then(() => {
-            // Notify client that benchmark is complete
-            ws.send(JSON.stringify({
-              jsonrpc: '2.0',
-              id: Date.now(), // Use new ID to avoid conflict
-              result: {
-                message: `Benchmark completed for model ${modelId}`,
-                status: 'completed',
-                modelId
-              }
-            }));
-          })
-          .catch(err => {
-            logger.error(`Error in benchmark for ${modelId}:`, err);
-            ws.send(JSON.stringify({
-              jsonrpc: '2.0',
-              id: Date.now(), // Use new ID to avoid conflict
-              error: {
-                code: -32001,
-                message: `Benchmark failed for model ${modelId}`,
-                data: err instanceof Error ? err.message : String(err)
-              }
-            }));
           });
-          
         } catch (error) {
           logger.error('Error starting benchmark:', error);
           ws.send(JSON.stringify({
