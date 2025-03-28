@@ -369,7 +369,8 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
             }
             
             // Add task results from individual benchmarks if available
-            const sanitizedModelId = modelId.replace(/\//g, '-');
+            // Properly sanitize the model ID for the file system - replace both slashes and colons
+            const sanitizedModelId = modelId.replace(/[/\\:]/g, '-');
             const modelDir = path.join(benchmarkDir, sanitizedModelId);
             
             try {
