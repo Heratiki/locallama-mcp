@@ -589,6 +589,7 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
               
               // Create a reference to the original function
               const originalGetFreeModels = costMonitor.costMonitor.getFreeModels.bind(costMonitor.costMonitor);
+              const originalGetAvailableModels = costMonitor.costMonitor.getAvailableModels.bind(costMonitor.costMonitor);
               
               // Create a function that returns just our specific model
               const singleModelFn = async () => {
@@ -597,19 +598,56 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
                 return [model];
               };
               
+              // Create a function that includes our specific model in available models
+              const singleAvailableModelFn = async () => {
+                // Get just this one model
+                await Promise.resolve();
+                logger.info(`Using customized getAvailableModels to focus only on model: ${modelId}`);
+                // Return an array with just our target model
+                return [model];
+              };
+              
               // Patch the module
               const costMonitorAny = costMonitor.costMonitor as {
                 getFreeModels: typeof singleModelFn;
+                getAvailableModels: typeof singleAvailableModelFn;
               };
               
               logger.info(`== BENCHMARK START: Individual model ${modelId} ==`);
               
-              // Replace the function
+              // Replace the functions
               costMonitorAny.getFreeModels = singleModelFn;
+              costMonitorAny.getAvailableModels = singleAvailableModelFn;
+              
+              // Also patch the MAX_MODELS_TO_BENCHMARK environment variable
+              const originalMaxModels = process.env.MAX_MODELS_TO_BENCHMARK;
+              process.env.MAX_MODELS_TO_BENCHMARK = '1';
               
               try {
                 logger.info(`Running benchmarkFreeModels for model: ${modelId}`);
+                
+                // Temporarily override the environment variable to use only 1 run per task
+                // Save the original value first
+                const originalRunsPerTask = process.env.BENCHMARK_RUNS_PER_TASK;
+                process.env.BENCHMARK_RUNS_PER_TASK = '1';
+                
+                // Run the benchmark with the environment override
                 await benchmarkService.benchmarkService.benchmarkFreeModels();
+                
+                // Restore the original environment variable
+                if (originalRunsPerTask) {
+                  process.env.BENCHMARK_RUNS_PER_TASK = originalRunsPerTask;
+                } else {
+                  delete process.env.BENCHMARK_RUNS_PER_TASK;
+                }
+                
+                // Restore MAX_MODELS_TO_BENCHMARK
+                if (originalMaxModels) {
+                  process.env.MAX_MODELS_TO_BENCHMARK = originalMaxModels;
+                } else {
+                  delete process.env.MAX_MODELS_TO_BENCHMARK;
+                }
+                
                 logger.info(`Completed benchmarkFreeModels for model: ${modelId}`);
                 
                 // Notify client that benchmark is complete
@@ -635,9 +673,10 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
                   logger.info(`== BENCHMARK COMPLETE: Post-processing completed for ${modelId} ==`);
                 });
               } finally {
-                // Restore the original function using the same cast pattern
+                // Restore the original functions using the same cast pattern
                 costMonitorAny.getFreeModels = originalGetFreeModels;
-                logger.info(`Restored original getFreeModels function after benchmark`);
+                costMonitorAny.getAvailableModels = originalGetAvailableModels;
+                logger.info(`Restored original getFreeModels and getAvailableModels functions after benchmark`);
               }
             } catch (err) {
               logger.error(`Error in benchmark for ${modelId}:`, err);
@@ -683,6 +722,9 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
           void Promise.resolve().then(async () => {
             try {
               const benchmarkService = await import('../../modules/decision-engine/services/benchmarkService.js');
+              
+              // Use the default runsPerTask value from config for regular benchmarking
+              // which will be 3 runs per task by default
               await benchmarkService.benchmarkService.benchmarkFreeModels();
               
               // Notify client that benchmark is complete
