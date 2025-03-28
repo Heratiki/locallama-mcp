@@ -233,6 +233,8 @@
     let currentFilter = 'all';
     let benchmarkResults = {};
     let benchmarkModal;
+    let jobRefreshInterval;
+    let isBenchmarking = false;
 
     async function initializeWebSocket() {
       try {
@@ -293,10 +295,28 @@
             benchmarkResults = message.result.data;
             displayBenchmarkResults(message.result.modelId);
             
+            // Reset benchmarking state when results come back
+            isBenchmarking = false;
+            
             // Close modal if it's open
             if (benchmarkModal && benchmarkModal._isShown) {
               benchmarkModal.hide();
             }
+            return;
+          }
+          
+          // Check if this is a benchmark completion notification
+          if (message.result && message.result.status === 'completed' && message.result.modelId) {
+            // Reset benchmarking state
+            isBenchmarking = false;
+            
+            // Close modal if it's open
+            if (benchmarkModal && benchmarkModal._isShown) {
+              benchmarkModal.hide();
+            }
+            
+            // Refresh data for the specific model
+            fetchModelBenchmarks(message.result.modelId);
             return;
           }
           
@@ -305,6 +325,20 @@
             displayActiveJobs(message.result.jobs);
             return;
           }
+        }
+        
+        // Check for error responses that might indicate benchmark failure
+        if (message.jsonrpc === '2.0' && message.error) {
+          console.error('RPC error:', message.error);
+          // Reset benchmarking state on error
+          isBenchmarking = false;
+          
+          if (benchmarkModal && benchmarkModal._isShown) {
+            benchmarkModal.hide();
+          }
+          
+          alert(`Error: ${message.error.message || 'Benchmark failed'}`);
+          return;
         }
         
         // Handle structured message types (new format)
@@ -316,6 +350,9 @@
           benchmarkResults = message.results;
           displayBenchmarkResults(message.modelId);
           
+          // Reset benchmarking state
+          isBenchmarking = false;
+          
           // Close modal if it's open
           if (benchmarkModal && benchmarkModal._isShown) {
             benchmarkModal.hide();
@@ -325,6 +362,9 @@
         } else if (message.type === 'benchmarkStarted') {
           showBenchmarkModal(message.modelId);
         } else if (message.type === 'benchmarkCompleted') {
+          // Reset benchmarking state
+          isBenchmarking = false;
+          
           if (benchmarkModal && benchmarkModal._isShown) {
             benchmarkModal.hide();
           }
@@ -335,6 +375,8 @@
         }
       } catch (error) {
         console.error('Error processing message:', error);
+        // Reset benchmarking state on error
+        isBenchmarking = false;
       }
     }
 
@@ -503,7 +545,7 @@
             }
             
             // Handle other thinking formats
-            const bracketThinkingMatches = cleanOutput.match(/\[thinking\]([\s\S]*?)\[\/thinking\]/i);
+            const bracketThinkingMatches = cleanOutput.match(/\[thinking\]([\\s\S]*?)\[\/thinking\]/i);
             if (bracketThinkingMatches) {
               thinkingOutput = bracketThinkingMatches[1];
               cleanOutput = cleanOutput.replace(/\[thinking\][\s\S]*?\[\/thinking\]/gi, '');
@@ -600,12 +642,21 @@
 
     function rebenchmarkModel(modelId) {
       if (confirm('Are you sure you want to re-benchmark this model? This may take several minutes.')) {
+        // Set benchmarking state to true
+        isBenchmarking = true;
+        
+        // Show benchmark modal immediately
+        showBenchmarkModal(modelId);
+        
+        // Send command to server
         sendCommand(`rebenchmarkModel ${modelId}`);
       }
     }
 
     function runAllBenchmarks() {
       if (confirm('Are you sure you want to run benchmarks for all models? This may take a long time.')) {
+        // Set benchmarking state to true
+        isBenchmarking = true;
         sendCommand('runAllBenchmarks');
       }
     }
@@ -645,8 +696,30 @@
       initializeWebSocket();
       
       // Set up refresh interval for jobs
-      setInterval(fetchActiveJobs, 10000); // Every 10 seconds
+      startJobRefreshInterval();
     });
+    
+    function startJobRefreshInterval() {
+      // Clear any existing interval first
+      if (jobRefreshInterval) {
+        clearInterval(jobRefreshInterval);
+      }
+      
+      // Set up a new interval
+      jobRefreshInterval = setInterval(() => {
+        // Only fetch jobs if we're not currently benchmarking
+        if (!isBenchmarking) {
+          fetchActiveJobs();
+        }
+      }, 10000); // Every 10 seconds
+    }
+    
+    function pauseJobRefreshInterval() {
+      if (jobRefreshInterval) {
+        clearInterval(jobRefreshInterval);
+        jobRefreshInterval = null;
+      }
+    }
   </script>
 </body>
 </html>
