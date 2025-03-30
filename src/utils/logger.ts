@@ -7,6 +7,13 @@ import zlib from 'zlib';
 const MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_LOG_FILES = 5;
 
+export interface Logger {
+  error: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  info: (...args: unknown[]) => void;
+  debug: (...args: unknown[]) => void;
+}
+
 /**
  * Log levels
  */
@@ -126,7 +133,7 @@ function writeToConsole(level: string, message: string): void {
 /**
  * Enhanced logger utility with file logging support
  */
-export const logger = {
+export const logger: Logger = {
   error(...args: LogArgs): void {
     const message = formatLogMessage('ERROR', args[0] as string, args.slice(1));
     writeToConsole('ERROR', message);
