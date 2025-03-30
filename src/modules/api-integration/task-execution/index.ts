@@ -158,7 +158,7 @@ export class TaskExecutor implements ITaskExecutor {
 
       // Complete the job (100%)
       try {
-        void jobTracker.completeJob(jobId);
+        void jobTracker.completeJob(jobId, [formattedResult]);
       } catch (completeJobError) {
         logger.error(`Failed to complete job ${jobId}: ${completeJobError instanceof Error ? completeJobError.message : String(completeJobError)}`);
       }

@@ -161,7 +161,7 @@ export interface IJobManager {
   /**
    * Mark a job as completed
    */
-  completeJob(jobId: string): void;
+  completeJob(jobId: string, results?: string[]): void;
 
   /**
    * Mark a job as failed

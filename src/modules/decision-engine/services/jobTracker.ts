@@ -35,6 +35,7 @@ export interface Job {
   startTime: number;
   model?: string;
   error?: string;
+  results?: string[]; // Array to store generated code blocks
 }
 
 /**
@@ -143,7 +144,7 @@ class JobTracker extends EventEmitter {
     }
   }
 
-  async completeJob(id: string): Promise<void> {
+  async completeJob(id: string, results?: string[]): Promise<void> {
     if (!this.initialized) {
       throw new Error('JobTracker not initialized');
     }
@@ -153,6 +154,12 @@ class JobTracker extends EventEmitter {
       job.status = JobStatus.COMPLETED;
       job.progress = '100%';
       job.estimated_time_remaining = '0';
+      
+      // Store results if provided
+      if (results && results.length > 0) {
+        job.results = results;
+        logger.debug(`Stored ${results.length} code blocks for job ${id}`);
+      }
       
       this.activeJobs.set(id, job);
       logger.debug(`Completed job ${id}`);
