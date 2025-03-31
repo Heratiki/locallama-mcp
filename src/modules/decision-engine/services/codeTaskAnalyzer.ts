@@ -207,26 +207,6 @@ export const codeTaskAnalyzer = {
    * @returns A complexity analysis result
    */
   async analyzeComplexity(task: string | undefined): Promise<CodeComplexityResult> {
-    /*
-    Author: Roo
-    Date: March 11, 2025, 8:28:46 PM
-    Removed duplicate null check that was causing redundant code execution
-    Original code:
-    if (!task) {
-      logger.warn('Task is undefined, returning default complexity.');
-      return {
-        overallComplexity: 0.5,
-        factors: {
-          algorithmic: 0.5,
-          integration: 0.5,
-          domainKnowledge: 0.5,
-          technical: 0.5
-        },
-        explanation: 'Task was undefined, using default medium complexity.'
-      };
-    }
-    */
-
     // Enhanced validation for undefined, null, or empty string task
     if (!task || task.trim() === '') {
       logger.warn('Task is undefined, null, or empty, returning default complexity.');
@@ -274,18 +254,58 @@ export const codeTaskAnalyzer = {
         logger.debug('Error getting free models, falling back to default:', error);
       }
       
-      const result = await openRouterModule.callOpenRouterApi(
-        modelId,
-        prompt,
-        30000 // 30 seconds timeout
-      );
+      let llmAnalysis: CodeComplexityResult;
+      
+      try {
+        const result = await openRouterModule.callOpenRouterApi(
+          modelId,
+          prompt,
+          30000 // 30 seconds timeout
+        );
 
-      if (!result.success || !result.text) {
-        logger.error('Failed to analyze complexity:', result.error);
-        throw new Error('Failed to analyze complexity: API returned unsuccessful result');
+        if (!result.success || !result.text) {
+          logger.warn('Model API failed for complexity analysis, using fallback strategy');
+          throw new Error('API returned unsuccessful result');
+        }
+
+        llmAnalysis = this.parseComplexityFromResponse(result.text);
+      } catch (apiError) {
+        // Use pattern-based fallback if API call fails
+        const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+        logger.warn(`Using pattern-based fallback for complexity analysis: ${errorMessage}`);
+        
+        // Calculate an algorithmic complexity based on keywords in the task
+        const algorithmicPatterns = [
+          /\b(algorithm|data structure|optimization|performance)\b/i,
+          /\b(search|sort|traverse|iterate)\b/i,
+          /\b(recursion|recursive|dynamic programming)\b/i,
+          /\b(complexity|big o|performance|optimize)\b/i
+        ];
+        
+        const algorithmicMatches = algorithmicPatterns.reduce((count, pattern) => 
+          count + (pattern.test(task) ? 1 : 0), 0);
+        
+        const algorithmicComplexity = Math.min(
+          algorithmicMatches / algorithmicPatterns.length + 0.3, 
+          0.9
+        );
+        
+        // Create a fallback complexity analysis
+        llmAnalysis = {
+          overallComplexity: Math.min(
+            (algorithmicComplexity + avgIntegrationComplexity + 
+             avgDomainComplexity + avgTechnicalComplexity) / 4 + 0.1,
+            0.9
+          ),
+          factors: {
+            algorithmic: algorithmicComplexity,
+            integration: avgIntegrationComplexity,
+            domainKnowledge: avgDomainComplexity,
+            technical: avgTechnicalComplexity
+          },
+          explanation: `Complexity assessed using pattern-based analysis: algorithmic=${algorithmicComplexity.toFixed(2)}, integration=${avgIntegrationComplexity.toFixed(2)}, domain=${avgDomainComplexity.toFixed(2)}, technical=${avgTechnicalComplexity.toFixed(2)}`
+        };
       }
-
-      const llmAnalysis = this.parseComplexityFromResponse(result.text);
       
       // Calculate overall domain knowledge score
       const domainKnowledgeScore = Math.max(
@@ -352,26 +372,36 @@ export const codeTaskAnalyzer = {
           // Define minimal type for raw subtask data
           type RawSubtask = {
             id?: string | number;
+            complexity?: number;
             [key: string]: unknown;
           };
           
-          if (Array.isArray(parsed)) {
-            return parsed.map((subtask: RawSubtask) => ({
+          // Apply complexity capping to prevent extremely high complexity values
+          const complexityThreshold = 0.8;
+          const processSubtask = (subtask: RawSubtask) => {
+            // Cap complexity at threshold if it exceeds it
+            if (subtask.complexity && subtask.complexity > complexityThreshold) {
+              logger.warn(`Capping subtask complexity from ${subtask.complexity} to ${complexityThreshold}`);
+              subtask.complexity = complexityThreshold;
+            }
+            return {
               ...subtask,
               id: subtask.id ? String(subtask.id) : uuidv4(),
-            }));
+            };
+          };
+          
+          if (Array.isArray(parsed)) {
+            return parsed.map(processSubtask);
           } else if (isSubtasksWrapper(parsed)) {
             // Handle case where JSON contains a wrapper object with subtasks array
-            return parsed.subtasks.map((subtask: RawSubtask) => ({
-              ...subtask,
-              id: subtask.id ? String(subtask.id) : uuidv4(),
-            }));
+            return parsed.subtasks.map(processSubtask);
           } else {
             logger.warn('JSON does not match expected subtasks format');
             return []; // Return empty array if JSON doesn't match expected format
           }
         } catch (jsonError: unknown) {
-          logger.warn(`Failed to parse JSON: ${String(jsonError)}`);
+          const errorMessage = jsonError instanceof Error ? jsonError.message : String(jsonError);
+          logger.warn(`Failed to parse JSON: ${errorMessage}`);
         }
       }
         
@@ -390,10 +420,17 @@ export const codeTaskAnalyzer = {
           // Ensure ID is always a string, using provided ID or generating a new UUID
           const id = idMatch ? String(idMatch[1].trim()) : uuidv4();
           
+          // Parse complexity with a cap at 0.8
+          let complexity = complexityMatch ? parseFloat(complexityMatch[1]) : 0.5;
+          if (complexity > 0.8) {
+            logger.warn(`Capping subtask complexity from ${complexity} to 0.8`);
+            complexity = 0.8;
+          }
+          
           return {
             id,
             description: descriptionMatch ? descriptionMatch[1].trim() : section.trim().split('\n')[0],
-            complexity: complexityMatch ? parseFloat(complexityMatch[1]) : 0.5,
+            complexity,
             estimatedTokens: tokensMatch ? parseInt(tokensMatch[1]) : 1000,
             dependencies: dependenciesMatch ?
               dependenciesMatch[1].split(',').map(d => d.trim()) : [],

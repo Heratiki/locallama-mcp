@@ -266,8 +266,10 @@ export const openRouterModule = {
     if (modelId.includes('google')) return 'google';
     if (modelId.includes('gemini')) return 'google';
     if (modelId.includes('mistral')) return 'mistral';
+    if (modelId.includes('meta-llama')) return 'meta';
     if (modelId.includes('meta')) return 'meta';
     if (modelId.includes('llama')) return 'meta';
+    if (modelId.includes('deepseek')) return 'deepseek';
     return 'unknown';
   },
 

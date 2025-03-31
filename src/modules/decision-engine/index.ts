@@ -67,29 +67,47 @@ export const decisionEngine = {
 
     try {
       // Initialize models database
-      modelsDbService.initialize();
+      void modelsDbService.initialize();
 
       // Initialize module connections to resolve circular dependencies
       modelPerformanceTracker.initialize(codeModelSelector);
       
-      try {
-        jobTracker = await getJobTracker();
-        setInterval(() => {
-          try {
-            jobTracker.cleanupCompletedJobs();
-          } catch (cleanupError) {
-            logger.error('Error cleaning up completed jobs:', cleanupError);
+      // Try to initialize job tracker with retry logic
+      let retries = 0;
+      const maxRetries = 3;
+      
+      while (retries < maxRetries) {
+        try {
+          jobTracker = await getJobTracker();
+          
+          // Setup cleanup interval once successfully initialized
+          setInterval(() => {
+            try {
+              jobTracker.cleanupCompletedJobs();
+            } catch (cleanupError) {
+              logger.error('Error cleaning up completed jobs:', cleanupError);
+            }
+          }, 3600000); // Clean up every hour
+          
+          break; // Break out of retry loop on success
+        } catch (getJobTrackerError) {
+          retries++;
+          logger.error(`Error initializing jobTracker (attempt ${retries}/${maxRetries}):`, getJobTrackerError);
+          
+          if (retries >= maxRetries) {
+            logger.error('Failed to initialize JobTracker after maximum retries. Some functionality may be limited.');
+          } else {
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
-        }, 3600000); // Clean up every hour
-      } catch (getJobTrackerError) {
-        logger.error('Error initializing jobTracker:', getJobTrackerError);
+        }
       }
 
       // Check for new free models that haven't been benchmarked
       if (config.openRouterApiKey) {
         try {
           // Schedule benchmarking to run in the background
-          setTimeout(() => {
+          void setTimeout(() => {
             benchmarkService.benchmarkFreeModels().catch(err => {
               logger.error('Error benchmarking free models:', err);
             });
