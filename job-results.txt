@@ -1,0 +1,27 @@
+Certainly! The Fibonacci sequence is a series of numbers where each number is the sum of the two preceding ones, usually starting with 0 and 1. Here is a Python function to calculate the nth Fibonacci number:
+
+```python
+def fibonacci(n):
+    if n <= 0:
+        raise ValueError("Input should be a positive integer.")
+    elif n == 1:
+        return 0
+    elif n == 2:
+        return 1
+
+    a, b = 0, 1
+    for _ in range(2, n):
+        a, b = b, a + b
+    return b
+
+# Example usage:
+n = 10
+print(f"The {n}th Fibonacci number is {fibonacci(n)}")
+```
+
+### Explanation:
+1. **Input Validation**: The function first checks if the input `n` is a positive integer. If not, it raises a `ValueError`.
+2. **Base Cases**: If `n` is 1, it returns 0 (the first Fibonacci number). If `n` is 2, it returns 1 (the second Fibonacci number).
+3. **Iterative Calculation**: For `n` greater than 2, it uses an iterative approach to calculate the nth Fibonacci number. It initializes two variables `a` and `b` to 0 and 1, respectively. Then, it iterates from 2 to `n-1`, updating `a` and `b` to the next Fibonacci numbers in the sequence.
+
+This function is efficient with a time complexity of O(n) and a space complexity of O(1).
