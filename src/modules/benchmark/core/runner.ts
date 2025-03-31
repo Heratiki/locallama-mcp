@@ -63,6 +63,10 @@ export async function runModelBenchmark(
       // Add enhanced logging for debugging
       logger.info(`Executing benchmark run ${i + 1}/${config.runsPerTask} for model ${model.id} (provider: ${model.provider}) with task: ${task.substring(0, 30)}...`);
       
+      // Calculate dynamic timeout based on model size and task complexity
+      const dynamicTimeout = getDynamicTimeout(model.id, model.contextWindow, task.length / 1000);
+      logger.info(`Using dynamic timeout of ${dynamicTimeout}ms for model ${model.id}`);
+      
       // Measure response time
       const startTime = Date.now();
       
@@ -76,7 +80,7 @@ export async function runModelBenchmark(
       
       if (model.provider === 'lm-studio') {
         logger.info(`Calling LM Studio API for model ${model.id}`);
-        response = await callLmStudioApi(model.id, task, config.taskTimeout);
+        response = await callLmStudioApi(model.id, task, dynamicTimeout);
         success = response.success;
         qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
         promptTokens = response.usage?.prompt_tokens || contextLength;
@@ -442,4 +446,41 @@ export async function benchmarkTask(
   }
   
   return result;
+}
+
+export function getDynamicTimeout(modelId: string, contextWindow: number = 4096, taskComplexity: number = 0.5): number {
+  // Base timeout for small models on simple tasks (2 minutes)
+  const baseTimeout = 120000;
+  
+  // Size multiplier based on context window size
+  // Larger models get more time - context window is a good proxy for model size
+  let sizeMultiplier = 1.0;
+  if (contextWindow >= 32768) {
+    // Very large models (32B+ parameters) - 3x more time
+    sizeMultiplier = 3.0;
+  } else if (contextWindow >= 16384) {
+    // Large models (13B-32B parameters) - 2.5x more time
+    sizeMultiplier = 2.5;
+  } else if (contextWindow >= 8192) {
+    // Medium-large models (7B-13B parameters) - 2x more time
+    sizeMultiplier = 2.0;
+  } else if (contextWindow >= 4096) {
+    // Medium models (1B-7B parameters) - 1.5x more time
+    sizeMultiplier = 1.5;
+  }
+  
+  // Complexity multiplier based on task complexity
+  // More complex tasks get more time
+  const complexityMultiplier = 1.0 + taskComplexity;
+  
+  // Adjust for specific models known to be slow
+  const modelMultiplier = modelId.includes('32b') || modelId.includes('70b') ? 1.5 : 1.0;
+  
+  // Calculate final timeout
+  const timeout = Math.round(baseTimeout * sizeMultiplier * complexityMultiplier * modelMultiplier);
+  
+  // Log the calculated timeout
+  logger.debug(`Calculated timeout for ${modelId}: ${timeout}ms (size: ${sizeMultiplier}x, complexity: ${complexityMultiplier}x, model-specific: ${modelMultiplier}x)`);
+  
+  return timeout;
 }

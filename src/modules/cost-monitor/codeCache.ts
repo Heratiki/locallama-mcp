@@ -461,7 +461,16 @@ export const codeCache = {
     try {
       if (fs.existsSync(patternCacheFilePath)) {
         const patternCacheData = await fs.promises.readFile(patternCacheFilePath, 'utf-8');
-        codeCache.patternCache = new Map<string, Set<string>>(JSON.parse(patternCacheData) as Iterable<[string, Set<string>]>);
+        // Parse the JSON data with explicit typing
+        const patternEntries = JSON.parse(patternCacheData) as Array<[string, string[]]>;
+        
+        // Create a new Map and convert arrays back to Set objects
+        const patternMap = new Map<string, Set<string>>();
+        for (const [key, values] of patternEntries) {
+          patternMap.set(key, new Set<string>(values));
+        }
+        
+        codeCache.patternCache = patternMap;
         logger.info('Pattern cache loaded from file');
       } else {
         logger.info('No pattern cache file found, starting with empty cache');
@@ -479,7 +488,13 @@ export const codeCache = {
     const patternCacheFilePath = path.join(config.cacheDir, 'pattern-cache.json');
     try {
       await fs.promises.writeFile(cacheFilePath, JSON.stringify(Array.from(codeCache.cache.entries())), 'utf-8');
-      await fs.promises.writeFile(patternCacheFilePath, JSON.stringify(Array.from(codeCache.patternCache.entries())), 'utf-8');
+      
+      // Convert Set objects to arrays before serializing
+      const patternEntries = Array.from(codeCache.patternCache.entries()).map(
+        ([key, setValues]) => [key, Array.from(setValues)]
+      );
+      
+      await fs.promises.writeFile(patternCacheFilePath, JSON.stringify(patternEntries), 'utf-8');
       logger.info('Code cache saved to file');
     } catch (e) {
       logger.error('Error saving code cache:', e);

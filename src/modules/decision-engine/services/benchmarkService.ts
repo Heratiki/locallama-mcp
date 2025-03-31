@@ -373,7 +373,53 @@ const benchmarkUtils = {
     } catch (error) {
       logger.error('Failed to save benchmark summary:', error);
     }
-  }
+  },
+
+  /**
+   * Get a dynamic timeout value based on model size and task complexity
+   * Larger models and more complex tasks get more time
+   * 
+   * @param modelId Model ID to get timeout for
+   * @param contextWindow Context window size (indicates model size)
+   * @param taskComplexity Task complexity (0-1)
+   * @returns Timeout in milliseconds
+   */
+  getDynamicTimeout(modelId: string, contextWindow: number = 4096, taskComplexity: number = 0.5): number {
+    // Base timeout for small models on simple tasks (2 minutes)
+    const baseTimeout = 120000;
+    
+    // Size multiplier based on context window size
+    // Larger models get more time - context window is a good proxy for model size
+    let sizeMultiplier = 1.0;
+    if (contextWindow >= 32768) {
+      // Very large models (32B+ parameters) - 3x more time
+      sizeMultiplier = 3.0;
+    } else if (contextWindow >= 16384) {
+      // Large models (13B-32B parameters) - 2.5x more time
+      sizeMultiplier = 2.5;
+    } else if (contextWindow >= 8192) {
+      // Medium-large models (7B-13B parameters) - 2x more time
+      sizeMultiplier = 2.0;
+    } else if (contextWindow >= 4096) {
+      // Medium models (1B-7B parameters) - 1.5x more time
+      sizeMultiplier = 1.5;
+    }
+    
+    // Complexity multiplier based on task complexity
+    // More complex tasks get more time
+    const complexityMultiplier = 1.0 + taskComplexity;
+    
+    // Adjust for specific models known to be slow
+    const modelMultiplier = modelId.includes('32b') || modelId.includes('70b') ? 1.5 : 1.0;
+    
+    // Calculate final timeout
+    const timeout = Math.round(baseTimeout * sizeMultiplier * complexityMultiplier * modelMultiplier);
+    
+    // Log the calculated timeout
+    logger.debug(`Calculated timeout for ${modelId}: ${timeout}ms (size: ${sizeMultiplier}x, complexity: ${complexityMultiplier}x, model-specific: ${modelMultiplier}x)`);
+    
+    return timeout;
+  },
 };
 
 /**
@@ -424,19 +470,35 @@ export const benchmarkService = {
       // Measure start time
       const startTime = Date.now();
       
+      // Calculate dynamic timeout based on model size and task complexity
+      const contextWindow = modelData.contextWindow || 4096;
+      const dynamicTimeout = 120000 * (contextWindow >= 16384 ? 3 : contextWindow >= 8192 ? 2 : 1.5) * 
+                            (1 + complexity) * (modelId.includes('32b') || modelId.includes('70b') ? 1.5 : 1.0);
+      
       let result;
-      if (provider === 'openrouter') {
-        // Call the model using OpenRouter
+      // Call the appropriate API
+      if (provider === 'lm-studio') {
+        logger.info(`Calling LM Studio API for model ${modelId}`);
+        result = await callLmStudioApi(
+          modelId,
+          task,
+          Math.round(dynamicTimeout) // Use dynamic timeout
+        );
+      } else if (provider === 'ollama') {
+        logger.info(`Calling Ollama API for model ${modelId}`);
+        result = await callOllamaApi(
+          modelId,
+          task,
+          Math.round(dynamicTimeout) // Use dynamic timeout
+        );
+      } else {
+        // Default to OpenRouter for other providers
+        logger.info(`Calling OpenRouter API for model ${modelId}`);
         result = await openRouterModule.callOpenRouterApi(
           modelId,
           task,
-          60000 // 60 second timeout
+          Math.round(dynamicTimeout) // Use dynamic timeout
         );
-      } else {
-        // For local models, we would use a different API
-        // This is a placeholder for future implementation
-        logger.warn(`Benchmarking for provider ${provider} not yet implemented`);
-        return;
       }
       
       // Measure end time
@@ -479,10 +541,14 @@ export const benchmarkService = {
           benchmarkCount
         } as ModelPerformanceData;
         
-        logger.warn(`Failed to benchmark ${modelId}: ${result.error}`);
+        // Use a better way to access the error property
+        const errorMessage = typeof result === 'object' && result !== null && 'error' in result 
+          ? String(result.error) 
+          : 'Unknown error';
+        logger.warn(`Failed to benchmark ${modelId}: ${errorMessage}`);
       }
       
-      // Save the database - modelsDbService doesn't have a save method, use updateModelData instead
+      // Save the database
       await modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
     } catch (error) {
       logger.error(`Error benchmarking model ${modelId}:`, error);
@@ -680,14 +746,22 @@ export const benchmarkService = {
           try {
             const startTime = Date.now();
             
+            // Calculate dynamic timeout based on model size and task complexity
+            const modelContextWindow = model.contextWindow || 4096;
+            const dynamicTimeout = benchmarkUtils.getDynamicTimeout(
+              model.id,
+              modelContextWindow,
+              task.complexity
+            );
+            
             let result;
-            // Call the appropriate API based on model provider, using draft model if available
+            // Call the appropriate API
             if (model.provider === 'lm-studio') {
               logger.info(`Calling LM Studio API for model ${model.id}`);
               result = await callLmStudioApi(
                 model.id,
                 task.task,
-                120000, // 2 minute timeout
+                Math.round(dynamicTimeout), // Use dynamic timeout
                 draftModel?.provider === 'lm-studio' ? draftModel.id : undefined // Only use draft model if it's also from LM Studio
               );
             } else if (model.provider === 'ollama') {
@@ -695,17 +769,16 @@ export const benchmarkService = {
               result = await callOllamaApi(
                 model.id,
                 task.task,
-                120000, // 2 minute timeout
+                Math.round(dynamicTimeout), // Use dynamic timeout
                 draftModel?.provider === 'ollama' ? draftModel.id : undefined // Only use draft model if it's also from Ollama
               );
             } else {
               // Default to OpenRouter for other providers
               logger.info(`Calling OpenRouter API for model ${model.id}`);
-              // For OpenRouter, speculative decoding is handled in the callOpenRouterApi function
               result = await openRouterModule.callOpenRouterApi(
                 model.id,
                 task.task,
-                120000 // 2 minute timeout
+                Math.round(dynamicTimeout) // Use dynamic timeout
               );
             }
             
