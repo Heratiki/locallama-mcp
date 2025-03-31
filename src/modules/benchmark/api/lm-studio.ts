@@ -21,21 +21,39 @@ interface LmStudioResponse {
   id?: string;
   model?: string;
   object?: string;
+  stats?: {
+    tokens_per_second?: number;
+    time_to_first_token?: number;
+    generation_time?: number;
+    stop_reason?: string;
+    draft_model?: string;
+    total_draft_tokens_count?: number;
+    accepted_draft_tokens_count?: number;
+    rejected_draft_tokens_count?: number;
+    ignored_draft_tokens_count?: number;
+  };
 }
 
 /**
- * Call LM Studio API
+ * Call LM Studio API with support for speculative decoding
  */
 export async function callLmStudioApi(
   modelId: string,
   task: string,
-  timeout: number
+  timeout: number,
+  draftModelId?: string
 ): Promise<{
   success: boolean;
   text?: string;
   usage?: {
     prompt_tokens: number;
     completion_tokens: number;
+  };
+  stats?: {
+    tokens_per_second?: number;
+    draft_model?: string;
+    accepted_draft_tokens_count?: number;
+    total_draft_tokens_count?: number;
   };
 }> {
   try {
@@ -46,19 +64,28 @@ export async function callLmStudioApi(
     const temperature = config.defaultModelConfig.temperature;
     const maxTokens = config.defaultModelConfig.maxTokens;
     
+    // Prepare request body
+    const requestBody: Record<string, unknown> = {
+      model: modelId,
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: task }
+      ],
+      temperature: temperature,
+      max_tokens: maxTokens,
+    };
+    
+    // Add draft model if provided
+    if (draftModelId) {
+      logger.info(`Using speculative decoding with draft model ${draftModelId} for LM Studio model ${modelId}`);
+      requestBody.draft_model = draftModelId;
+    }
+    
     logger.debug(`LM Studio API call for ${modelId} using temperature: ${temperature}, maxTokens: ${maxTokens}`);
     
     const response = await axios.post<LmStudioResponse>(
       `${config.lmStudioEndpoint}/chat/completions`,
-      {
-        model: modelId,
-        messages: [
-          { role: 'system', content: 'You are a helpful assistant.' },
-          { role: 'user', content: task }
-        ],
-        temperature: temperature,
-        max_tokens: maxTokens,
-      },
+      requestBody,
       {
         signal: controller.signal,
         headers: {
@@ -70,11 +97,47 @@ export async function callLmStudioApi(
     clearTimeout(timeoutId);
     
     if (response.status === 200 && response.data.choices && response.data.choices.length > 0) {
-      return {
+      const result: {
+        success: boolean;
+        text?: string;
+        usage?: {
+          prompt_tokens: number;
+          completion_tokens: number;
+        };
+        stats?: {
+          tokens_per_second?: number;
+          draft_model?: string;
+          accepted_draft_tokens_count?: number;
+          total_draft_tokens_count?: number;
+        };
+      } = {
         success: true,
         text: response.data.choices[0].message.content,
         usage: response.data.usage,
       };
+      
+      // Add speculative decoding stats if available
+      if (response.data.stats) {
+        result.stats = {
+          tokens_per_second: response.data.stats.tokens_per_second,
+          draft_model: response.data.stats.draft_model,
+          accepted_draft_tokens_count: response.data.stats.accepted_draft_tokens_count,
+          total_draft_tokens_count: response.data.stats.total_draft_tokens_count
+        };
+        
+        // Log speculative decoding stats if available
+        if (response.data.stats.draft_model && response.data.stats.accepted_draft_tokens_count) {
+          logger.info(`Speculative decoding stats for LM Studio model ${modelId}:`);
+          logger.info(` - Draft model: ${response.data.stats.draft_model}`);
+          logger.info(` - Total draft tokens: ${response.data.stats.total_draft_tokens_count}`);
+          logger.info(` - Accepted draft tokens: ${response.data.stats.accepted_draft_tokens_count}`);
+          logger.info(` - Tokens per second: ${response.data.stats.tokens_per_second}`);
+          logger.info(` - Acceptance rate: ${(response.data.stats.accepted_draft_tokens_count / 
+            (response.data.stats.total_draft_tokens_count || 1) * 100).toFixed(1)}%`);
+        }
+      }
+      
+      return result;
     } else {
       return { success: false };
     }

@@ -13,8 +13,9 @@ import {
   PromptingStrategy,
   OpenRouterErrorType
 } from './types.js';
+import { speculativeDecodingService } from '../decision-engine/services/speculativeDecoding.js';
 
-// Add type definitions for OpenRouter API responses
+// Add type definition for speculative decoding stats in OpenRouter response
 interface OpenRouterChatCompletion {
   choices: Array<{
     message: {
@@ -24,6 +25,17 @@ interface OpenRouterChatCompletion {
   usage?: {
     prompt_tokens: number;
     completion_tokens: number;
+  };
+  stats?: {
+    tokens_per_second?: number;
+    time_to_first_token?: number;
+    generation_time?: number;
+    stop_reason?: string;
+    draft_model?: string;
+    total_draft_tokens_count?: number;
+    accepted_draft_tokens_count?: number;
+    rejected_draft_tokens_count?: number;
+    ignored_draft_tokens_count?: number;
   };
 }
 
@@ -559,7 +571,7 @@ export const openRouterModule = {
   },
 
   /**
-   * Call OpenRouter API with a task
+   * Call OpenRouter API with a task and optionally use speculative decoding
    */
   async callOpenRouterApi(
     modelId: string,
@@ -571,6 +583,12 @@ export const openRouterModule = {
     usage?: {
       prompt_tokens: number;
       completion_tokens: number;
+    };
+    stats?: {
+      tokens_per_second?: number;
+      draft_model?: string;
+      accepted_draft_tokens_count?: number;
+      total_draft_tokens_count?: number;
     };
     error?: OpenRouterErrorType;
   }> {
@@ -617,15 +635,41 @@ export const openRouterModule = {
         messages.push({ role: 'user', content: task });
       }
       
+      // Create the request body
+      const requestBody: Record<string, unknown> = {
+        model: modelId,
+        messages,
+        temperature: 0.7,
+        max_tokens: 1000,
+      };
+
+      // Try to find a compatible draft model for speculative decoding
+      // First get all available models
+      const allModels = await this.getAvailableModels();
+      
+      // Create a Model object for this model
+      const targetModel: Model = {
+        id: modelId,
+        name: model.name,
+        provider: 'openrouter',
+        capabilities: model.capabilities,
+        costPerToken: model.costPerToken,
+        contextWindow: model.contextWindow
+      };
+      
+      // Use speculative decoding service to find a compatible draft model
+      const draftModel = speculativeDecodingService.findCompatibleDraftModel(targetModel, allModels);
+      
+      // If a draft model was found, add it to the request
+      if (draftModel) {
+        logger.info(`Using speculative decoding with draft model ${draftModel.id} for target model ${modelId}`);
+        requestBody.draft_model = draftModel.id;
+      }
+      
       // Make the request
       const response = await axios.post<OpenRouterChatCompletion>(
         'https://openrouter.ai/api/v1/chat/completions',
-        {
-          model: modelId,
-          messages,
-          temperature: 0.7,
-          max_tokens: 1000,
-        },
+        requestBody,
         {
           signal: controller.signal,
           headers: {
@@ -651,7 +695,20 @@ export const openRouterModule = {
           firstChoice.message &&
           typeof firstChoice.message.content === 'string'
         ) {
-          return {
+          const result: {
+            success: boolean;
+            text?: string;
+            usage?: {
+              prompt_tokens: number;
+              completion_tokens: number;
+            };
+            stats?: {
+              tokens_per_second?: number;
+              draft_model?: string;
+              accepted_draft_tokens_count?: number;
+              total_draft_tokens_count?: number;
+            };
+          } = {
             success: true,
             text: firstChoice.message.content,
             usage: response.data.usage &&
@@ -661,6 +718,29 @@ export const openRouterModule = {
               ? (response.data.usage as { prompt_tokens: number; completion_tokens: number })
               : { prompt_tokens: 0, completion_tokens: 0 },
           };
+          
+          // Add speculative decoding stats if available
+          if (response.data.stats) {
+            result.stats = {
+              tokens_per_second: response.data.stats.tokens_per_second,
+              draft_model: response.data.stats.draft_model,
+              accepted_draft_tokens_count: response.data.stats.accepted_draft_tokens_count,
+              total_draft_tokens_count: response.data.stats.total_draft_tokens_count
+            };
+            
+            // Log speculative decoding stats if available
+            if (response.data.stats.draft_model && response.data.stats.accepted_draft_tokens_count) {
+              logger.info(`Speculative decoding stats for ${modelId}:`);
+              logger.info(` - Draft model: ${response.data.stats.draft_model}`);
+              logger.info(` - Total draft tokens: ${response.data.stats.total_draft_tokens_count}`);
+              logger.info(` - Accepted draft tokens: ${response.data.stats.accepted_draft_tokens_count}`);
+              logger.info(` - Tokens per second: ${response.data.stats.tokens_per_second}`);
+              logger.info(` - Acceptance rate: ${(response.data.stats.accepted_draft_tokens_count / 
+                (response.data.stats.total_draft_tokens_count || 1) * 100).toFixed(1)}%`);
+            }
+          }
+          
+          return result;
         }
       }
       logger.warn('Invalid response from OpenRouter API:', response.data);

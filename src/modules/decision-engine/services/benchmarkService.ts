@@ -9,6 +9,8 @@ import { callLmStudioApi } from '../../benchmark/api/lm-studio.js';
 import { callOllamaApi } from '../../benchmark/api/ollama.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { speculativeDecodingService } from '../services/speculativeDecoding.js';
+import { Model } from '../../../types/index.js';
 
 // Add this interface at the top of the file with other types
 /**
@@ -520,12 +522,20 @@ export const benchmarkService = {
       // Find LM Studio models and add them to the free models pool
       const lmStudioModels = availableModels.filter(m => m.provider === 'lm-studio');
       
-      // Combine OpenRouter free models with LM Studio models
+      // Find Ollama models and add them to the free models pool
+      const ollamaModels = availableModels.filter(m => m.provider === 'ollama');
+      
+      // Combine OpenRouter free models with LM Studio and Ollama models
       let allFreeModels = [...freeModels];
       
       if (lmStudioModels.length > 0) {
         logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool for benchmarking`);
-        allFreeModels = [...lmStudioModels, ...freeModels];
+        allFreeModels = [...allFreeModels, ...lmStudioModels];
+      }
+      
+      if (ollamaModels.length > 0) {
+        logger.info(`Including ${ollamaModels.length} Ollama models in free models pool for benchmarking`);
+        allFreeModels = [...allFreeModels, ...ollamaModels];
       }
       
       if (allFreeModels.length === 0) {
@@ -652,6 +662,12 @@ export const benchmarkService = {
       for (const model of modelsToBenchmark) {
         logger.info(`Benchmarking model: ${model.id}`);
         
+        // Try to find a compatible draft model for speculative decoding
+        const draftModel: Model | null = speculativeDecodingService.findCompatibleDraftModel(model, availableModels);
+        if (draftModel) {
+          logger.info(`Found compatible draft model ${draftModel.id} for target model ${model.id}`);
+        }
+        
         for (const task of benchmarkTasks) {
           // Skip if this task has already been benchmarked for this model
           if (modelBenchmarkStatus.get(model.id)?.has(task.name)) {
@@ -665,24 +681,27 @@ export const benchmarkService = {
             const startTime = Date.now();
             
             let result;
-            // Call the appropriate API based on model provider
+            // Call the appropriate API based on model provider, using draft model if available
             if (model.provider === 'lm-studio') {
               logger.info(`Calling LM Studio API for model ${model.id}`);
               result = await callLmStudioApi(
                 model.id,
                 task.task,
-                120000 // 2 minute timeout
+                120000, // 2 minute timeout
+                draftModel?.provider === 'lm-studio' ? draftModel.id : undefined // Only use draft model if it's also from LM Studio
               );
             } else if (model.provider === 'ollama') {
               logger.info(`Calling Ollama API for model ${model.id}`);
               result = await callOllamaApi(
                 model.id,
                 task.task,
-                120000 // 2 minute timeout
+                120000, // 2 minute timeout
+                draftModel?.provider === 'ollama' ? draftModel.id : undefined // Only use draft model if it's also from Ollama
               );
             } else {
               // Default to OpenRouter for other providers
               logger.info(`Calling OpenRouter API for model ${model.id}`);
+              // For OpenRouter, speculative decoding is handled in the callOpenRouterApi function
               result = await openRouterModule.callOpenRouterApi(
                 model.id,
                 task.task,
@@ -719,7 +738,14 @@ export const benchmarkService = {
                     completion: result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0),
                     total: (result.usage?.prompt_tokens || task.task.length / 4) + (result.usage?.completion_tokens || (result.text ? result.text.length / 4 : 0))
                   },
-                  output: result.text || ''
+                  output: result.text || '',
+                  // Add speculative decoding stats if available
+                  speculativeDecoding: result.stats ? {
+                    draftModel: result.stats.draft_model,
+                    acceptedTokens: result.stats.accepted_draft_tokens_count,
+                    totalTokens: result.stats.total_draft_tokens_count,
+                    tokensPerSecond: result.stats.tokens_per_second
+                  } : undefined
                 },
                 paid: {
                   model: 'none',
@@ -751,7 +777,7 @@ export const benchmarkService = {
                 modelsDb.models[model.id] = {
                   id: model.id,
                   name: model.name || model.id,
-                  provider: 'openrouter',
+                  provider: model.provider || 'openrouter',
                   lastSeen: new Date().toISOString(),
                   contextWindow: model.contextWindow || 4096,
                   successRate: isWorkingCode ? 1 : 0,
@@ -784,7 +810,12 @@ export const benchmarkService = {
                 } as ModelPerformanceData;
               }
               
-              logger.info(`Benchmarked ${model.id} with task ${task.name}: Working code=${isWorkingCode}, Quality=${qualityScore.toFixed(2)}, Time=${responseTime}ms`);
+              // Log completion info with speculative decoding stats if available
+              const speculativeInfo = result.stats?.draft_model ? 
+                `, Used speculative decoding with ${result.stats.draft_model} (${result.stats.accepted_draft_tokens_count}/${result.stats.total_draft_tokens_count} tokens accepted)` :
+                '';
+              
+              logger.info(`Benchmarked ${model.id} with task ${task.name}: Working code=${isWorkingCode}, Quality=${qualityScore.toFixed(2)}, Time=${responseTime}ms${speculativeInfo}`);
             } else {
               // Model failed to produce a response
               if (!modelsDb.models[model.id]) {
@@ -792,7 +823,7 @@ export const benchmarkService = {
                 modelsDb.models[model.id] = {
                   id: model.id,
                   name: model.name || model.id,
-                  provider: 'openrouter',
+                  provider: model.provider || 'openrouter',
                   lastSeen: new Date().toISOString(),
                   contextWindow: model.contextWindow || 4096,
                   successRate: 0,
