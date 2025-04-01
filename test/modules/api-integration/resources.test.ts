@@ -21,5 +21,6 @@ describe('setupResourceHandlers', () => {
 
     // Verify the server's setHandler method was called
     expect(mockServer.setHandler).toHaveBeenCalled();
+    expect(mockServer.setRequestHandler).toHaveBeenCalled();
   });
 });
