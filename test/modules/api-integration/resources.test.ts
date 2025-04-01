@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { setupResourceHandlers } from '../../../../src/modules/api-integration/resources.js';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { setupResourceHandlers } from '../../../src/modules/api-integration/resources.js';
 
 jest.mock('@modelcontextprotocol/sdk/server/index.js');
 
@@ -11,7 +10,9 @@ describe('setupResourceHandlers', () => {
     // Reset mocks between tests
     jest.clearAllMocks();
     mockServer = {
-      setHandler: jest.fn().mockResolvedValue(undefined)
+      setHandler: jest.fn(),
+      // Add missing mock function
+      setRequestHandler: jest.fn()
     };
   });
 

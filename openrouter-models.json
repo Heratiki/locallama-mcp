@@ -1,9 +1,31 @@
 {
   "models": {
+    "mistral/ministral-8b": {
+      "id": "mistral/ministral-8b",
+      "name": "Mistral: Ministral 8b",
+      "provider": "mistral",
+      "isFree": false,
+      "contextWindow": 131072,
+      "capabilities": {
+        "chat": false,
+        "completion": false,
+        "vision": false
+      },
+      "costPerToken": {
+        "prompt": "0.0000001",
+        "completion": "0.0000001"
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful AI assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
+      "version": "1.0"
+    },
     "deepseek/deepseek-v3-base:free": {
       "id": "deepseek/deepseek-v3-base:free",
       "name": "DeepSeek: DeepSeek V3 Base (free)",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": true,
       "contextWindow": 131072,
       "capabilities": {
@@ -19,7 +41,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.492Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "scb10x/llama3.1-typhoon2-8b-instruct": {
@@ -41,7 +63,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.492Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "scb10x/llama3.1-typhoon2-70b-instruct": {
@@ -63,7 +85,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.492Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "allenai/molmo-7b-d:free": {
@@ -85,7 +107,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "bytedance-research/ui-tars-72b:free": {
@@ -107,7 +129,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen2.5-vl-3b-instruct:free": {
@@ -129,7 +151,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-2.5-pro-exp-03-25:free": {
@@ -151,7 +173,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen2.5-vl-32b-instruct:free": {
@@ -173,13 +195,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-chat-v3-0324:free": {
       "id": "deepseek/deepseek-chat-v3-0324:free",
       "name": "DeepSeek: DeepSeek V3 0324 (free)",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": true,
       "contextWindow": 131072,
       "capabilities": {
@@ -195,13 +217,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-chat-v3-0324": {
       "id": "deepseek/deepseek-chat-v3-0324",
       "name": "DeepSeek: DeepSeek V3 0324",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": false,
       "contextWindow": 64000,
       "capabilities": {
@@ -217,7 +239,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "featherless/qwerky-72b:free": {
@@ -239,7 +261,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o1-pro": {
@@ -261,7 +283,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/mistral-small-3.1-24b-instruct:free": {
@@ -283,7 +305,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/mistral-small-3.1-24b-instruct": {
@@ -291,7 +313,7 @@
       "name": "Mistral: Mistral Small 3.1 24B",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 131072,
+      "contextWindow": 32768,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -305,7 +327,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "open-r1/olympiccoder-7b:free": {
@@ -327,7 +349,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "open-r1/olympiccoder-32b:free": {
@@ -349,7 +371,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "steelskull/l3.3-electra-r1-70b": {
@@ -371,7 +393,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "allenai/olmo-2-0325-32b-instruct": {
@@ -393,7 +415,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemma-3-1b-it:free": {
@@ -415,7 +437,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemma-3-4b-it:free": {
@@ -437,7 +459,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemma-3-4b-it": {
@@ -459,7 +481,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "ai21/jamba-1.6-large": {
@@ -481,7 +503,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "ai21/jamba-1.6-mini": {
@@ -503,7 +525,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemma-3-12b-it:free": {
@@ -525,7 +547,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemma-3-12b-it": {
@@ -547,7 +569,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "cohere/command-a": {
@@ -569,7 +591,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/gpt-4o-mini-search-preview": {
@@ -591,7 +613,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/gpt-4o-search-preview": {
@@ -613,7 +635,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "tokyotech-llm/llama-3.1-swallow-70b-instruct-v0.3": {
@@ -635,7 +657,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "rekaai/reka-flash-3:free": {
@@ -657,7 +679,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemma-3-27b-it:free": {
@@ -679,7 +701,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemma-3-27b-it": {
@@ -701,7 +723,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "thedrummer/anubis-pro-105b-v1": {
@@ -723,7 +745,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.493Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "latitudegames/wayfarer-large-70b-llama-3.3": {
@@ -745,7 +767,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "thedrummer/skyfall-36b-v2": {
@@ -767,7 +789,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "microsoft/phi-4-multimodal-instruct": {
@@ -789,7 +811,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "perplexity/sonar-reasoning-pro": {
@@ -811,7 +833,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "perplexity/sonar-pro": {
@@ -833,7 +855,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "perplexity/sonar-deep-research": {
@@ -855,13 +877,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-zero:free": {
       "id": "deepseek/deepseek-r1-zero:free",
       "name": "DeepSeek: DeepSeek R1 Zero (free)",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": true,
       "contextWindow": 163840,
       "capabilities": {
@@ -877,7 +899,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwq-32b:free": {
@@ -899,7 +921,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwq-32b": {
@@ -921,7 +943,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen2.5-32b-instruct": {
@@ -943,7 +965,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "moonshotai/moonlight-16b-a3b-instruct:free": {
@@ -965,7 +987,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "nousresearch/deephermes-3-llama-3-8b-preview:free": {
@@ -987,7 +1009,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/gpt-4.5-preview": {
@@ -1009,7 +1031,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-2.0-flash-lite-001": {
@@ -1031,7 +1053,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.7-sonnet:beta": {
@@ -1053,7 +1075,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.7-sonnet": {
@@ -1075,7 +1097,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.7-sonnet:thinking": {
@@ -1097,7 +1119,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "perplexity/r1-1776": {
@@ -1119,7 +1141,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/mistral-saba": {
@@ -1127,7 +1149,7 @@
       "name": "Mistral: Saba",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 32000,
+      "contextWindow": 32768,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -1141,7 +1163,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "cognitivecomputations/dolphin3.0-r1-mistral-24b:free": {
@@ -1163,7 +1185,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "cognitivecomputations/dolphin3.0-mistral-24b:free": {
@@ -1185,7 +1207,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-guard-3-8b": {
@@ -1207,7 +1229,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o3-mini-high": {
@@ -1229,29 +1251,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
-      "version": "1.0"
-    },
-    "allenai/llama-3.1-tulu-3-405b": {
-      "id": "allenai/llama-3.1-tulu-3-405b",
-      "name": "Llama 3.1 Tulu 3 405B",
-      "provider": "meta",
-      "isFree": false,
-      "contextWindow": 16384,
-      "capabilities": {
-        "chat": false,
-        "completion": false,
-        "vision": false
-      },
-      "costPerToken": {
-        "prompt": "0.000005",
-        "completion": "0.00001"
-      },
-      "promptingStrategy": {
-        "systemPrompt": "You are a helpful AI assistant.",
-        "useChat": true
-      },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-llama-8b": {
@@ -1273,7 +1273,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-2.0-flash-001": {
@@ -1295,7 +1295,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-2.0-pro-exp-02-05:free": {
@@ -1317,7 +1317,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-vl-plus": {
@@ -1339,7 +1339,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "aion-labs/aion-1.0": {
@@ -1361,7 +1361,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "aion-labs/aion-1.0-mini": {
@@ -1383,7 +1383,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "aion-labs/aion-rp-llama-3.1-8b": {
@@ -1405,7 +1405,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-vl-max": {
@@ -1427,7 +1427,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-turbo": {
@@ -1449,7 +1449,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen2.5-vl-72b-instruct:free": {
@@ -1471,7 +1471,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen2.5-vl-72b-instruct": {
@@ -1479,7 +1479,7 @@
       "name": "Qwen: Qwen2.5 VL 72B Instruct",
       "provider": "unknown",
       "isFree": false,
-      "contextWindow": 32000,
+      "contextWindow": 128000,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -1493,7 +1493,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-plus": {
@@ -1515,7 +1515,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-max": {
@@ -1537,7 +1537,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o3-mini": {
@@ -1559,13 +1559,13 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-qwen-1.5b": {
       "id": "deepseek/deepseek-r1-distill-qwen-1.5b",
       "name": "DeepSeek: R1 Distill Qwen 1.5B",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": false,
       "contextWindow": 131072,
       "capabilities": {
@@ -1581,7 +1581,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/mistral-small-24b-instruct-2501:free": {
@@ -1603,7 +1603,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/mistral-small-24b-instruct-2501": {
@@ -1625,13 +1625,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-qwen-32b:free": {
       "id": "deepseek/deepseek-r1-distill-qwen-32b:free",
       "name": "DeepSeek: R1 Distill Qwen 32B (free)",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": true,
       "contextWindow": 16000,
       "capabilities": {
@@ -1647,13 +1647,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-qwen-32b": {
       "id": "deepseek/deepseek-r1-distill-qwen-32b",
       "name": "DeepSeek: R1 Distill Qwen 32B",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": false,
       "contextWindow": 131072,
       "capabilities": {
@@ -1669,13 +1669,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-qwen-14b:free": {
       "id": "deepseek/deepseek-r1-distill-qwen-14b:free",
       "name": "DeepSeek: R1 Distill Qwen 14B (free)",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": true,
       "contextWindow": 64000,
       "capabilities": {
@@ -1691,13 +1691,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-qwen-14b": {
       "id": "deepseek/deepseek-r1-distill-qwen-14b",
       "name": "DeepSeek: R1 Distill Qwen 14B",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": false,
       "contextWindow": 64000,
       "capabilities": {
@@ -1713,7 +1713,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "perplexity/sonar-reasoning": {
@@ -1735,7 +1735,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "perplexity/sonar": {
@@ -1757,7 +1757,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "liquid/lfm-7b": {
@@ -1779,7 +1779,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "liquid/lfm-3b": {
@@ -1801,7 +1801,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-llama-70b:free": {
@@ -1823,7 +1823,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1-distill-llama-70b": {
@@ -1845,7 +1845,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-2.0-flash-thinking-exp:free": {
@@ -1867,13 +1867,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1:free": {
       "id": "deepseek/deepseek-r1:free",
       "name": "DeepSeek: R1 (free)",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": true,
       "contextWindow": 163840,
       "capabilities": {
@@ -1889,13 +1889,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-r1": {
       "id": "deepseek/deepseek-r1",
       "name": "DeepSeek: R1",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": false,
       "contextWindow": 163840,
       "capabilities": {
@@ -1911,7 +1911,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "sophosympatheia/rogue-rose-103b-v0.2:free": {
@@ -1933,7 +1933,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "minimax/minimax-01": {
@@ -1955,7 +1955,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/codestral-2501": {
@@ -1963,7 +1963,7 @@
       "name": "Mistral: Codestral 2501",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 256000,
+      "contextWindow": 262144,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -1977,7 +1977,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "microsoft/phi-4": {
@@ -1999,7 +1999,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "sao10k/l3.1-70b-hanami-x1": {
@@ -2021,13 +2021,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-chat:free": {
       "id": "deepseek/deepseek-chat:free",
       "name": "DeepSeek: DeepSeek V3 (free)",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": true,
       "contextWindow": 131072,
       "capabilities": {
@@ -2043,13 +2043,13 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "deepseek/deepseek-chat": {
       "id": "deepseek/deepseek-chat",
       "name": "DeepSeek: DeepSeek V3",
-      "provider": "unknown",
+      "provider": "deepseek",
       "isFree": false,
       "contextWindow": 163840,
       "capabilities": {
@@ -2065,7 +2065,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-2.0-flash-thinking-exp-1219:free": {
@@ -2087,7 +2087,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "sao10k/l3.3-euryale-70b": {
@@ -2109,7 +2109,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o1": {
@@ -2131,7 +2131,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "eva-unit-01/eva-llama-3.33-70b": {
@@ -2153,7 +2153,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "x-ai/grok-2-vision-1212": {
@@ -2175,7 +2175,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "x-ai/grok-2-1212": {
@@ -2197,7 +2197,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "cohere/command-r7b-12-2024": {
@@ -2219,7 +2219,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-2.0-flash-exp:free": {
@@ -2241,7 +2241,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.3-70b-instruct:free": {
@@ -2263,7 +2263,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.3-70b-instruct": {
@@ -2285,7 +2285,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "amazon/nova-lite-v1": {
@@ -2307,7 +2307,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "amazon/nova-micro-v1": {
@@ -2329,7 +2329,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "amazon/nova-pro-v1": {
@@ -2351,7 +2351,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwq-32b-preview:free": {
@@ -2373,7 +2373,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwq-32b-preview": {
@@ -2395,7 +2395,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/learnlm-1.5-pro-experimental:free": {
@@ -2417,7 +2417,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "eva-unit-01/eva-qwen-2.5-72b": {
@@ -2439,7 +2439,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/gpt-4o-2024-11-20": {
@@ -2461,7 +2461,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/mistral-large-2411": {
@@ -2469,7 +2469,7 @@
       "name": "Mistral Large 2411",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 128000,
+      "contextWindow": 131072,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -2483,7 +2483,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/mistral-large-2407": {
@@ -2491,7 +2491,7 @@
       "name": "Mistral Large 2407",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 128000,
+      "contextWindow": 131072,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -2505,7 +2505,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/pixtral-large-2411": {
@@ -2513,7 +2513,7 @@
       "name": "Mistral: Pixtral Large 2411",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 128000,
+      "contextWindow": 131072,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -2527,7 +2527,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "x-ai/grok-vision-beta": {
@@ -2549,7 +2549,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "infermatic/mn-inferor-12b": {
@@ -2571,7 +2571,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-coder-32b-instruct:free": {
@@ -2593,7 +2593,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-coder-32b-instruct": {
@@ -2615,7 +2615,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "raifle/sorcererlm-8x22b": {
@@ -2637,7 +2637,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "eva-unit-01/eva-qwen-2.5-32b": {
@@ -2659,7 +2659,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "thedrummer/unslopnemo-12b": {
@@ -2681,7 +2681,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-haiku:beta": {
@@ -2703,7 +2703,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-haiku": {
@@ -2725,7 +2725,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-haiku-20241022:beta": {
@@ -2747,7 +2747,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-haiku-20241022": {
@@ -2769,7 +2769,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "neversleep/llama-3.1-lumimaid-70b": {
@@ -2791,7 +2791,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthracite-org/magnum-v4-72b": {
@@ -2813,7 +2813,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-sonnet:beta": {
@@ -2835,7 +2835,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-sonnet": {
@@ -2857,7 +2857,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "x-ai/grok-beta": {
@@ -2879,7 +2879,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/ministral-8b": {
@@ -2901,7 +2901,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/ministral-3b": {
@@ -2909,7 +2909,7 @@
       "name": "Mistral: Ministral 3B",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 128000,
+      "contextWindow": 131072,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -2923,7 +2923,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-7b-instruct": {
@@ -2945,7 +2945,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "nvidia/llama-3.1-nemotron-70b-instruct:free": {
@@ -2967,7 +2967,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "nvidia/llama-3.1-nemotron-70b-instruct": {
@@ -2989,7 +2989,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "inflection/inflection-3-productivity": {
@@ -3011,7 +3011,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "inflection/inflection-3-pi": {
@@ -3033,7 +3033,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-flash-1.5-8b": {
@@ -3055,7 +3055,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "thedrummer/rocinante-12b": {
@@ -3077,7 +3077,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "anthracite-org/magnum-v2-72b": {
@@ -3099,7 +3099,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "liquid/lfm-40b": {
@@ -3121,7 +3121,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.494Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.2-3b-instruct:free": {
@@ -3143,7 +3143,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.2-3b-instruct": {
@@ -3165,7 +3165,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.2-1b-instruct:free": {
@@ -3187,7 +3187,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.2-1b-instruct": {
@@ -3209,7 +3209,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.2-90b-vision-instruct": {
@@ -3231,7 +3231,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.2-11b-vision-instruct:free": {
@@ -3253,7 +3253,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.2-11b-vision-instruct": {
@@ -3275,7 +3275,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-72b-instruct:free": {
@@ -3297,7 +3297,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-72b-instruct": {
@@ -3319,7 +3319,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-vl-72b-instruct": {
@@ -3327,7 +3327,7 @@
       "name": "Qwen: Qwen2.5-VL 72B Instruct",
       "provider": "unknown",
       "isFree": false,
-      "contextWindow": 4096,
+      "contextWindow": 32768,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -3341,7 +3341,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "neversleep/llama-3.1-lumimaid-8b": {
@@ -3363,7 +3363,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o1-preview": {
@@ -3385,7 +3385,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o1-preview-2024-09-12": {
@@ -3407,7 +3407,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o1-mini": {
@@ -3429,7 +3429,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/o1-mini-2024-09-12": {
@@ -3451,7 +3451,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "mistralai/pixtral-12b": {
@@ -3459,7 +3459,7 @@
       "name": "Mistral: Pixtral 12B",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 4096,
+      "contextWindow": 32768,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -3473,7 +3473,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "cohere/command-r-plus-08-2024": {
@@ -3495,7 +3495,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "cohere/command-r-08-2024": {
@@ -3517,7 +3517,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-vl-7b-instruct:free": {
@@ -3539,7 +3539,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "qwen/qwen-2.5-vl-7b-instruct": {
@@ -3547,7 +3547,7 @@
       "name": "Qwen: Qwen2.5-VL 7B Instruct",
       "provider": "unknown",
       "isFree": false,
-      "contextWindow": 4096,
+      "contextWindow": 32768,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -3561,7 +3561,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "sao10k/l3.1-euryale-70b": {
@@ -3583,7 +3583,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "google/gemini-flash-1.5-8b-exp": {
@@ -3605,7 +3605,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "ai21/jamba-1-5-mini": {
@@ -3627,7 +3627,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "ai21/jamba-1-5-large": {
@@ -3649,7 +3649,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "microsoft/phi-3.5-mini-128k-instruct": {
@@ -3671,7 +3671,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "nousresearch/hermes-3-llama-3.1-70b": {
@@ -3693,7 +3693,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "nousresearch/hermes-3-llama-3.1-405b": {
@@ -3715,7 +3715,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/chatgpt-4o-latest": {
@@ -3737,7 +3737,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "sao10k/l3-lunaris-8b": {
@@ -3759,7 +3759,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "aetherwiing/mn-starcannon-12b": {
@@ -3781,7 +3781,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.205Z",
       "version": "1.0"
     },
     "openai/gpt-4o-2024-08-06": {
@@ -3803,7 +3803,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.1-405b": {
@@ -3825,7 +3825,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "nothingiisreal/mn-celeste-12b": {
@@ -3847,7 +3847,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "perplexity/llama-3.1-sonar-small-128k-online": {
@@ -3869,7 +3869,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "perplexity/llama-3.1-sonar-large-128k-online": {
@@ -3891,7 +3891,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.1-8b-instruct:free": {
@@ -3913,7 +3913,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.1-8b-instruct": {
@@ -3935,7 +3935,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.1-405b-instruct": {
@@ -3957,7 +3957,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3.1-70b-instruct": {
@@ -3979,7 +3979,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/codestral-mamba": {
@@ -3987,7 +3987,7 @@
       "name": "Mistral: Codestral Mamba",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 256000,
+      "contextWindow": 262144,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -4001,7 +4001,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-nemo:free": {
@@ -4023,7 +4023,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-nemo": {
@@ -4045,7 +4045,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4o-mini": {
@@ -4067,7 +4067,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4o-mini-2024-07-18": {
@@ -4089,7 +4089,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "qwen/qwen-2-7b-instruct:free": {
@@ -4111,7 +4111,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "qwen/qwen-2-7b-instruct": {
@@ -4133,7 +4133,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemma-2-27b-it": {
@@ -4155,7 +4155,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "alpindale/magnum-72b": {
@@ -4177,7 +4177,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemma-2-9b-it:free": {
@@ -4199,7 +4199,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemma-2-9b-it": {
@@ -4221,7 +4221,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "01-ai/yi-large": {
@@ -4243,7 +4243,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "ai21/jamba-instruct": {
@@ -4265,7 +4265,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-sonnet-20240620:beta": {
@@ -4287,7 +4287,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3.5-sonnet-20240620": {
@@ -4309,7 +4309,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "sao10k/l3-euryale-70b": {
@@ -4331,7 +4331,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "cognitivecomputations/dolphin-mixtral-8x22b": {
@@ -4353,7 +4353,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "qwen/qwen-2-72b-instruct": {
@@ -4375,7 +4375,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-7b-instruct:free": {
@@ -4397,7 +4397,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-7b-instruct": {
@@ -4419,7 +4419,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-7b-instruct-v0.3": {
@@ -4441,7 +4441,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "nousresearch/hermes-2-pro-llama-3-8b": {
@@ -4463,7 +4463,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "microsoft/phi-3-mini-128k-instruct:free": {
@@ -4485,7 +4485,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "microsoft/phi-3-mini-128k-instruct": {
@@ -4507,7 +4507,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "microsoft/phi-3-medium-128k-instruct:free": {
@@ -4529,7 +4529,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "microsoft/phi-3-medium-128k-instruct": {
@@ -4551,7 +4551,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "neversleep/llama-3-lumimaid-70b": {
@@ -4573,7 +4573,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemini-flash-1.5": {
@@ -4595,7 +4595,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4o": {
@@ -4617,7 +4617,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4o:extended": {
@@ -4639,7 +4639,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4o-2024-05-13": {
@@ -4661,7 +4661,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-guard-2-8b": {
@@ -4683,7 +4683,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "neversleep/llama-3-lumimaid-8b:extended": {
@@ -4705,7 +4705,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "neversleep/llama-3-lumimaid-8b": {
@@ -4727,7 +4727,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "sao10k/fimbulvetr-11b-v2": {
@@ -4749,7 +4749,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3-8b-instruct:free": {
@@ -4771,7 +4771,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3-8b-instruct": {
@@ -4793,7 +4793,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-3-70b-instruct": {
@@ -4815,7 +4815,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mixtral-8x22b-instruct": {
@@ -4837,7 +4837,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "microsoft/wizardlm-2-8x22b": {
@@ -4859,7 +4859,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "microsoft/wizardlm-2-7b": {
@@ -4881,7 +4881,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemini-pro-1.5": {
@@ -4903,7 +4903,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4-turbo": {
@@ -4925,7 +4925,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "cohere/command-r-plus": {
@@ -4947,7 +4947,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "cohere/command-r-plus-04-2024": {
@@ -4969,7 +4969,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "sophosympatheia/midnight-rose-70b": {
@@ -4991,7 +4991,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "cohere/command": {
@@ -5013,7 +5013,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "cohere/command-r": {
@@ -5035,7 +5035,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3-haiku:beta": {
@@ -5057,7 +5057,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3-haiku": {
@@ -5079,7 +5079,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3-opus:beta": {
@@ -5101,7 +5101,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3-opus": {
@@ -5123,7 +5123,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3-sonnet:beta": {
@@ -5145,7 +5145,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-3-sonnet": {
@@ -5167,7 +5167,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "cohere/command-r-03-2024": {
@@ -5189,7 +5189,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-large": {
@@ -5211,7 +5211,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemma-7b-it": {
@@ -5233,7 +5233,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-3.5-turbo-0613": {
@@ -5255,7 +5255,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4-turbo-preview": {
@@ -5277,7 +5277,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "nousresearch/nous-hermes-2-mixtral-8x7b-dpo": {
@@ -5299,29 +5299,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
-      "version": "1.0"
-    },
-    "mistralai/mistral-tiny": {
-      "id": "mistralai/mistral-tiny",
-      "name": "Mistral Tiny",
-      "provider": "mistral",
-      "isFree": false,
-      "contextWindow": 32000,
-      "capabilities": {
-        "chat": false,
-        "completion": false,
-        "vision": false
-      },
-      "costPerToken": {
-        "prompt": "0.00000025",
-        "completion": "0.00000025"
-      },
-      "promptingStrategy": {
-        "systemPrompt": "You are a helpful AI assistant.",
-        "useChat": true
-      },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-medium": {
@@ -5329,7 +5307,7 @@
       "name": "Mistral Medium",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 32000,
+      "contextWindow": 32768,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -5343,7 +5321,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-small": {
@@ -5351,7 +5329,7 @@
       "name": "Mistral Small",
       "provider": "mistral",
       "isFree": false,
-      "contextWindow": 32000,
+      "contextWindow": 32768,
       "capabilities": {
         "chat": false,
         "completion": false,
@@ -5365,7 +5343,29 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
+      "version": "1.0"
+    },
+    "mistralai/mistral-tiny": {
+      "id": "mistralai/mistral-tiny",
+      "name": "Mistral Tiny",
+      "provider": "mistral",
+      "isFree": false,
+      "contextWindow": 32768,
+      "capabilities": {
+        "chat": false,
+        "completion": false,
+        "vision": false
+      },
+      "costPerToken": {
+        "prompt": "0.00000025",
+        "completion": "0.00000025"
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful AI assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-7b-instruct-v0.2": {
@@ -5387,7 +5387,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "cognitivecomputations/dolphin-mixtral-8x7b": {
@@ -5409,7 +5409,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemini-pro-vision": {
@@ -5431,7 +5431,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/gemini-pro": {
@@ -5453,7 +5453,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mixtral-8x7b": {
@@ -5475,7 +5475,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mixtral-8x7b-instruct": {
@@ -5497,7 +5497,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openchat/openchat-7b:free": {
@@ -5519,7 +5519,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openchat/openchat-7b": {
@@ -5541,7 +5541,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "neversleep/noromaid-20b": {
@@ -5563,7 +5563,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-2.1:beta": {
@@ -5585,7 +5585,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-2.1": {
@@ -5607,7 +5607,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-2:beta": {
@@ -5629,7 +5629,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-2": {
@@ -5651,7 +5651,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "teknium/openhermes-2.5-mistral-7b": {
@@ -5673,7 +5673,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "undi95/toppy-m-7b:free": {
@@ -5695,7 +5695,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "undi95/toppy-m-7b": {
@@ -5717,7 +5717,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "alpindale/goliath-120b": {
@@ -5739,7 +5739,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openrouter/auto": {
@@ -5761,7 +5761,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-3.5-turbo-1106": {
@@ -5783,7 +5783,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4-1106-preview": {
@@ -5805,7 +5805,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/palm-2-chat-bison-32k": {
@@ -5827,7 +5827,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/palm-2-codechat-bison-32k": {
@@ -5849,7 +5849,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "jondurbin/airoboros-l2-70b": {
@@ -5871,7 +5871,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "xwin-lm/xwin-lm-70b": {
@@ -5893,7 +5893,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-3.5-turbo-instruct": {
@@ -5915,7 +5915,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mistralai/mistral-7b-instruct-v0.1": {
@@ -5937,7 +5937,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "pygmalionai/mythalion-13b": {
@@ -5959,7 +5959,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-3.5-turbo-16k": {
@@ -5981,7 +5981,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4-32k": {
@@ -6003,7 +6003,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4-32k-0314": {
@@ -6025,7 +6025,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "nousresearch/nous-hermes-llama2-13b": {
@@ -6047,7 +6047,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "mancer/weaver": {
@@ -6069,7 +6069,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "huggingfaceh4/zephyr-7b-beta:free": {
@@ -6091,7 +6091,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-2.0:beta": {
@@ -6113,7 +6113,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "anthropic/claude-2.0": {
@@ -6135,7 +6135,7 @@
         "systemPrompt": "You are Claude, a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "undi95/remm-slerp-l2-13b": {
@@ -6157,7 +6157,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/palm-2-chat-bison": {
@@ -6179,7 +6179,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "google/palm-2-codechat-bison": {
@@ -6201,7 +6201,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "gryphe/mythomax-l2-13b:free": {
@@ -6223,7 +6223,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "gryphe/mythomax-l2-13b": {
@@ -6245,7 +6245,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-2-13b-chat": {
@@ -6267,7 +6267,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "meta-llama/llama-2-70b-chat": {
@@ -6289,7 +6289,7 @@
         "systemPrompt": "You are a helpful AI assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-3.5-turbo": {
@@ -6311,7 +6311,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-3.5-turbo-0125": {
@@ -6333,7 +6333,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4": {
@@ -6355,7 +6355,7 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     },
     "openai/gpt-4-0314": {
@@ -6377,11 +6377,11 @@
         "systemPrompt": "You are a helpful assistant.",
         "useChat": true
       },
-      "lastUpdated": "2025-03-30T13:00:47.495Z",
+      "lastUpdated": "2025-04-01T12:25:29.206Z",
       "version": "1.0"
     }
   },
-  "lastUpdated": "2025-03-30T13:00:47.495Z",
+  "lastUpdated": "2025-04-01T12:25:29.206Z",
   "freeModels": [
     "deepseek/deepseek-v3-base:free",
     "allenai/molmo-7b-d:free",

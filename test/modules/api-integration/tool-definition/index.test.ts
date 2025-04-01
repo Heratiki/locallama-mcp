@@ -7,7 +7,8 @@ describe('toolDefinitionProvider', () => {
     let mockServer: Server;
 
     beforeEach(() => {
-        mockServer = new Server({name: 'test', version: '0.0.0'}, { capabilities: {} });
+        // Add 'tools' capability to the mock server
+        mockServer = new Server({name: 'test', version: '0.0.0'}, { capabilities: { tools: { list: true } } });
         jest.clearAllMocks();
     });
 

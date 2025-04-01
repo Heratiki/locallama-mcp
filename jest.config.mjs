@@ -1,13 +1,13 @@
 // @ts-check
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 export default {
-  preset: 'ts-jest/presets/default-esm', // Using ESM preset
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  // Fix moduleNameMapper with explicit regexes that don't use forward slashes in the pattern
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'json', 'node'],
   moduleNameMapper: {
-    '(.*).js$': '$1'
+    '^(\\.{1,2}/.*)\\.js$': '$1.ts',
+    '^(\\.{1,2}/.*)\\.ts$': '$1.ts'
   },
   transform: {
     '^.+\\.tsx?$': [
@@ -19,8 +19,9 @@ export default {
     ],
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(.*\\.mjs$|@modelcontextprotocol/sdk))'
+    '/node_modules/(?!(@modelcontextprotocol/sdk|ipaddr.js)/.*)'
   ],
   injectGlobals: true,
-  setupFilesAfterEnv: ['<rootDir>/test/setup-jest.ts']
-};
+  setupFilesAfterEnv: ['<rootDir>/test/setup-jest.ts'],
+  moduleDirectories: ['node_modules', 'src']
+}
