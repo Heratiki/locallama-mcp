@@ -11,12 +11,16 @@ const LOCK_FILE_PATH = path.join(__dirname, '..', '..', LOCK_FILE_NAME);
 /**
  * Creates a lock file to prevent multiple instances of the server from running
  * Stores process ID and start time for debugging purposes
+ * @param {Object} additionalInfo Optional additional information to store in the lock file
+ * @param {number} additionalInfo.port The port the server is running on
+ * @param {string} additionalInfo.connectionInfo Additional connection information
  */
-export function createLockFile() {
+export function createLockFile(additionalInfo = {}) {
   try {
     const lockInfo = {
       pid: process.pid,
       startTime: new Date().toISOString(),
+      ...additionalInfo
     };
     
     fs.writeFileSync(LOCK_FILE_PATH, JSON.stringify(lockInfo), { flag: 'wx' });
@@ -79,5 +83,42 @@ export function getLockFileInfo() {
   } catch (error) {
     console.error('Error reading lock file:', error);
     return null;
+  }
+}
+
+/**
+ * Verifies if the process in the lock file is still running
+ * @returns {boolean} True if process is still running, false otherwise
+ */
+export function isLockFileProcessRunning() {
+  try {
+    const lockInfo = getLockFileInfo();
+    if (!lockInfo || !lockInfo.pid) {
+      return false;
+    }
+    
+    // Different ways to check if a process is running depending on platform
+    if (process.platform === 'win32') {
+      try {
+        // On Windows, we can use tasklist and search for the PID
+        const { execSync } = require('child_process');
+        execSync(`tasklist /FI "PID eq ${lockInfo.pid}" /NH`);
+        return true;
+      } catch (error) {
+        return false; // Process not found
+      }
+    } else {
+      // On Unix-like systems (Linux, macOS), we can just try to send signal 0
+      // which doesn't actually send a signal but checks if the process exists
+      try {
+        process.kill(lockInfo.pid, 0);
+        return true;
+      } catch (error) {
+        return false; // Process not running
+      }
+    }
+  } catch (error) {
+    console.error('Error checking if lock file process is running:', error);
+    return false;
   }
 }

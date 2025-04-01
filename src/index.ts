@@ -262,19 +262,42 @@ export class LocalLamaMcpServer {
       // Check if another instance is already running
       if (isLockFilePresent()) {
         const lockInfo: LockFileInfo | null = getLockFileInfo();
-        logger.info(`Another instance of LocalLama MCP Server is already running. Process: ${lockInfo?.pid || 'unknown'}, Started: ${lockInfo?.startTime || 'unknown'}. Exiting.`);
-        process.exit(0);
-        return;
+        
+        // Check if the process in the lock file is still running
+        try {
+          const isProcessRunning = await import('./utils/lock-file.js').then(
+            module => module.isLockFileProcessRunning()
+          );
+          
+          if (isProcessRunning) {
+            // The other server instance is still running
+            logger.info(`Another instance of LocalLama MCP Server is already running.`);
+            logger.info(`Process: ${lockInfo?.pid || 'unknown'}, Started: ${lockInfo?.startTime || 'unknown'}`);
+            if (lockInfo?.connectionInfo) {
+              logger.info(`Connection Info: ${lockInfo.connectionInfo}`);
+            }
+            logger.info(`This process will exit and requests will be directed to the existing instance.`);
+            process.exit(0);
+            return;
+          } else {
+            // The lock file exists but the process is not running (stale lock file)
+            logger.info(`Found a stale lock file from a terminated server instance. Removing it.`);
+            removeLockFile();
+          }
+        } catch (error) {
+          logger.error('Error checking if lock file process is running:', error);
+          // If we encounter an error checking the process, assume the lock file is stale
+          removeLockFile();
+        }
       }
-    } catch (error) {
-      logger.error('Error checking lock file:', error);
-      process.exit(1);
-      return;
-    }
-
-    try {
-      // Create lock file with current process info
-      createLockFile();
+      
+      // No lock file or stale lock file was removed, continue starting the server
+      
+      // Connection information for the lock file
+      const connectionInfo = `LocalLama MCP Server running on stdio`;
+      
+      // Create lock file with current process info and connection details
+      createLockFile({ connectionInfo });
 
       // Initialize the decision engine
       const { decisionEngine } = await import('./modules/decision-engine/index.js');
@@ -286,7 +309,7 @@ export class LocalLamaMcpServer {
       logger.info('Starting LocalLama MCP Server...');
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
-      logger.info(`LocalLama MCP Server v${version} running on stdio (PID: ${process.pid})`);
+      logger.info(`${connectionInfo} (PID: ${process.pid})`);
     } catch (error: unknown) {
       logger.error('Failed to start server:', error instanceof Error ? error.message : String(error));
       removeLockFile();

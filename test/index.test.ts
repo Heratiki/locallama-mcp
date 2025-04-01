@@ -47,11 +47,12 @@ import { decisionEngine } from '../dist/modules/decision-engine/index.js'; // Im
 
 describe('LocalLamaMcpServer', () => {
   let server: LocalLamaMcpServer;
-  let exitSpy: jest.SpyInstance; // Use correct type
+  // Use ReturnType to infer the type from jest.spyOn
+  let exitSpy: ReturnType<typeof jest.spyOn>; 
 
   beforeAll(() => {
     // Mock process.exit once for the entire suite
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | undefined) => never);
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: string | number | null | undefined) => never);
   });
 
   afterAll(() => {
