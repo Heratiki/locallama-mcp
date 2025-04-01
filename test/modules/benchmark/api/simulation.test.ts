@@ -1,4 +1,4 @@
-import { simulateOpenAiApi, simulateGenericApi } from '../../../../../src/modules/benchmark/api/simulation.js';
+import { simulateOpenAiApi, simulateGenericApi } from '../../../../dist/modules/benchmark/api/simulation.js';
 
 jest.mock('../../../../../src/modules/utils/logger.js');
 

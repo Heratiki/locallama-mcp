@@ -1,5 +1,5 @@
 import { describe, expect, it, jest, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { LocalLamaMcpServer } from '../src/index';
+import { LocalLamaMcpServer } from '../src/index.ts';
 
 // Create mock objects first
 const mockServer = {
@@ -18,21 +18,13 @@ const mockLockFile = {
 jest.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
   Server: jest.fn(() => mockServer)
 }));
-jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: jest.fn(() => ({
-    connect: jest.fn().mockReturnValue(Promise.resolve())
-  }))
-}));
-jest.mock('../src/modules/api-integration/resources.js', () => ({
-  setupResourceHandlers: jest.fn().mockReturnValue(Promise.resolve())
-}));
-jest.mock('../src/modules/api-integration/tool-definition/index.js', () => ({
+jest.mock('../src/modules/api-integration/tool-definition/index.ts', () => ({
   toolDefinitionProvider: {
     initialize: jest.fn().mockReturnValue(Promise.resolve()),
   }
 }));
-jest.mock('../src/utils/lock-file.js', () => mockLockFile);
-jest.mock('../src/modules/decision-engine/index.js', () => ({
+jest.mock('../src/utils/lock-file.ts', () => mockLockFile);
+jest.mock('../src/modules/decision-engine/index.ts', () => ({
   decisionEngine: {
     initialize: jest.fn().mockReturnValue(Promise.resolve()),
   }
@@ -41,10 +33,10 @@ jest.mock('../src/modules/decision-engine/index.js', () => ({
 // Import after all mocks are defined
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { setupResourceHandlers } from '../src/modules/api-integration/resources.js';
-import { toolDefinitionProvider } from '../src/modules/api-integration/tool-definition/index.js';
-import * as lockFile from '../src/utils/lock-file.js';
-import { decisionEngine } from '../src/modules/decision-engine/index.js'; // Import decisionEngine directly
+import { setupResourceHandlers } from '../src/modules/api-integration/resources.ts';
+import { toolDefinitionProvider } from '../src/modules/api-integration/tool-definition/index.ts';
+import * as lockFile from '../src/utils/lock-file.ts';
+import { decisionEngine } from '../src/modules/decision-engine/index.ts'; // Import decisionEngine directly
 
 
 describe('LocalLamaMcpServer', () => {
@@ -142,10 +134,10 @@ describe('LocalLamaMcpServer', () => {
     const setRequestHandlerSpy = jest.spyOn((server as any).server, 'setRequestHandler');
 
     // Mock the import statements (ensure mocks are correctly set up if needed elsewhere)
-    jest.mock('../src/modules/api-integration/routing/index.js', () => ({
+    jest.mock('../src/modules/api-integration/routing/index.ts', () => ({
       routeTask: jest.fn().mockReturnValue(Promise.resolve({}))
     }));
-    jest.mock('../src/modules/api-integration/cost-estimation/index.js', () => ({
+    jest.mock('../src/modules/api-integration/cost-estimation/index.ts', () => ({
       estimateCost: jest.fn().mockReturnValue(Promise.resolve({}))
     }));
 

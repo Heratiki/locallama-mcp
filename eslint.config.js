@@ -1,5 +1,6 @@
 import tseslint from 'typescript-eslint';
 import js from '@eslint/js';
+import pluginImport from 'eslint-plugin-import'; // Import the import plugin
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -33,6 +34,7 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tseslint.plugin,
+      'import': pluginImport // Add the import plugin
     },
     rules: {
       // General rules for all TS files
@@ -44,14 +46,16 @@ export default [
       'eqeqeq': ['warn', 'always'],
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/await-thenable': 'warn',
-      '@typescript-eslint/no-misused-promises': 'warn'
+      '@typescript-eslint/no-misused-promises': 'warn',
       // Keep stricter rules like no-unsafe-* enabled by default from recommendedTypeChecked
+      // Add rule to disallow .ts extensions in general
+      'import/extensions': ['error', 'ignorePackages', { 'ts': 'never', 'tsx': 'never' }]
     },
   },
 
   // Override configurations specifically for TEST files
   {
-    files: ['test/**/*.ts'],
+    files: ['test/**/*.ts', 'test/**/*.test.ts'], // Ensure pattern covers all test files
     languageOptions: {
       parserOptions: {
         project: './tsconfig.test.json',
@@ -78,6 +82,8 @@ export default [
       '@typescript-eslint/no-unsafe-argument': 'off', // Allow unsafe arguments
       '@typescript-eslint/no-unsafe-return': 'off', // Allow unsafe returns
       '@typescript-eslint/unbound-method': 'off', // Allow unbound methods (common with mocks)
+      // Turn off the import/extensions rule specifically for tests
+      'import/extensions': 'off'
     },
   }
 ];

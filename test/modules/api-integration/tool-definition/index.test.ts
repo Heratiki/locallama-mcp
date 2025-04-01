@@ -1,5 +1,4 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { toolDefinitionProvider } from '../../../../src/modules/api-integration/tool-definition/index.js';
+import { toolDefinitionProvider } from '../../../../dist/modules/api-integration/tool-definition/index.js';
 
 jest.mock('@modelcontextprotocol/sdk/server/index.js');
 

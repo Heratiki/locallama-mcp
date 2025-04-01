@@ -1,9 +1,8 @@
-import axios from 'axios';
-import { callOllamaApi } from '../../../../../src/modules/benchmark/api/ollama.js';
-import { logger } from '../../../../../src/modules/utils/logger.js';
+import { callOllamaApi } from '../../../../dist/modules/benchmark/api/ollama.js'; // Changed path and extension
+// import { logger } from '../../../../dist/utils/logger.js'; // Changed path and extension
 
 jest.mock('axios');
-jest.mock('../../../../../src/modules/utils/logger.js');
+jest.mock('../../../../dist/utils/logger.js'); // Changed path and extension
 
 describe('callOllamaApi', () => {
   beforeEach(() => {

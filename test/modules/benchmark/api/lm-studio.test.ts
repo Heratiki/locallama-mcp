@@ -1,9 +1,8 @@
-import axios from 'axios';
-import { callLmStudioApi } from '../../../../../src/modules/benchmark/api/lm-studio.js';
-import { logger } from '../../../../../src/modules/utils/logger.js';
+import { callLmStudioApi } from '../../../../dist/modules/benchmark/api/lm-studio.js';
+// import { logger } from '../../../../dist/utils/logger.js';
 
 jest.mock('axios');
-jest.mock('../../../../../src/modules/utils/logger.js');
+jest.mock('../../../../dist/utils/logger.js');
 
 describe('callLmStudioApi', () => {
   beforeEach(() => {

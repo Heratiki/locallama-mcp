@@ -1,4 +1,4 @@
-import { costMonitor } from '../../../../src/modules/cost-monitor/index.js';
+import { costMonitor } from '../../../src/modules/cost-monitor/index.ts';
 
 jest.mock('../../../../src/modules/utils/logger.js');
 jest.mock('../../../../src/modules/config/index.js');

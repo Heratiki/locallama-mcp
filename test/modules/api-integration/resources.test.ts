@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import { setupResourceHandlers } from '../../../src/modules/api-integration/resources.js';
+import { setupResourceHandlers } from '../../../dist/modules/api-integration/resources.js';
 
 jest.mock('@modelcontextprotocol/sdk/server/index.js');
+jest.mock('../../dist/modules/cost-monitor/index.js');
+jest.mock('../../dist/modules/openrouter/index.js');
+jest.mock('../../dist/config/index.js');
+jest.mock('../../dist/utils/logger.js');
+jest.mock('../../dist/modules/decision-engine/services/jobTracker.js');
 
 describe('setupResourceHandlers', () => {
   let mockServer: any;

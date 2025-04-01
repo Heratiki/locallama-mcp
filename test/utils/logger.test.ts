@@ -1,19 +1,17 @@
-import { logger } from '../../src/utils/logger';
-import fs from 'fs';
-import zlib from 'zlib';
+import { logger } from '../../dist/utils/logger.js'; // Changed path and extension
+// import { config } from '../../dist/config/index.js'; // Changed path and extension
 
-// Mock external dependencies
-jest.mock('fs');
-jest.mock('zlib');
-jest.mock('../../src/config/index.js', () => ({
+// Mock dependencies
+jest.mock('../../dist/config/index.js', () => ({ // Changed path and extension
   config: {
-    logFile: '/mock/log/file.log',
-    logLevel: 'info'
+    logLevel: 'info',
+    logToFile: true, // Enable file logging for testing
+    logFilePath: '/mock/log/file.log' // Use a mock path
   }
 }));
 
-// Mock the logger module
-jest.mock('../../src/utils/logger', () => ({
+// Mock the logger module itself to prevent actual logging during tests
+jest.mock('../../dist/utils/logger.js', () => ({ // Changed path and extension
   logger: {
     error: jest.fn(),
     warn: jest.fn(),
@@ -21,6 +19,13 @@ jest.mock('../../src/utils/logger', () => ({
     debug: jest.fn()
   }
 }));
+
+// Mock fs and zlib for file operations
+jest.mock('node:fs');
+jest.mock('node:zlib');
+
+import * as fs from 'node:fs';
+import * as zlib from 'node:zlib';
 
 describe('Logger Utility', () => {
   beforeEach(() => {

@@ -1,11 +1,14 @@
-import { benchmarkModule } from '../../../../src/modules/benchmark/index.js';
-import { benchmarkTask } from '../../../../src/modules/benchmark/core/runner.js';
-import { generateSummary } from '../../../../src/modules/benchmark/core/summary.js';
-import { initBenchmarkDb, cleanupOldResults } from '../../../../src/modules/benchmark/storage/benchmarkDb.js';
+import { benchmarkModule } from '../../../dist/modules/benchmark/index.js';
+import { benchmarkTask } from '../../../dist/modules/benchmark/core/runner.js';
+import { generateSummary } from '../../../dist/modules/benchmark/core/summary.js';
+import { initBenchmarkDb, cleanupOldResults } from '../../../dist/modules/benchmark/storage/benchmarkDb.js';
 
-jest.mock('../../../../src/modules/benchmark/core/runner.js');
-jest.mock('../../../../src/modules/benchmark/core/summary.js');
-jest.mock('../../../../src/modules/benchmark/storage/benchmarkDb.js');
+jest.mock('../../../dist/modules/benchmark/core/runner.js');
+jest.mock('../../../dist/modules/benchmark/core/summary.js');
+jest.mock('../../../dist/modules/benchmark/storage/benchmarkDb.ts');
+jest.mock('../../../dist/modules/benchmark/api/ollama.js');
+jest.mock('../../../dist/modules/benchmark/api/lm-studio.js');
+jest.mock('../../../dist/modules/benchmark/api/simulation.js');
 
 describe('benchmarkModule', () => {
   beforeEach(() => {
@@ -24,8 +27,8 @@ describe('benchmarkModule', () => {
 
   it('should run benchmarkTasks and generate a summary', async () => {
     const mockTasks = [
-      { id: 'task1', params: {} },
-      { id: 'task2', params: {} }
+      { taskId: 'task1', task: 'Test task 1', contextLength: 100, expectedOutputLength: 50, complexity: 0.5 },
+      { taskId: 'task2', task: 'Test task 2', contextLength: 150, expectedOutputLength: 75, complexity: 0.9 }
     ];
     const mockResults = [
       { id: 'task1', result: 'success' },
@@ -34,7 +37,7 @@ describe('benchmarkModule', () => {
     const mockSummary = { total: 2, success: 2 };
 
     (initBenchmarkDb as jest.Mock).mockResolvedValue(undefined);
-    (benchmarkTask as jest.Mock).mockImplementation((task) => mockResults.find(r => r.id === task.id));
+    (benchmarkTask as jest.Mock).mockImplementation((task) => mockResults.find(r => r.id === task.taskId));
     (generateSummary as jest.Mock).mockReturnValue(mockSummary);
     (cleanupOldResults as jest.Mock).mockResolvedValue(undefined);
 
