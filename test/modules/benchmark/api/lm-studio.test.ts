@@ -15,6 +15,8 @@ jest.mock('../../../../dist/utils/logger.js'); // Changed path and extension
 describe('callLmStudioApi', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+     // Ensure the mock function itself is reset if needed
+    (axios.post as jest.Mock).mockClear();
   });
 
   it('should handle a successful API response', async () => {
@@ -35,6 +37,7 @@ describe('callLmStudioApi', () => {
       },
     };
 
+    // Use the mock function directly
     (axios.post as jest.Mock).mockResolvedValue(mockResponse);
 
     const result = await callLmStudioApi('test-model', 'Say hello', 5000);
@@ -74,6 +77,7 @@ describe('callLmStudioApi', () => {
       },
     };
 
+    // Use the mock function directly
     (axios.post as jest.Mock).mockResolvedValue(mockResponse);
 
     const result = await callLmStudioApi('test-model', 'Speculative task', 5000, 'draft-test-model');
@@ -96,6 +100,7 @@ describe('callLmStudioApi', () => {
   });
 
   it('should handle API errors gracefully', async () => {
+    // Use the mock function directly
     (axios.post as jest.Mock).mockRejectedValue(new Error('API error'));
 
     const result = await callLmStudioApi('test-model', 'Error task', 5000);
@@ -107,6 +112,7 @@ describe('callLmStudioApi', () => {
   it('should handle timeouts', async () => {
     jest.useFakeTimers();
 
+    // Use the mock function directly
     (axios.post as jest.Mock).mockImplementation(() => {
       return new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Timeout')), 6000);

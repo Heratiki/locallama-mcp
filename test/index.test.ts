@@ -1,4 +1,4 @@
-import { describe, expect, it, jest, ,beforeAll, afterAll, beforeEach } from '@jest/globals';
+import { describe, expect, it, jest, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import { LocalLamaMcpServer } from '../dist/index.js';
 
 // Create mock objects first

@@ -1,15 +1,25 @@
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import { benchmarkModule } from '../../../dist/modules/benchmark/index.js';
 import { benchmarkTask } from '../../../dist/modules/benchmark/core/runner.js';
-import { generateSummary } from '../../../dist/modules/benchmark/core/summary.js';
-import { initBenchmarkDb, cleanupOldResults } from '../../../dist/modules/benchmark/storage/benchmarkDb.js';
+import { generateSummary } from '../../../dist/modules/benchmark/core/summary.js'; // Corrected import path/extension
 
-jest.mock('../../../dist/modules/benchmark/core/runner.js');
-jest.mock('../../../dist/modules/benchmark/core/summary.js');
-jest.mock('../../../dist/modules/benchmark/storage/benchmarkDb.js');
-jest.mock('../../../dist/modules/benchmark/api/ollama.js');
-jest.mock('../../../dist/modules/benchmark/api/lm-studio.js');
-jest.mock('../../../dist/modules/benchmark/api/simulation.js');
+// Mock dependencies manually
+jest.mock('../../../dist/modules/benchmark/core/runner.js', () => ({
+  benchmarkTask: jest.fn()
+}));
+jest.mock('../../../dist/modules/benchmark/core/summary.js', () => ({
+  generateSummary: jest.fn()
+}));
+jest.mock('../../../dist/modules/benchmark/storage/benchmarkDb.js', () => ({ // Manual mock for benchmarkDb
+  initBenchmarkDb: jest.fn(),
+  cleanupOldResults: jest.fn()
+}));
+jest.mock('../../../dist/modules/benchmark/api/ollama.js'); 
+jest.mock('../../../dist/modules/benchmark/api/lm-studio.js'); 
+jest.mock('../../../dist/modules/benchmark/api/simulation.js'); 
+
+// Import after mocks
+import { initBenchmarkDb, cleanupOldResults } from '../../../dist/modules/benchmark/storage/benchmarkDb.js';
 
 describe('benchmarkModule', () => {
   beforeEach(() => {
@@ -37,6 +47,7 @@ describe('benchmarkModule', () => {
     ];
     const mockSummary = { total: 2, success: 2 };
 
+    // Access the mocked functions directly
     (initBenchmarkDb as jest.Mock).mockResolvedValue(undefined);
     (benchmarkTask as jest.Mock).mockImplementation((task) => mockResults.find(r => r.id === task.taskId));
     (generateSummary as jest.Mock).mockReturnValue(mockSummary);

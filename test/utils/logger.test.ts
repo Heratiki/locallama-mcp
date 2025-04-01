@@ -22,6 +22,7 @@ jest.mock('../../dist/utils/logger.js', () => ({ // Changed path and extension
 }));
 
 // Mock fs and zlib for file operations
+// Ensure the factory returns an object with jest.fn() for each method
 jest.mock('node:fs', () => ({
   existsSync: jest.fn(),
   statSync: jest.fn(),
@@ -30,7 +31,9 @@ jest.mock('node:fs', () => ({
   appendFileSync: jest.fn(),
   mkdirSync: jest.fn(),
 }));
-jest.mock('node:zlib');
+jest.mock('node:zlib', () => ({ // Also mock zlib explicitly if needed
+  gzipSync: jest.fn(),
+}));
 
 // Import after mocks
 import * as fs from 'node:fs';
@@ -39,9 +42,14 @@ import * as zlib from 'node:zlib';
 describe('Logger Utility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset mock implementations for fs methods if needed for specific tests
-    (fs.existsSync as jest.Mock).mockReturnValue(true); // Default to exists
-    (fs.statSync as jest.Mock).mockReturnValue({ size: 1024 }); // Default size
+    // Access the mocked functions via the imported fs object
+    (fs.existsSync as jest.Mock).mockReturnValue(true); 
+    (fs.statSync as jest.Mock).mockReturnValue({ size: 1024 }); 
+    (fs.renameSync as jest.Mock).mockClear();
+    (fs.writeFileSync as jest.Mock).mockClear();
+    (fs.appendFileSync as jest.Mock).mockClear();
+    (fs.mkdirSync as jest.Mock).mockClear();
+    (zlib.gzipSync as jest.Mock).mockClear();
   });
 
   it('should log an error message to console and file', () => {
@@ -57,10 +65,10 @@ describe('Logger Utility', () => {
   it('should rotate log files when size exceeds limit', () => {
     // Set specific mock return values for this test
     (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (fs.statSync as jest.Mock).mockReturnValue({ size: 11 * 1024 * 1024 } as fs.Stats);
+    (fs.statSync as jest.Mock).mockReturnValue({ size: 11 * 1024 * 1024 }); // Cast might not be needed if TS infers from mock
     (zlib.gzipSync as jest.Mock).mockReturnValue(Buffer.from('compressed content'));
 
-    logger.info('Trigger log rotation');
+    logger.info('Trigger log rotation'); // Assuming logger uses the mocked fs internally
 
     expect(fs.renameSync).toHaveBeenCalled();
     expect(fs.writeFileSync).toHaveBeenCalledWith('/mock/log/file.log.1.gz', Buffer.from('compressed content'));

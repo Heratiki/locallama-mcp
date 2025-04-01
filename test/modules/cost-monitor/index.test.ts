@@ -4,7 +4,7 @@ import { costMonitor } from '../../../dist/modules/cost-monitor/index.js';
 // Mock dependencies
 jest.mock('../../../dist/config/index.js'); // Corrected path (dist)
 jest.mock('../../../dist/utils/logger.js'); // Corrected path (dist)
-jest.mock('../../../../src/modules/openrouter/index.js');
+jest.mock('../../../dist/modules/openrouter/index.js'); // Corrected path (dist)
 
 describe('costMonitor', () => {
   beforeEach(() => {
