@@ -1,6 +1,7 @@
+import { describe, expect, it, jest } from '@jest/globals';
 import { simulateOpenAiApi, simulateGenericApi } from '../../../../dist/modules/benchmark/api/simulation.js';
 
-jest.mock('../../../../../src/modules/utils/logger.js');
+jest.mock('../../../../dist/utils/logger.js'); // Changed path to dist and extension to .js
 
 describe('simulateOpenAiApi', () => {
   it('should return a successful response with token usage', async () => {

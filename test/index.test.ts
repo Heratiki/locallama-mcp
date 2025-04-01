@@ -1,5 +1,5 @@
-import { describe, expect, it, jest, beforeAll, afterAll, beforeEach } from '@jest/globals';
-import { LocalLamaMcpServer } from '../src/index.ts';
+import { describe, expect, it, jest, ,beforeAll, afterAll, beforeEach } from '@jest/globals';
+import { LocalLamaMcpServer } from '../dist/index.js';
 
 // Create mock objects first
 const mockServer = {
@@ -18,13 +18,19 @@ const mockLockFile = {
 jest.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
   Server: jest.fn(() => mockServer)
 }));
-jest.mock('../src/modules/api-integration/tool-definition/index.ts', () => ({
+jest.mock('../dist/modules/api-integration/tool-definition/index.js', () => ({
   toolDefinitionProvider: {
     initialize: jest.fn().mockReturnValue(Promise.resolve()),
   }
 }));
-jest.mock('../src/utils/lock-file.ts', () => mockLockFile);
-jest.mock('../src/modules/decision-engine/index.ts', () => ({
+// Add manual mock for lock-file
+jest.mock('../dist/utils/lock-file.js', () => ({
+  isLockFilePresent: jest.fn(),
+  createLockFile: jest.fn(),
+  removeLockFile: jest.fn(),
+  getLockFileInfo: jest.fn(),
+}));
+jest.mock('../dist/modules/decision-engine/index.js', () => ({
   decisionEngine: {
     initialize: jest.fn().mockReturnValue(Promise.resolve()),
   }
@@ -33,20 +39,19 @@ jest.mock('../src/modules/decision-engine/index.ts', () => ({
 // Import after all mocks are defined
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { setupResourceHandlers } from '../src/modules/api-integration/resources.ts';
-import { toolDefinitionProvider } from '../src/modules/api-integration/tool-definition/index.ts';
-import * as lockFile from '../src/utils/lock-file.ts';
-import { decisionEngine } from '../src/modules/decision-engine/index.ts'; // Import decisionEngine directly
+import { setupResourceHandlers } from '../dist/modules/api-integration/resources.js';
+import { toolDefinitionProvider } from '../dist/modules/api-integration/tool-definition/index.js';
+import * as lockFile from '../dist/utils/lock-file.js'; // Ensure path points to dist and uses .js
+import { decisionEngine } from '../dist/modules/decision-engine/index.js'; // Import decisionEngine directly
 
 
 describe('LocalLamaMcpServer', () => {
   let server: LocalLamaMcpServer;
-  let exitSpy: any;  // Using any for now to bypass type issues
+  let exitSpy: jest.SpyInstance; // Use correct type
 
   beforeAll(() => {
     // Mock process.exit once for the entire suite
-    // Correct the type signature for the mock implementation (remove redundant | undefined)
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: string | number | null) => never);
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | undefined) => never);
   });
 
   afterAll(() => {
@@ -59,14 +64,13 @@ describe('LocalLamaMcpServer', () => {
     jest.clearAllMocks();
 
     // Initialize the server before each test
-    // Use 'any' cast locally for constructor due to complex mock dependencies
-    server = new (LocalLamaMcpServer as any)();
+    server = new LocalLamaMcpServer();
   });
 
   it('should initialize correctly', () => {
     // Ensure the server and tool definition provider are initialized
-    // Assert against the mocked constructor
-    expect(Server as jest.Mock).toHaveBeenCalledTimes(1);
+    // Assert against the mock constructor returned by jest.mock
+    expect(Server).toHaveBeenCalledTimes(1);
     // Access mocked initialize directly and cast
     expect(toolDefinitionProvider.initialize as jest.Mock).toHaveBeenCalledTimes(1);
   });
@@ -129,17 +133,13 @@ describe('LocalLamaMcpServer', () => {
   });
 
   it('should set up tool call handler', async () => {
-    // Spy on setRequestHandler to verify tool call handler setup
-    // Use 'any' cast to access mocked server property
-    const setRequestHandlerSpy = jest.spyOn((server as any).server, 'setRequestHandler');
+    // Spy on setRequestHandler on the mockServer instance
+    const setRequestHandlerSpy = jest.spyOn(mockServer, 'setRequestHandler');
 
     // Mock the import statements (ensure mocks are correctly set up if needed elsewhere)
-    jest.mock('../src/modules/api-integration/routing/index.ts', () => ({
-      routeTask: jest.fn().mockReturnValue(Promise.resolve({}))
-    }));
-    jest.mock('../src/modules/api-integration/cost-estimation/index.ts', () => ({
-      estimateCost: jest.fn().mockReturnValue(Promise.resolve({}))
-    }));
+    // Note: Mocking imports inside tests is generally discouraged, prefer top-level mocks
+    // jest.mock('../dist/modules/api-integration/routing/index.js', () => ({ ... }));
+    // jest.mock('../dist/modules/api-integration/cost-estimation/index.js', () => ({ ... }));
 
     // Access private method using 'any' cast for testing
     await (server as any)['setupToolCallHandler']();
@@ -157,20 +157,24 @@ describe('LocalLamaMcpServer', () => {
     (setupResourceHandlers as jest.Mock).mockImplementation(() => {});
     // Mock the prototype correctly
     const connectMock = jest.fn().mockReturnValue(Promise.resolve());
-    (StdioServerTransport as jest.Mock).mockImplementation(() => ({
+    // Ensure StdioServerTransport is mocked correctly if it's a class
+    jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
+      StdioServerTransport: jest.fn().mockImplementation(() => ({
         connect: connectMock
+      }))
     }));
 
-    // Call public method - run() should be public on LocalLamaMcpServer
-    // Cast locally if necessary due to constructor issues
-    await (server as any).run();
+    // Re-import after mock if necessary, or ensure mock is hoisted
+    const { StdioServerTransport: MockedTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+
+    await server.run();
 
     expect(lockFile.isLockFilePresent).toHaveBeenCalledTimes(1);
     expect(lockFile.createLockFile).toHaveBeenCalledTimes(1);
     // Check the mock directly
     expect(decisionEngineInitializeMock).toHaveBeenCalledTimes(1);
     expect(setupResourceHandlers).toHaveBeenCalledTimes(1);
-    expect(StdioServerTransport).toHaveBeenCalledTimes(1);
+    expect(MockedTransport).toHaveBeenCalledTimes(1);
     expect(connectMock).toHaveBeenCalledTimes(1); // Verify connect was called
   });
 
@@ -180,13 +184,13 @@ describe('LocalLamaMcpServer', () => {
     (lockFile.getLockFileInfo as jest.Mock).mockReturnValue({ pid: 123, startTime: 'test' });
     // No local mock needed
 
-    await (server as any).run();
+    await server.run();
 
     expect(lockFile.isLockFilePresent).toHaveBeenCalledTimes(1);
     expect(lockFile.getLockFileInfo).toHaveBeenCalledTimes(1);
     // Use the suite-level spy
-    expect(exitSpy).toHaveBeenCalledWith(0);
-    exitSpy.mockClear();
+    expect(exitSpy).toHaveBeenCalledWith(0); // Check the suite-level spy
+    exitSpy.mockClear(); // Clear calls for next test
   });
 
   it('should shut down the server', async () => {

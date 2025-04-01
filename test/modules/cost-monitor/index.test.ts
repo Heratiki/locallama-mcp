@@ -1,7 +1,9 @@
-import { costMonitor } from '../../../src/modules/cost-monitor/index.ts';
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { costMonitor } from '../../../dist/modules/cost-monitor/index.js';
 
-jest.mock('../../../../src/modules/utils/logger.js');
-jest.mock('../../../../src/modules/config/index.js');
+// Mock dependencies
+jest.mock('../../../dist/config/index.js'); // Corrected path (dist)
+jest.mock('../../../dist/utils/logger.js'); // Corrected path (dist)
 jest.mock('../../../../src/modules/openrouter/index.js');
 
 describe('costMonitor', () => {

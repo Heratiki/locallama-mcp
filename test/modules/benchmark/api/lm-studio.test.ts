@@ -1,8 +1,16 @@
-import { callLmStudioApi } from '../../../../dist/modules/benchmark/api/lm-studio.js';
-// import { logger } from '../../../../dist/utils/logger.js';
+import { logger } from '../../../../dist/utils/logger.js'; // Changed path and extension
 
-jest.mock('axios');
-jest.mock('../../../../dist/utils/logger.js');
+// Manually mock axios to ensure axios.post is a jest.Mock
+jest.mock('axios', () => ({
+  post: jest.fn(),
+}));
+
+// Import axios *after* the mock
+import axios from 'axios';
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { callLmStudioApi } from '../../../../dist/modules/benchmark/api/lm-studio.js'; // Changed path and extension
+
+jest.mock('../../../../dist/utils/logger.js'); // Changed path and extension
 
 describe('callLmStudioApi', () => {
   beforeEach(() => {

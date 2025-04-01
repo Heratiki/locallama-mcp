@@ -1,3 +1,5 @@
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { toolDefinitionProvider } from '../../../../dist/modules/api-integration/tool-definition/index.js';
 
 jest.mock('@modelcontextprotocol/sdk/server/index.js');

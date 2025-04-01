@@ -1,7 +1,16 @@
-import { callOllamaApi } from '../../../../dist/modules/benchmark/api/ollama.js'; // Changed path and extension
-// import { logger } from '../../../../dist/utils/logger.js'; // Changed path and extension
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { logger } from '../../../../dist/utils/logger.js'; // Changed path and extension
 
-jest.mock('axios');
+// Manually mock axios to ensure axios.post is a jest.Mock
+jest.mock('axios', () => ({
+  post: jest.fn(),
+}));
+
+// Import axios *after* the mock
+import axios from 'axios';
+
+import { callOllamaApi } from '../../../../dist/modules/benchmark/api/ollama.js'; // Changed path and extension
+
 jest.mock('../../../../dist/utils/logger.js'); // Changed path and extension
 
 describe('callOllamaApi', () => {

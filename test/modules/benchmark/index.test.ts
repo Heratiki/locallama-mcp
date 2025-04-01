@@ -1,3 +1,4 @@
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import { benchmarkModule } from '../../../dist/modules/benchmark/index.js';
 import { benchmarkTask } from '../../../dist/modules/benchmark/core/runner.js';
 import { generateSummary } from '../../../dist/modules/benchmark/core/summary.js';
@@ -5,7 +6,7 @@ import { initBenchmarkDb, cleanupOldResults } from '../../../dist/modules/benchm
 
 jest.mock('../../../dist/modules/benchmark/core/runner.js');
 jest.mock('../../../dist/modules/benchmark/core/summary.js');
-jest.mock('../../../dist/modules/benchmark/storage/benchmarkDb.ts');
+jest.mock('../../../dist/modules/benchmark/storage/benchmarkDb.js');
 jest.mock('../../../dist/modules/benchmark/api/ollama.js');
 jest.mock('../../../dist/modules/benchmark/api/lm-studio.js');
 jest.mock('../../../dist/modules/benchmark/api/simulation.js');

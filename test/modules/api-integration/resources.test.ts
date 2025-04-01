@@ -1,11 +1,12 @@
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import { setupResourceHandlers } from '../../../dist/modules/api-integration/resources.js';
 
-jest.mock('@modelcontextprotocol/sdk/server/index.js');
-jest.mock('../../dist/modules/cost-monitor/index.js');
-jest.mock('../../dist/modules/openrouter/index.js');
-jest.mock('../../dist/config/index.js');
-jest.mock('../../dist/utils/logger.js');
-jest.mock('../../dist/modules/decision-engine/services/jobTracker.js');
+jest.mock('@modelcontextprotocol/sdk/server/index.js'); // Keep external mock
+jest.mock('../../../dist/modules/cost-monitor/index.js'); // Corrected path (added ../)
+jest.mock('../../../dist/modules/openrouter/index.js'); // Corrected path (added ../)
+jest.mock('../../../dist/config/index.js'); // Corrected path (added ../)
+jest.mock('../../../dist/utils/logger.js'); // Corrected path (added ../)
+jest.mock('../../../dist/modules/decision-engine/services/jobTracker.js'); // Corrected path (added ../)
 
 describe('setupResourceHandlers', () => {
   let mockServer: any;
