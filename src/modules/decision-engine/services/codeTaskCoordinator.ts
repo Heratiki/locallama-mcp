@@ -2,7 +2,9 @@ import { logger } from '../../../utils/logger.js';
 import { codeTaskAnalyzer } from './codeTaskAnalyzer.js';
 import { dependencyMapper } from './dependencyMapper.js';
 import { codeModelSelector } from './codeModelSelector.js';
-import { openRouterModule } from '../../openrouter/index.js';
+import { openRouterModule, ModelNotFoundError } from '../../openrouter/index.js'; // Import ModelNotFoundError
+import { lmStudioModule } from '../../lm-studio/index.js'; // Import LM Studio module
+import { ollamaModule } from '../../ollama/index.js'; // Import Ollama module
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
@@ -271,25 +273,74 @@ Complexity: ${subtask.complexity.toFixed(2)} (0-1 scale)
 ${relevantCodeSnippets}
 Please provide a well-structured, high-quality implementation for this specific part of the task.
 Focus only on this subtask, don't worry about other parts of the larger task.`;
-    
+
+    const timeout = 180000; // 3 minutes timeout
+
     try {
-      // Call the model using OpenRouter API
-      const result = await openRouterModule.callOpenRouterApi(
-        model.id,
-        prompt,
-        60000 // 60 seconds timeout
-      );
-      
-      if (!result.success || !result.text) {
-        throw new Error(`Failed to execute subtask: ${result.error}`);
+      let resultText: string | undefined;
+      let success = false;
+      let errorInstance: Error | undefined;
+
+      // Determine which module to call based on the provider
+      switch (model.provider) {
+        case 'lm-studio': {
+          // LM Studio model IDs might have a prefix like "lm-studio:", remove it
+          const lmStudioModelId = model.id.startsWith('lm-studio:') ? model.id.substring(10) : model.id;
+          logger.info(`Executing subtask with LM Studio model: ${lmStudioModelId}`);
+          const result = await lmStudioModule.callLMStudioApi(lmStudioModelId, prompt, timeout);
+          success = result.success;
+          resultText = result.text;
+          if (!success) {
+             errorInstance = new Error(`LM Studio Error: ${result.error}`);
+          }
+          break;
+        }
+        case 'ollama': {
+          // Ollama model IDs might have a prefix like "ollama:", remove it
+          const ollamaModelId = model.id.startsWith('ollama:') ? model.id.substring(7) : model.id;
+          logger.info(`Executing subtask with Ollama model: ${ollamaModelId}`);
+          const result = await ollamaModule.callOllamaApi(ollamaModelId, prompt, timeout);
+          success = result.success;
+          resultText = result.text;
+           if (!success) {
+             errorInstance = new Error(`Ollama Error: ${result.error}`);
+          }
+          break;
+        }
+        case 'openrouter':
+        default: { // Default to OpenRouter if provider is unknown or 'openrouter'
+          // OpenRouter model IDs might have a prefix like "openrouter:", remove it if present
+           const openRouterModelId = model.id.startsWith('openrouter:') ? model.id.substring(11) : model.id;
+          logger.info(`Executing subtask with OpenRouter model: ${openRouterModelId}`);
+          const result = await openRouterModule.callOpenRouterApi(openRouterModelId, prompt, timeout);
+          success = result.success;
+          resultText = result.text;
+          errorInstance = result.errorInstance; // Use the specific error instance
+          break;
+        }
       }
-      
-      return result.text;
+
+      if (!success || !resultText) {
+         // Use the specific error instance if available
+         const errorToThrow = errorInstance || new Error(`Failed to execute subtask with ${model.provider}`);
+         throw errorToThrow;
+      }
+
+      return resultText;
+
     } catch (error) {
+       // Handle specific ModelNotFoundError from OpenRouter cache check
+       if (error instanceof ModelNotFoundError) {
+         logger.warn(`Model ${model.id} not found in ${model.provider} cache during execution.`);
+         // Optionally: Implement retry logic here by calling codeModelSelector again
+         // For now, just return the error message
+         return `Error: Failed to execute subtask "${subtask.description}" - Model ${model.id} not found for provider ${model.provider}.`;
+       }
+      // General error handling
       if (error instanceof Error) {
-        return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}": ${error.message}`;
+        return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): ${error.message}`;
       }
-      return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}": Unknown error`;
+      return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): Unknown error`;
     }
   },
   

@@ -15,6 +15,15 @@ import {
 } from './types.js';
 import { speculativeDecodingService } from '../decision-engine/services/speculativeDecoding.js';
 
+
+// Add a custom error class
+export class ModelNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ModelNotFoundError';
+  }
+}
+
 // Add type definition for speculative decoding stats in OpenRouter response
 interface OpenRouterChatCompletion {
   choices: Array<{
@@ -593,6 +602,7 @@ export const openRouterModule = {
       total_draft_tokens_count?: number;
     };
     error?: OpenRouterErrorType;
+    errorInstance?: Error; // Add this to pass the specific error instance
   }> {
     logger.debug(`Calling OpenRouter API for model ${modelId}`);
     

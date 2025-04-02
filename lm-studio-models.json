@@ -1,0 +1,499 @@
+{
+  "models": {
+    "deepseek-coder-1.3b-typescript": {
+      "id": "deepseek-coder-1.3b-typescript",
+      "name": "deepseek-coder-1.3b-typescript",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "wizardcoder-python-13b-v1.0": {
+      "id": "wizardcoder-python-13b-v1.0",
+      "name": "wizardcoder-python-13b-v1.0",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "ml4se23_g1_wizardcoder-scot-1b-v1.0": {
+      "id": "ml4se23_g1_wizardcoder-scot-1b-v1.0",
+      "name": "ml4se23_g1_wizardcoder-scot-1b-v1.0",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "starcoder2-3b-instruct": {
+      "id": "starcoder2-3b-instruct",
+      "name": "starcoder2-3b-instruct",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "starcoder2-3b@q4_k_s": {
+      "id": "starcoder2-3b@q4_k_s",
+      "name": "starcoder2-3b@q4_k_s",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "starcoder2-3b@q8_0": {
+      "id": "starcoder2-3b@q8_0",
+      "name": "starcoder2-3b@q8_0",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "starcoder2-15b": {
+      "id": "starcoder2-15b",
+      "name": "starcoder2-15b",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "qwen2.5-coder-32b-instruct": {
+      "id": "qwen2.5-coder-32b-instruct",
+      "name": "qwen2.5-coder-32b-instruct",
+      "provider": "lm-studio",
+      "contextWindow": 32768,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 32768,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "qwen"
+    },
+    "deepseek-r1-distill-qwen-1.5b": {
+      "id": "deepseek-r1-distill-qwen-1.5b",
+      "name": "deepseek-r1-distill-qwen-1.5b",
+      "provider": "lm-studio",
+      "contextWindow": 32768,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 32768,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "qwen"
+    },
+    "qwen2.5-coder-0.5b-instruct": {
+      "id": "qwen2.5-coder-0.5b-instruct",
+      "name": "qwen2.5-coder-0.5b-instruct",
+      "provider": "lm-studio",
+      "contextWindow": 32768,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 32768,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "qwen"
+    },
+    "text-embedding-nomic-embed-text-v1.5": {
+      "id": "text-embedding-nomic-embed-text-v1.5",
+      "name": "text-embedding-nomic-embed-text-v1.5",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "olympiccoder-7b": {
+      "id": "olympiccoder-7b",
+      "name": "olympiccoder-7b",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "deepseek-r1-distill-llama-8b": {
+      "id": "deepseek-r1-distill-llama-8b",
+      "name": "deepseek-r1-distill-llama-8b",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "llama"
+    },
+    "deepseek-r1-distill-qwen-7b": {
+      "id": "deepseek-r1-distill-qwen-7b",
+      "name": "deepseek-r1-distill-qwen-7b",
+      "provider": "lm-studio",
+      "contextWindow": 32768,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 32768,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "qwen"
+    },
+    "openai-community_-_gpt2-xl": {
+      "id": "openai-community_-_gpt2-xl",
+      "name": "openai-community_-_gpt2-xl",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    },
+    "qwen2.5-coder-3b-instruct": {
+      "id": "qwen2.5-coder-3b-instruct",
+      "name": "qwen2.5-coder-3b-instruct",
+      "provider": "lm-studio",
+      "contextWindow": 32768,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 32768,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "qwen"
+    },
+    "codellama-7b-instruct": {
+      "id": "codellama-7b-instruct",
+      "name": "codellama-7b-instruct",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "llama"
+    },
+    "qwen2.5-coder-7b-instruct": {
+      "id": "qwen2.5-coder-7b-instruct",
+      "name": "qwen2.5-coder-7b-instruct",
+      "provider": "lm-studio",
+      "contextWindow": 32768,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 32768,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "qwen"
+    },
+    "stable-code-instruct-3b": {
+      "id": "stable-code-instruct-3b",
+      "name": "stable-code-instruct-3b",
+      "provider": "lm-studio",
+      "contextWindow": 4096,
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "contextWindow": 4096,
+        "speculativeInference": false,
+        "supportedFormats": [
+          "chat",
+          "completion"
+        ]
+      },
+      "costPerToken": {
+        "prompt": 0,
+        "completion": 0
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2025-04-02T05:36:59.986Z",
+      "family": "default"
+    }
+  },
+  "lastUpdated": "2025-04-02T05:36:59.986Z"
+}

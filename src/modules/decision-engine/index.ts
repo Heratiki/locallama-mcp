@@ -13,6 +13,8 @@ import { apiHandlers } from './services/apiHandlers.js';
 import { getJobTracker } from './services/jobTracker.js';
 import { codeModelSelector } from './services/codeModelSelector.js';
 import { modelPerformanceTracker } from './services/modelPerformance.js';
+import { lmStudioModule } from '../lm-studio/index.js';
+import { ollamaModule } from '../ollama/index.js';
 // import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
 /**
  * Represents a single factor in the routing decision.
@@ -68,6 +70,10 @@ export const decisionEngine = {
     try {
       // Initialize models database
       void modelsDbService.initialize();
+      // Initialize provider modules
+      void lmStudioModule.initialize();
+      void ollamaModule.initialize();
+
 
       // Initialize module connections to resolve circular dependencies
       modelPerformanceTracker.initialize(codeModelSelector);
