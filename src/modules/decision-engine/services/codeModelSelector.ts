@@ -571,7 +571,7 @@ export const codeModelSelector = {
   ): Promise<Map<string, Model>> {
     if (!this._modelPerformanceTracker) {
       logger.warn('Model performance tracker not initialized, using simple assignment');
-      return selectModelsForSubtasks(subtasks, false);
+      return this.selectModelsForSubtasks(subtasks, false);
     }
 
     const assignments = new Map<string, Model>();
@@ -595,7 +595,7 @@ export const codeModelSelector = {
       let bestScore = 0;
 
       for (const model of availableModels) {
-        const score = await scoreModelForSubtask(model, subtask, perfAnalysis);
+        const score = await this.scoreModelForSubtask(model, subtask, perfAnalysis);
         if (score > bestScore) {
           bestScore = score;
           bestModel = model;
@@ -639,7 +639,7 @@ export const codeModelSelector = {
               Math.max(0, subtask.complexity - 0.1),
               Math.min(1, subtask.complexity + 0.1)
             );
-            const score = await scoreModelForSubtask(m, subtask, perfAnalysis);
+            const score = await this.scoreModelForSubtask(m, subtask, perfAnalysis);
             return { model: m, score };
           });
 

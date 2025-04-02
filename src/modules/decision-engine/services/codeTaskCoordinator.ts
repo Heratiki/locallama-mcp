@@ -450,12 +450,18 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
     const modelUsage = new Map<string, { count: number, subtasks: string[] }>();
     
     // Get the job tracker for registering subtasks as jobs
-    let jobTracker;
+    let jobTracker = null;
     try {
       jobTracker = await getJobTracker();
+      if (!jobTracker.isInitialized()) {
+        logger.warn('JobTracker exists but is not initialized');
+        // Don't throw, just continue without tracking
+        jobTracker = null;
+      }
     } catch (error) {
       // Log the error but continue without job tracking
-      logger.error('Failed to initialize JobTracker, continuing without job tracking:', error);
+      logger.warn('Failed to initialize JobTracker, continuing without job tracking:', error);
+      jobTracker = null;
     }
     
     logger.info(`======= STARTING EXECUTION OF ALL SUBTASKS =======`);
@@ -749,5 +755,95 @@ Please provide a clean, consolidated solution that integrates all the components
       this._codeSearchEngine.dispose();
       this._codeSearchEngine = null;
     }
-  }
+  },
+
+  /**
+   * Resolve any circular dependencies in subtasks
+   * @param subtasks The subtasks to check for circular dependencies
+   * @returns Subtasks with resolved dependencies
+   */
+  async resolveDependencyCycles(subtasks: CodeSubtask[]): Promise<CodeSubtask[]> {
+    // Create a copy of subtasks to avoid modifying the original
+    const resolvedSubtasks = [...subtasks];
+    
+    // Build a dependency graph
+    const dependencyGraph = new Map<string, Set<string>>();
+    
+    // Initialize the graph with all subtask IDs
+    for (const subtask of resolvedSubtasks) {
+      dependencyGraph.set(subtask.id, new Set(subtask.dependencies));
+    }
+    
+    // Check for circular dependencies
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    
+    // Function to check for cycles starting from a node
+    const hasCycle = (nodeId: string, path: string[] = []): boolean => {
+      if (!dependencyGraph.has(nodeId)) {
+        return false; // Node doesn't exist in graph
+      }
+      
+      if (recursionStack.has(nodeId)) {
+        logger.warn(`Detected circular dependency: ${path.join(' -> ')} -> ${nodeId}`);
+        return true;
+      }
+      
+      if (visited.has(nodeId)) {
+        return false; // Already checked
+      }
+      
+      visited.add(nodeId);
+      recursionStack.add(nodeId);
+      
+      const dependencies = dependencyGraph.get(nodeId) || new Set<string>();
+      
+      for (const depId of dependencies) {
+        if (hasCycle(depId, [...path, nodeId])) {
+          return true;
+        }
+      }
+      
+      recursionStack.delete(nodeId);
+      return false;
+    };
+    
+    // Check each node for cycles
+    for (const subtask of resolvedSubtasks) {
+      recursionStack.clear(); // Reset for each root node
+      if (hasCycle(subtask.id)) {
+        // Found a cycle, need to resolve it
+        logger.info(`Resolving circular dependency for subtask: ${subtask.id}`);
+      }
+    }
+    
+    // Resolve any cycles
+    for (const subtask of resolvedSubtasks) {
+      const dependencies = new Set<string>();
+      
+      // Only keep dependencies that won't create cycles
+      for (const depId of subtask.dependencies) {
+        // Test if adding this dependency would create a cycle
+        dependencyGraph.get(subtask.id)?.delete(depId);
+        recursionStack.clear();
+        visited.clear();
+        
+        if (!hasCycle(subtask.id)) {
+          // It's safe to add this dependency
+          dependencies.add(depId);
+          dependencyGraph.get(subtask.id)?.add(depId);
+        } else {
+          logger.warn(`Removed circular dependency: ${subtask.id} -> ${depId}`);
+          // Keep the dependency graph consistent
+          dependencyGraph.get(subtask.id)?.delete(depId);
+        }
+      }
+      
+      // Update the subtask with the filtered dependencies
+      subtask.dependencies = Array.from(dependencies);
+    }
+    
+    logger.info(`Resolved circular dependencies among ${resolvedSubtasks.length} subtasks`);
+    return resolvedSubtasks;
+  },
 };
