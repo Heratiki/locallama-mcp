@@ -447,39 +447,81 @@ export const codeCache = {
   async loadCache() {
     const cacheFilePath = path.join(config.cacheDir, 'code-cache.json');
     const patternCacheFilePath = path.join(config.cacheDir, 'pattern-cache.json');
+    
+    // Ensure cache directory exists
+    try {
+      await fs.promises.mkdir(path.dirname(cacheFilePath), { recursive: true });
+    } catch (mkdirError) {
+      logger.error('Error creating cache directory:', mkdirError instanceof Error ? mkdirError.message : String(mkdirError));
+    }
+
     try {
       if (fs.existsSync(cacheFilePath)) {
         const cacheData = await fs.promises.readFile(cacheFilePath, 'utf-8');
-        codeCache.cache = new Map<string, CachedCodeEntry>(JSON.parse(cacheData) as Iterable<[string, CachedCodeEntry]>);
-        logger.info('Code cache loaded from file');
+        if (!cacheData.trim()) {
+          logger.info('Code cache file is empty, starting with new cache');
+          codeCache.cache = new Map<string, CachedCodeEntry>();
+        } else {
+          try {
+            codeCache.cache = new Map<string, CachedCodeEntry>(JSON.parse(cacheData) as Iterable<[string, CachedCodeEntry]>);
+            logger.info('Code cache loaded from file');
+          } catch (parseError) {
+            logger.error('Error parsing code cache file:', parseError instanceof Error ? parseError.message : String(parseError));
+            logger.info('Starting with new cache due to parse error');
+            codeCache.cache = new Map<string, CachedCodeEntry>();
+            // Create backup of corrupted cache file
+            const backupPath = `${cacheFilePath}.backup.${Date.now()}`;
+            await fs.promises.copyFile(cacheFilePath, backupPath);
+            logger.info(`Backed up corrupted cache file to ${backupPath}`);
+          }
+        }
       } else {
         logger.info('No code cache file found, starting with empty cache');
+        codeCache.cache = new Map<string, CachedCodeEntry>();
       }
     } catch (e) {
       logger.error('Error loading code cache:', e instanceof Error ? e.message : String(e), 
         '\nCache file path:', cacheFilePath,
         '\nError details:', e);
+      // Initialize empty cache on error
+      codeCache.cache = new Map<string, CachedCodeEntry>();
     }
+
     try {
       if (fs.existsSync(patternCacheFilePath)) {
         const patternCacheData = await fs.promises.readFile(patternCacheFilePath, 'utf-8');
-        const patternEntries = JSON.parse(patternCacheData) as Array<[string, string[]]>;
-        
-        // Create a new Map and convert arrays back to Set objects
-        const patternMap = new Map<string, Set<string>>();
-        for (const [key, values] of patternEntries) {
-          patternMap.set(key, new Set<string>(values));
+        if (!patternCacheData.trim()) {
+          logger.info('Pattern cache file is empty, starting with new pattern cache');
+          codeCache.patternCache = new Map<string, Set<string>>();
+        } else {
+          try {
+            const patternEntries = JSON.parse(patternCacheData) as Array<[string, string[]]>;
+            const patternMap = new Map<string, Set<string>>();
+            for (const [key, values] of patternEntries) {
+              patternMap.set(key, new Set<string>(values));
+            }
+            codeCache.patternCache = patternMap;
+            logger.info('Pattern cache loaded from file');
+          } catch (parseError) {
+            logger.error('Error parsing pattern cache file:', parseError instanceof Error ? parseError.message : String(parseError));
+            logger.info('Starting with new pattern cache due to parse error');
+            codeCache.patternCache = new Map<string, Set<string>>();
+            // Create backup of corrupted pattern cache file
+            const backupPath = `${patternCacheFilePath}.backup.${Date.now()}`;
+            await fs.promises.copyFile(patternCacheFilePath, backupPath);
+            logger.info(`Backed up corrupted pattern cache file to ${backupPath}`);
+          }
         }
-        
-        codeCache.patternCache = patternMap;
-        logger.info('Pattern cache loaded from file');
       } else {
         logger.info('No pattern cache file found, starting with empty cache');
+        codeCache.patternCache = new Map<string, Set<string>>();
       }
     } catch (e) {
       logger.error('Error loading pattern cache:', e instanceof Error ? e.message : String(e),
         '\nPattern cache file path:', patternCacheFilePath,
         '\nError details:', e);
+      // Initialize empty pattern cache on error
+      codeCache.patternCache = new Map<string, Set<string>>();
     }
   },
 
