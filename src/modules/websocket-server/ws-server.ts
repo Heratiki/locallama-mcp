@@ -1,4 +1,4 @@
-import type { IJobManager } from '../api-integration/types.js';
+import { IJobManager } from '../api-integration/types.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import express from 'express';
 import net from 'net';
@@ -9,6 +9,8 @@ import { initDatabase, getAllJobsFromDb } from './db.js';
 import { logger } from '../../utils/logger.js';
 import { benchmarkModule } from '../benchmark/index.js';
 import { config } from '../../config/index.js';
+// Import getJobTracker
+import { getJobTracker } from '../decision-engine/services/jobTracker.js';
 
 // Map internal job status to API job status
 const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' => {
@@ -182,65 +184,83 @@ async function startExpressServer() {
 }
 
 export async function broadcastJobs(wss: WebSocketServer): Promise<void> {
-  if (!jobTracker) {
-    logger.error('JobTracker not initialized');
-    return;
-  }
+    try {
+        // Ensure JobTracker is initialized
+        if (!jobTracker) {
+            logger.warn('JobTracker not initialized in broadcastJobs, fetching instance...');
+            const tracker = await getJobTracker();
+            initJobTracker(tracker);
+            logger.info('JobTracker initialized during broadcast');
+        }
 
-  try {
-    // If getActiveJobs exists, use it, otherwise get all jobs through getJob
-    const allJobs = await getAllJobsFromDb();
-    const activeJobs = allJobs.filter(job => job.status === 'pending' || job.status === 'in_progress');
-    
-    const jobData = {
-      activeJobs,
-      allJobs
-    };
+        // Get jobs from database even if JobTracker initialization fails
+        const allJobs = await getAllJobsFromDb();
+        const activeJobs = allJobs.filter(job => job.status === 'pending' || job.status === 'in_progress');
+        
+        const jobData = {
+            activeJobs,
+            allJobs
+        };
 
-    const promises = Array.from(wss.clients)
-      .filter(client => client.readyState === WebSocket.OPEN)
-      .map(client => client.send(JSON.stringify(jobData)));
-    
-    await Promise.all(promises);
-  } catch (error) {
-    logger.error('Error broadcasting jobs:', error instanceof Error ? error.message : String(error));
-  }
+        const clients = Array.from(wss.clients)
+            .filter(client => client.readyState === WebSocket.OPEN);
+
+        if (clients.length === 0) {
+            logger.debug('No connected clients to broadcast to');
+            return;
+        }
+
+        await Promise.all(
+            clients.map(client => 
+                new Promise<void>((resolve) => {
+                    client.send(JSON.stringify(jobData), (err) => {
+                        if (err) {
+                            logger.warn('Error broadcasting to client:', err);
+                        }
+                        resolve();
+                    });
+                })
+            )
+        );
+    } catch (error) {
+        logger.error('Error broadcasting jobs:', error instanceof Error ? error.message : String(error));
+    }
 }
 
 async function cancelJob(jobId: string): Promise<void> {
-  if (!jobTracker) {
-    logger.error('JobTracker not initialized');
-    return;
-  }
-
-  try {
-    const job = jobTracker.getJob(jobId);
-    if (!job) {
-      logger.error(`Job ${jobId} not found`);
-      return;
+    if (!jobTracker) {
+        logger.warn('JobTracker not initialized in cancelJob, fetching instance...');
+        jobTracker = await getJobTracker() as unknown as IJobManager;
     }
-
-    // Convert internal status to IJobManager status
-    const status = mapStatus(job.status);
-    
-    if (status === 'pending' || status === 'in_progress') {
-      if (status === 'in_progress' && 'processId' in job && typeof job.processId === 'number') {
-        try {
-          process.kill(job.processId);
-        } catch (killError) {
-          logger.error('Error killing process:', killError);
+  
+    try {
+        const job = jobTracker.getJob(jobId) ?? null;
+        if (!job) {
+            logger.error(`Job ${jobId} not found`);
+            return;
         }
-      }
-      
-      // Call cancelJob and wait for operation to complete
-      jobTracker.cancelJob(jobId);
-      await new Promise(resolve => setTimeout(resolve, 100)); // Give time for job state to update
-    }
 
-    await broadcastJobs(wss);
-  } catch (error) {
-    logger.error('Error canceling job:', error instanceof Error ? error.message : String(error));
-  }
+        // Convert internal status to IJobManager status
+        const status = mapStatus(job.status);
+        
+        if (status === 'pending' || status === 'in_progress') {
+            if (status === 'in_progress' && 'processId' in job && typeof job.processId === 'number') {
+                try {
+                    process.kill(job.processId);
+                } catch (killError) {
+                    logger.error('Error killing process:', killError);
+                }
+            }
+            
+            // Call cancelJob and wait for operation to complete
+            jobTracker.cancelJob(jobId);
+            await new Promise(resolve => setTimeout(resolve, 100)); // Allow job state to update
+        }
+
+        await broadcastJobs(wss);
+    } catch (error) {
+        logger.error('Error canceling job:', error instanceof Error ? error.message : String(error));
+    }
 }
 
 let wss: WebSocketServer;
@@ -830,12 +850,22 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
  */
 async function init() {
   try {
+    // Get the JobTracker instance first to ensure it's ready
+    const trackerInstance = await getJobTracker();
+    initJobTracker(trackerInstance);
+    logger.info('JobTracker instance initialized in ws-server');
+
+    // Then initialize other services
     await initDatabase();
     wss = await startWebSocketServer();
     await startExpressServer();
+
   } catch (error) {
-    logger.error('Error starting servers:', error);
-    process.exit(1);
+    logger.error('Error during server initialization:', error);
+    // Don't exit on JobTracker error, just log it
+    if (error instanceof Error && !error.message.includes('JobTracker')) {
+      process.exit(1);
+    }
   }
 }
 
