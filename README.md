@@ -47,6 +47,14 @@ LocalLama MCP Server is designed to reduce token usage and costs by dynamically 
 - Generates detailed reports for analysis and decision-making
 - Includes new tools for benchmarking free models and updating prompting strategies
 
+### Server Lock Mechanism
+
+- Prevents multiple instances of the server from running simultaneously
+- Automatically detects and cleans up stale lock files from crashed processes
+- Stores connection information in the lock file for better diagnostics
+- Verifies if processes in existing lock files are still running
+- Provides clear error messages when attempting to start a second instance
+
 ## Tools
 
 The following tools are available in the LocalLama MCP Server:
@@ -194,6 +202,10 @@ BENCHMARK_TASK_TIMEOUT=60000
 BENCHMARK_SAVE_RESULTS=true
 BENCHMARK_RESULTS_PATH=./benchmark-results
 
+# Server Lock Configuration
+LOCK_FILE_CHECK_ACTIVE_PROCESS=true
+REMOVE_STALE_LOCK_FILES=true
+
 # API Keys (replace with your actual keys)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 
@@ -247,6 +259,10 @@ PYTHON_DETECT_VENV=true
   - `cancel_job`: Cancels a running job to prevent runaway costs
   - Enhanced `route_task`: Implements a structured workflow with user preferences, cost confirmation, Retriv search, and job tracking
 
+- **Server Lock Configuration** (New)
+  - `LOCK_FILE_CHECK_ACTIVE_PROCESS`: Verify if processes in lock files are still running
+  - `REMOVE_STALE_LOCK_FILES`: Automatically clean up stale lock files from crashed processes
+
 ### Environment Variables for Cline.Bot and Roo Code
 
 When integrating with Cline.Bot or Roo Code, you can pass these environment variables directly:
@@ -263,6 +279,10 @@ When integrating with Cline.Bot or Roo Code, you can pass these environment vari
 ```bash
 npm start
 ```
+
+The server uses a lock file mechanism to prevent multiple instances from running simultaneously. If you try to start the server when another instance is already running, you'll see a message with information about the existing instance and the process will exit.
+
+If a previous server process crashed without properly cleaning up, the enhanced lock file mechanism will automatically detect and remove the stale lock file, allowing a new server instance to start correctly.
 
 ### OpenRouter Integration
 
@@ -423,6 +443,27 @@ Example usage:
 }
 ```
 
+### Understanding Usage
+
+The MCP server provides several ways to monitor and understand its usage:
+
+*   **API Usage & Costs**: Track token usage and estimated costs for different APIs (like OpenRouter) using the `locallama://usage/{api}` resource. Replace `{api}` with the name of the API (e.g., `openrouter`). This information is gathered by the Cost Monitoring module.
+*   **Job Tracking**: Monitor the status and progress of tasks submitted to the server:
+    *   `locallama://jobs/active`: Lists all currently running jobs.
+    *   `locallama://jobs/progress/{jobId}`: Shows the detailed progress percentage and status for a specific job ID.
+*   **Model Execution Logs**: The server logs (`locallama.log` by default) contain detailed information about which models are being used for specific tasks, including decisions made by the Decision Engine.
+*   **Advanced Local Model Features (LM Studio & Ollama)**:
+    *   **Automatic Prompt Strategy Improvement**: The `lmStudioModule` (and potentially `ollamaModule` if implemented similarly) can automatically benchmark different prompting strategies for models over time. If a better strategy is found based on quality heuristics, it will be saved and used for future requests. This process happens periodically based on configuration (e.g., `promptImprovementConfig` in `lm-studio/index.ts`). Check the logs for messages indicating strategy updates.
+    *   **Speculative Inference/Decoding**: The `lmStudioModule`'s `callWithSpeculativeInference` function (and potentially Ollama's equivalent) attempts to speed up responses by generating a few tokens speculatively and then validating them. This is controlled by configuration (e.g., `speculativeInferenceConfig` in `lm-studio/index.ts`) and requires model support. Logs will indicate when speculative inference is attempted, accepted, or rejected, and may show statistics on tokens generated/accepted.
+    *   **Configuration**: While not directly controlled via tools/resources, the behavior of these features (enabled status, thresholds, cooldowns) is managed within the respective module files (`lm-studio/index.ts`, `ollama/index.ts`) and their associated configuration objects (like `DEFAULT_PROMPT_IMPROVEMENT_CONFIG`, `DEFAULT_SPECULATIVE_INFERENCE_CONFIG`).
+*   **Speculative Inference Statistics**: When speculative inference is enabled for LM Studio or Ollama models, the logs may also contain statistics about the number of tokens generated, accepted, and potential time saved.
+*   **Resource Status**: Check the general status of the server and integrations:
+    *   `locallama://status`: General server status.
+    *   `locallama://models`: List of detected local models (LM Studio, Ollama).
+    *   `locallama://openrouter/status`: Status of the OpenRouter integration.
+
+By utilizing these resources and checking the logs, users and LLMs interacting with the server can gain insights into its operation, costs, and performance, including the advanced optimizations happening within the local model modules.
+
 ### Running Benchmarks
 
 The project includes a comprehensive benchmarking system to compare local LLM models against paid API models:
@@ -463,6 +504,19 @@ npm run dev
 ```bash
 npm test
 ```
+
+All test files in the `/test` directory use proper mocking to prevent multiple actual server instances from starting during test runs. If you create custom test scripts, make sure they properly clean up server processes and remove lock files when done.
+
+## Troubleshooting
+
+### Server Won't Start Due to Lock File
+
+If the server won't start because it detects another instance is already running:
+
+1. Check if there's actually another instance running using `ps` or Task Manager
+2. If no other instance is running, the lock file might be stale due to a previous crash
+3. The enhanced lock mechanism should automatically detect and remove stale lock files
+4. If needed, you can manually remove the `locallama.lock` file from the project root
 
 ## Security Notes
 

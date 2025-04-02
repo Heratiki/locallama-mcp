@@ -2,6 +2,8 @@ import { logger } from '../../../utils/logger.js';
 import { config } from '../../../config/index.js';
 import { getJobTracker } from '../../decision-engine/services/jobTracker.js';
 import { openRouterModule } from '../../openrouter/index.js';
+import { ollamaModule } from '../../ollama/index.js'; // Added import
+import { lmStudioModule } from '../../lm-studio/index.js'; // Added import
 import { ITaskExecutor } from '../types.js';
 import { indexDocuments } from '../../cost-monitor/codeSearchEngine.js';
 
@@ -182,34 +184,9 @@ export class TaskExecutor implements ITaskExecutor {
    */
   async executeOllamaModel(model: string, task: string): Promise<string> {
     logger.info(`Executing task with Ollama model ${model}`);
-    
     try {
-      // Get Ollama API endpoint from config or use default
-      const ollamaEndpoint = config.ollamaEndpoint || 'http://localhost:11434/api/generate';
-      
-      // Make a request to the Ollama API
-      const response = await fetch(`${ollamaEndpoint}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: 'You are a helpful assistant.' },
-            { role: 'user', content: task }
-          ],
-          stream: false,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Ollama API error (${response.status}): ${errorText}`);
-      }
-      
-      const result = await response.json() as { message?: { content?: string } };
-      return result.message?.content || 'No response from Ollama';
+      // Use the ollamaModule to execute the task
+      return await ollamaModule.executeTask(model, task);
     } catch (error) {
       logger.error(`Error executing task with Ollama model ${model}:`, error);
       throw error;
@@ -221,36 +198,10 @@ export class TaskExecutor implements ITaskExecutor {
    */
   async executeLmStudioModel(model: string, task: string): Promise<string> {
     logger.info(`Executing task with LM Studio model ${model}`);
-    
     try {
-      // Get LM Studio API endpoint from config or use default
-      const lmStudioEndpoint = config.lmStudioEndpoint || 'http://localhost:1234/v1';
-      
-      // Make a request to the LM Studio API
-      const response = await fetch(`${lmStudioEndpoint}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: 'You are a helpful assistant.' },
-            { role: 'user', content: task }
-          ],
-          temperature: 0.7,
-          max_tokens: 4096,
-          stream: false
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`LM Studio API error (${response.status}): ${errorText}`);
-      }
-      
-      const result = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-      return result.choices?.[0]?.message?.content || 'No response from LM Studio';
+      // Use the lmStudioModule to execute the task
+      // Consider using executeSpeculativeTask if speculative inference is desired
+      return await lmStudioModule.executeTask(model, task);
     } catch (error) {
       logger.error(`Error executing task with LM Studio model ${model}:`, error);
       throw error;
@@ -262,16 +213,16 @@ export class TaskExecutor implements ITaskExecutor {
    */
   async executeLocalModel(model: string, task: string): Promise<string> {
     logger.info(`Executing task with local model ${model}`);
-    
     try {
-      // For local models, we'll default to using the LM Studio endpoint if available,
-      // otherwise fall back to Ollama
+      // Prioritize LM Studio if configured, then Ollama
       if (config.lmStudioEndpoint) {
+        logger.debug(`Local model execution defaulting to LM Studio for model: ${model}`);
         return await this.executeLmStudioModel(model, task);
       } else if (config.ollamaEndpoint) {
+        logger.debug(`Local model execution defaulting to Ollama for model: ${model}`);
         return await this.executeOllamaModel(model, task);
       } else {
-        throw new Error('No local model endpoint configured');
+        throw new Error('No local model endpoint configured for execution');
       }
     } catch (error) {
       logger.error(`Error executing task with local model ${model}:`, error);
