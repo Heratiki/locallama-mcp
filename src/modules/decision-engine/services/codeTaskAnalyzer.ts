@@ -30,20 +30,38 @@ function isSubtasksWrapper(obj: unknown): obj is { subtasks: RawSubtask[] } {
          'subtasks' in obj && Array.isArray((obj as Record<string, unknown>).subtasks);
 }
 
-// Prompts for code task analysis
-const DECOMPOSE_TASK_PROMPT = `You are a code architecture expert helping to break down a complex coding task into smaller subtasks.
-Analyze the following coding task and decompose it into logical, modular subtasks.
+// Prompt for decomposing a task into subtasks
+const DECOMPOSE_TASK_PROMPT = `
+You are an expert software architect. Your task is to decompose a given coding task into smaller, manageable subtasks.
+For each subtask, provide:
+1. A unique UUID (use version 4 UUID format).
+2. A clear, concise description of the subtask.
+3. An estimated complexity score (0.0 to 1.0, where 1.0 is most complex).
+4. The type of code artifact this subtask produces (e.g., function, class, component, module, test, documentation, configuration, other).
+5. A list of dependencies, specified ONLY by the UUIDs of other subtasks it depends on. If a subtask has no dependencies, provide an empty list [].
 
-Task: {task}
+**IMPORTANT**: When listing dependencies, you MUST use the exact UUID generated for the prerequisite subtask. Do NOT use the subtask description or any other name.
 
-Consider:
-1. Each subtask should be clear, focused, and achievable by a language model
-2. Identify dependencies between subtasks
-3. For each subtask, estimate complexity (0-1 scale) and token requirements
-4. Group related functionality
-5. Consider code structure (classes, functions, methods)
+Task to decompose: {task}
 
-Analyze the task thoroughly and provide a structured decomposition in JSON format.`;
+Output the result as a JSON array of subtask objects. Example format:
+[
+  {
+    "id": "uuid-generated-for-subtask-1",
+    "description": "Subtask 1 description",
+    "complexity": 0.5,
+    "codeType": "function",
+    "dependencies": [] 
+  },
+  {
+    "id": "uuid-generated-for-subtask-2",
+    "description": "Subtask 2 description",
+    "complexity": 0.7,
+    "codeType": "class",
+    "dependencies": ["uuid-generated-for-subtask-1"] 
+  }
+]
+`;
 
 // Update COMPLEXITY_ANALYSIS_PROMPT to include more detailed integration analysis
 const COMPLEXITY_ANALYSIS_PROMPT = `You are an expert in software development complexity analysis. 

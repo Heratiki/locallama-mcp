@@ -404,8 +404,9 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
       }
 
       if (!success || !resultText) {
-         // Use the specific error instance if available
-         const errorToThrow = errorInstance || new Error(`Failed to execute subtask with ${model.provider}`);
+         // Use the specific error instance if available, otherwise create a generic one
+         const errorToThrow = errorInstance || new Error(`Failed to execute subtask with ${model.provider}. Success flag: ${success}, Result text available: ${!!resultText}`);
+         logger.error(`Subtask ${subtask.id} failed execution with ${model.provider}. Error: ${errorToThrow.message}`); // Log specific error before throwing
          throw errorToThrow;
       }
 
@@ -423,11 +424,14 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
        }
       // General error handling
       if (error instanceof Error) {
+        logger.error(`Error executing subtask ${subtask.id} with model ${model.id} (Provider: ${model.provider}): ${error.message}`, error); // Log stack trace too
         logger.info(`------- SUBTASK EXECUTION FAILED (ERROR) -------`);
+        // Return a more informative error message
         return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): ${error.message}`;
       }
+      logger.error(`Unknown error executing subtask ${subtask.id} with model ${model.id} (Provider: ${model.provider})`, error);
       logger.info(`------- SUBTASK EXECUTION FAILED (UNKNOWN ERROR) -------`);
-      return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): Unknown error`;
+      return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): Unknown error occurred.`;
     }
   },
   
@@ -453,11 +457,12 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
     let jobTracker = null;
     try {
       jobTracker = await getJobTracker();
-      if (!jobTracker.isInitialized()) {
-        logger.warn('JobTracker exists but is not initialized');
-        // Don't throw, just continue without tracking
-        jobTracker = null;
-      }
+      // REMOVED: Check for isInitialized() - rely on internal checks in JobTracker methods
+      // if (!jobTracker.isInitialized()) {
+      //   logger.warn('JobTracker exists but is not initialized');
+      //   // Don't throw, just continue without tracking
+      //   jobTracker = null; 
+      // }
     } catch (error) {
       // Log the error but continue without job tracking
       logger.warn('Failed to initialize JobTracker, continuing without job tracking:', error);
@@ -499,6 +504,7 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
       }
       
       // Register this subtask as a job with the job tracker (if available)
+      // Check if jobTracker is not null before using it
       if (jobTracker) {
         try {
           await jobTracker.createJob(
@@ -509,6 +515,9 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         } catch (error) {
           logger.warn(`Failed to create job for subtask ${subtask.id}:`, error);
         }
+      } else {
+        // Log if tracker is unavailable for job creation
+        logger.debug(`JobTracker not available, skipping job creation for subtask ${subtask.id}`);
       }
       
       // Track progress
@@ -516,12 +525,15 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
       logger.info(`Executing subtask ${completedCount}/${executionOrder.length}: ${subtask.id}`);
       
       // Update job status to In Progress (if job tracker is available)
+      // Check if jobTracker is not null before using it
       if (jobTracker) {
         try {
           await jobTracker.updateJobProgress(subtask.id, 10); // Start at 10%
         } catch (error) {
           logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
         }
+      } else {
+         logger.debug(`JobTracker not available, skipping progress update (10%) for subtask ${subtask.id}`);
       }
       
       // Gather context from dependencies
@@ -541,12 +553,15 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
       }
       
       // Update job progress (if job tracker is available)
+      // Check if jobTracker is not null before using it
       if (jobTracker) {
         try {
           await jobTracker.updateJobProgress(subtask.id, 30); // Update to 30%
         } catch (error) {
           logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
         }
+      } else {
+         logger.debug(`JobTracker not available, skipping progress update (30%) for subtask ${subtask.id}`);
       }
       
       try {
@@ -558,22 +573,28 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         this.logSubtaskResult(subtask, model, result);
         
         // Mark job as completed (if job tracker is available)
+        // Check if jobTracker is not null before using it
         if (jobTracker) {
           try {
             await jobTracker.completeJob(subtask.id, [result]);
           } catch (error) {
             logger.warn(`Failed to complete job for subtask ${subtask.id}:`, error);
           }
+        } else {
+           logger.debug(`JobTracker not available, skipping job completion for subtask ${subtask.id}`);
         }
       } catch (error) {
         // If execution fails, mark the job as failed (if job tracker is available)
         const errorMessage = error instanceof Error ? error.message : String(error);
+        // Check if jobTracker is not null before using it
         if (jobTracker) {
           try {
             await jobTracker.failJob(subtask.id, errorMessage);
           } catch (trackerError) {
             logger.warn(`Failed to mark job as failed for subtask ${subtask.id}:`, trackerError);
           }
+        } else {
+           logger.debug(`JobTracker not available, skipping job failure marking for subtask ${subtask.id}`);
         }
         
         // Still set the result, but with the error message
