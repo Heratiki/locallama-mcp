@@ -293,9 +293,10 @@ export class LocalLamaMcpServer {
             removeLockFile();
           }
         } catch (error) {
-          logger.error('Error checking if lock file process is running:', error);
-          // If we encounter an error checking the process, assume the lock file is stale
-          removeLockFile();
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error('Error checking if lock file process is running:', errorMessage);
+          logger.error('Lock file details:', lockInfo);
+          throw error;
         }
       }
       
@@ -309,17 +310,33 @@ export class LocalLamaMcpServer {
 
       // Initialize the decision engine
       const { decisionEngine } = await import('./modules/decision-engine/index.js');
-      await decisionEngine.initialize();
+      try {
+        await decisionEngine.initialize();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Failed to initialize decision engine:', errorMessage);
+        logger.error('Error details:', error);
+        throw error;
+      }
 
       // Set up resource and tool handlers
-      await setupResourceHandlers(this.server);
+      try {
+        await setupResourceHandlers(this.server);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Failed to set up resource handlers:', errorMessage);
+        logger.error('Error details:', error);
+        throw error;
+      }
       
       logger.info('Starting LocalLama MCP Server...');
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
       logger.info(`${connectionInfo} (PID: ${process.pid})`);
     } catch (error: unknown) {
-      logger.error('Failed to start server:', error instanceof Error ? error.message : String(error));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Server initialization failed:', errorMessage);
+      logger.error('Error details:', error);
       removeLockFile();
       process.exit(1);
     }

@@ -851,17 +851,55 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
 async function init() {
   try {
     // Get the JobTracker instance first to ensure it's ready
-    const trackerInstance = await getJobTracker();
-    initJobTracker(trackerInstance);
-    logger.info('JobTracker instance initialized in ws-server');
+    const trackerInstance = await getJobTracker().catch(error => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to get JobTracker instance:', errorMessage);
+      logger.error('Error details:', error);
+      throw error;
+    });
+
+    try {
+      initJobTracker(trackerInstance);
+      logger.info('JobTracker instance initialized in ws-server');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to initialize JobTracker:', errorMessage);
+      logger.error('Error details:', error);
+      throw error;
+    }
 
     // Then initialize other services
-    await initDatabase();
-    wss = await startWebSocketServer();
-    await startExpressServer();
+    try {
+      await initDatabase();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to initialize database:', errorMessage);
+      logger.error('Error details:', error);
+      throw error;
+    }
+
+    try {
+      wss = await startWebSocketServer();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to start WebSocket server:', errorMessage);
+      logger.error('Error details:', error);
+      throw error;
+    }
+
+    try {
+      await startExpressServer();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to start Express server:', errorMessage);
+      logger.error('Error details:', error);
+      throw error;
+    }
 
   } catch (error) {
-    logger.error('Error during server initialization:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Error during server initialization:', errorMessage);
+    logger.error('Error details:', error);
     // Don't exit on JobTracker error, just log it
     if (error instanceof Error && !error.message.includes('JobTracker')) {
       process.exit(1);

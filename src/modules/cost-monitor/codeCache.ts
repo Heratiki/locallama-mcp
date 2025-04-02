@@ -456,12 +456,13 @@ export const codeCache = {
         logger.info('No code cache file found, starting with empty cache');
       }
     } catch (e) {
-      logger.error('Error loading code cache:', e);
+      logger.error('Error loading code cache:', e instanceof Error ? e.message : String(e), 
+        '\nCache file path:', cacheFilePath,
+        '\nError details:', e);
     }
     try {
       if (fs.existsSync(patternCacheFilePath)) {
         const patternCacheData = await fs.promises.readFile(patternCacheFilePath, 'utf-8');
-        // Parse the JSON data with explicit typing
         const patternEntries = JSON.parse(patternCacheData) as Array<[string, string[]]>;
         
         // Create a new Map and convert arrays back to Set objects
@@ -476,7 +477,9 @@ export const codeCache = {
         logger.info('No pattern cache file found, starting with empty cache');
       }
     } catch (e) {
-      logger.error('Error loading pattern cache:', e);
+      logger.error('Error loading pattern cache:', e instanceof Error ? e.message : String(e),
+        '\nPattern cache file path:', patternCacheFilePath,
+        '\nError details:', e);
     }
   },
 
