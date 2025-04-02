@@ -163,7 +163,11 @@ export interface Config {
   
   // Python configuration
   python?: PythonConfig;
+
+  // Startup benchmark targets
+  startupBenchmarkTargets: string[];
 }
+
 /**
  * Helper function to parse boolean environment variables
  */
@@ -240,6 +244,24 @@ export const config: Config = {
     virtualEnv: process.env.PYTHON_VENV_PATH || path.join(process.cwd(), '.venv'),
     detectVirtualEnv: parseBool(process.env.PYTHON_DETECT_VENV, true),
   },
+
+  // Startup benchmark targets
+  startupBenchmarkTargets: (() => {
+    const envVar = process.env.STARTUP_BENCHMARK_TARGETS;
+    const defaultTargets = process.env.OPENROUTER_API_KEY ? ['free'] : ['local'];
+    if (!envVar) {
+      return defaultTargets;
+    }
+    const targets = envVar.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
+    if (targets.includes('none')) {
+      return [];
+    }
+    if (targets.includes('all')) {
+      return ['local', 'free', 'paid'];
+    }
+    // Remove duplicates
+    return [...new Set(targets)];
+  })(),
   
   // Paths
   rootDir,
@@ -297,6 +319,17 @@ export function validateConfig(): void {
   // Validate cache config
   if (config.maxCacheSize <= 0) {
     errors.push(`Invalid maxCacheSize: ${config.maxCacheSize}`);
+  }
+  // Validate startup benchmark targets
+  const validTargets = ['local', 'free', 'paid'];
+  if (!Array.isArray(config.startupBenchmarkTargets)) {
+    errors.push('Invalid startupBenchmarkTargets: Must be an array.');
+  } else {
+    for (const target of config.startupBenchmarkTargets) {
+      if (!validTargets.includes(target)) {
+        errors.push(`Invalid startupBenchmarkTarget: ${target}. Must be one of ${validTargets.join(', ')}.`);
+      }
+    }
   }
   // Validate Python path if provided
   if (config.python?.path && typeof config.python.path === 'string') {

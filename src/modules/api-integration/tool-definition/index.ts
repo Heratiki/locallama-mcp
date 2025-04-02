@@ -66,7 +66,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
     const tools: ITool[] = [
       {
         name: 'route_task',
-        description: 'Route a coding task to either a local LLM or a paid API based on cost and complexity',
+        description: 'Processes a coding task: decomposes if necessary, executes subtasks using appropriate models (local/free/paid based on routing), synthesizes the results, and returns the final code.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -97,6 +97,41 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             }
           },
           required: ['task', 'context_length']
+        },
+        outputSchema: {
+          type: 'object',
+          properties: {
+            model: {
+              type: 'string',
+              description: 'The final model used for the last step or synthesis.'
+            },
+            provider: {
+              type: 'string',
+              description: 'The provider of the final model used.'
+            },
+            reason: {
+              type: 'string',
+              description: 'Explanation of the routing and execution process.'
+            },
+            resultCode: {
+              type: 'string',
+              description: 'The final synthesized code result.'
+            },
+            estimatedCost: {
+              type: 'number',
+              description: 'Estimated cost in USD for the task execution (optional).'
+            },
+            details: {
+              type: 'object',
+              description: 'Optional details about the execution process (e.g., cost breakdown, subtask analysis).',
+              properties: {
+                // Define specific details properties if needed, e.g.:
+                // costEstimate: { type: 'object' },
+                // taskAnalysis: { type: 'object' }
+              }
+            }
+          },
+          required: ['model', 'provider', 'reason', 'resultCode']
         }
       },
       {
@@ -182,6 +217,40 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             }
           },
           required: ['task', 'context_length']
+        }, // <<< Add comma here
+        outputSchema: { // <<< Add outputSchema here
+          type: 'object',
+          properties: {
+            model: {
+              type: 'string',
+              description: 'The final model used for the last step or synthesis.'
+            },
+            provider: {
+              type: 'string',
+              description: 'The provider of the final model used.'
+            },
+            reason: {
+              type: 'string',
+              description: 'Explanation of the routing and execution process.'
+            },
+            resultCode: {
+              type: 'string',
+              description: 'The final synthesized code result.'
+            },
+            estimatedCost: {
+              type: 'number',
+              description: 'Estimated cost in USD for the task execution.'
+            },
+            details: {
+              type: 'object',
+              description: 'Optional details about the execution process.',
+              properties: {
+                // Add properties from RouteTaskResult['details'] if needed
+                // e.g., costEstimate, retrivResults, taskAnalysis
+              }
+            }
+          },
+          required: ['model', 'provider', 'reason', 'resultCode']
         }
       },
       {

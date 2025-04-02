@@ -211,10 +211,18 @@ export class LocalLamaMcpServer {
               };
 
               switch (name) {
-                case 'route_task':
-                  return await routingModule.routeTask(ensureRouteTaskParams(args));
-                case 'preemptive_route_task':
-                  return await routingModule.preemptiveRouteTask(ensureRouteTaskParams(args));
+                case 'route_task': {
+                  // routeTask is now synchronous and returns RouteTaskResult
+                  const routeResult = await routingModule.routeTask(ensureRouteTaskParams(args));
+                  // The primary result content is the synthesized code
+                  return routeResult.resultCode;
+                }
+                case 'preemptive_route_task': {
+                  // preemptiveRouteTask also returns RouteTaskResult now
+                  const preemptiveResult = await routingModule.preemptiveRouteTask(ensureRouteTaskParams(args));
+                  // Return the placeholder/info string
+                  return preemptiveResult.resultCode;
+                }
                 case 'get_cost_estimate':
                   return await costModule.estimateCost(ensureCostEstimationParams(args));
                 case 'cancel_job': {

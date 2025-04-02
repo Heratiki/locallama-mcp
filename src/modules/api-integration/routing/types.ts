@@ -13,20 +13,21 @@ export interface RouteTaskParams {
 }
 
 export interface RouteTaskResult {
+  /** The final model used for the last step or synthesis */
   model: string;
+  /** The provider of the final model used */
   provider: string;
+  /** Explanation of the routing and execution process */
   reason: string;
-  jobId?: string;
+  /** Estimated cost for the entire task execution */
   estimatedCost?: number;
-  estimatedTime?: number;
-  requiresConfirmation?: boolean;
+  /** The final synthesized code result */
+  resultCode: string;
+  /** Optional details about the execution */
   details?: {
-    status?: JobStatus;
-    progress?: number;
-    isPreemptive?: boolean;
     costEstimate?: CostEstimationResult;
     retrivResults?: RetrivSearchResult[];
-    taskAnalysis?: DecomposedCodeTask;
+    taskAnalysis?: DecomposedCodeTask; // Contains original task and subtasks
   };
 }
 

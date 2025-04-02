@@ -9,6 +9,8 @@ import { logger } from '../../../utils/logger.js';
 import { costEstimator } from '../cost-estimation/index.js';
 import { getCodeSearchEngine } from '../../cost-monitor/codeSearchEngine.js';
 import type { RetrivSearchResult } from '../retriv-integration/types.js';
+import { codeTaskCoordinator } from '../../decision-engine/services/codeTaskCoordinator.js'; // Import coordinator
+import { Model } from '../../../types/index.js'; // Import Model type
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -31,28 +33,9 @@ export class Router implements IRouter {
         model: undefined
       });
 
-      const costThreshold = userPreferences.costConfirmationThreshold || config.costThreshold || 0.1;
-
-      // Check if the execution mode allows paid APIs
-      const allowsPaidAPIs = executionMode !== 'Local model only' &&
-        executionMode !== 'Free API only' &&
-        executionMode !== 'Local and Free API';
-
-      if (costEstimate.paid.cost.total > costThreshold && allowsPaidAPIs) {
-        // Return a response that requires user confirmation
-        return {
-          model: costEstimate.paid.model,
-          provider: costEstimate.paid.provider,
-          reason: 'Cost exceeds threshold, confirmation required',
-          estimatedCost: costEstimate.paid.cost.total,
-          requiresConfirmation: true,
-          details: {
-            costEstimate: costEstimate
-          }
-        };
-      }
-
       // Task breakdown analysis
+      // NOTE: Removed cost confirmation logic as routeTask is now synchronous.
+      // Confirmation might need to be handled by the client before calling this tool.
       let taskAnalysis = null;
       let hasSubtasks = false;
 
@@ -85,12 +68,16 @@ export class Router implements IRouter {
         }
       }
 
-      if (retrivResults.length > 0) {
-        // Use existing code from Retriv
+      if (retrivResults.length > 0 && retrivResults[0].score > 0.8) { // Check score threshold
+        // Use existing code from Retriv if confidence is high
+        const resultCode = retrivResults[0]?.content ?? '// Retriv found a match, but content was empty.';
+        logger.info(`High confidence Retriv match found (score: ${retrivResults[0].score}). Returning cached result.`);
         return {
           model: 'retriv',
-          provider: 'local',
-          reason: 'Found existing code solution in local database',
+          provider: 'local-cache', // Changed provider to reflect source
+          reason: `Found existing code solution in local database with score ${retrivResults[0]?.score?.toFixed(2) ?? 'N/A'}`,
+          resultCode: resultCode, // Add missing resultCode
+          estimatedCost: 0, // Cost is 0 for cached result
           details: {
             retrivResults
           }
@@ -106,46 +93,43 @@ export class Router implements IRouter {
         priority: params.priority || 'quality',
       });
 
-      // Job creation and progress tracking
-      const jobId = uuidv4();
-      try {
-        jobTracker = await getJobTracker();
-        try {
-          await jobTracker.createJob(jobId, params.task, decision.model);
-          await jobTracker.updateJobProgress(jobId, 0);
-        } catch (createJobError) {
-          logger.error('Error creating/updating job:', createJobError);
-        }
-      } catch (getJobTrackerError) {
-        logger.error('Error initializing jobTracker:', getJobTrackerError);
-      }
+      // --- Full Task Processing via Coordinator ---
+      logger.info('Proceeding with full task processing (decomposition, execution, synthesis)');
 
-      // Execute task asynchronously
-      void (async () => {
-        try {
-          await taskExecutor.executeTask(decision.model, params.task, jobId);
-          logger.info(`Task execution completed successfully for job ${jobId}`);
-        } catch (error) {
-          logger.error(`Task execution failed for job ${jobId}:`, error);
-          // Job failure is already handled in executeTask
-        }
-      })();
+      // Process the task: decompose, assign models, determine order
+      const processingResult = await codeTaskCoordinator.processCodeTask(
+        params.task,
+        { /* Add relevant options if needed, e.g., granularity */ }
+      );
 
-      // Generate a reason if it doesn't exist in the decision object
-      const routingReason = generateRoutingReason(decision);
+      const { decomposedTask, modelAssignments, executionOrder } = processingResult;
 
-      // Return the routing result with job ID for tracking
+      // Execute all subtasks sequentially or in parallel based on dependencies
+      const subtaskResults = await codeTaskCoordinator.executeAllSubtasks(
+        decomposedTask,
+        modelAssignments
+      );
+
+      // Synthesize the final result from subtask results
+      const finalCode = await codeTaskCoordinator.synthesizeFinalResult(
+        decomposedTask,
+        subtaskResults
+      );
+
+      // Determine the primary model/provider used (e.g., for the synthesis step)
+      const finalModelInfo = modelAssignments.get(executionOrder[executionOrder.length - 1]?.id) || { id: 'unknown', provider: 'unknown' };
+
+      // Return the final synthesized result
       return {
-        model: decision.model,
-        provider: decision.provider,
-        reason: routingReason,
-        jobId: jobId,
-        estimatedCost: costEstimate.paid.cost.total,
-        estimatedTime: calculateEstimatedTime(decision),
+        model: finalModelInfo.id,
+        provider: finalModelInfo.provider,
+        reason: `Task decomposed into ${decomposedTask.subtasks.length} subtasks, executed, and synthesized.`,
+        resultCode: finalCode,
+        estimatedCost: processingResult.estimatedCost, // Get cost from processing result
         details: {
-          status: JobStatus.IN_PROGRESS,
-          progress: 0,
-          taskAnalysis: taskAnalysis ? taskAnalysis.decomposedTask : undefined
+          costEstimate: costEstimate, // Keep original estimate for reference
+          retrivResults: retrivResults.length > 0 ? retrivResults : undefined, // Include if search was done
+          taskAnalysis: decomposedTask
         }
       };
     } catch (error) {
@@ -173,13 +157,18 @@ export class Router implements IRouter {
       // Generate a reason if it doesn't exist in the decision object
       const routingReason = generateRoutingReason(decision);
       
+      // Return a placeholder result indicating the preemptive choice
+      // The actual execution must now happen via the main routeTask
       return {
         model: decision.model,
         provider: decision.provider,
-        reason: routingReason,
-        estimatedTime: calculateEstimatedTime(decision),
+        reason: `Preemptive routing suggested ${decision.model}. Full execution required via route_task. Reason: ${routingReason}`,
+        resultCode: `// Preemptive routing selected ${decision.model}. Full execution needed via route_task.`, // Placeholder result
+        // estimatedCost: undefined, // Preemptive doesn't calculate cost
         details: {
-          isPreemptive: true
+          // TODO: Implement elsewhere - costEstimate: undefined, // No cost estimate done
+          // TODO: Implement retriv in a way that leverages it's semantic search to reduce code generation - retrivResults: undefined, // No retriv search done
+          // TODO: Implement elsewhere - taskAnalysis: undefined // No analysis done
         }
       };
     } catch (error) {
@@ -193,6 +182,8 @@ export class Router implements IRouter {
    */
   async cancelJob(jobId: string): Promise<CancelJobResult> {
     try {
+      // Initialize jobTracker here as it's not initialized globally in this scope anymore
+      jobTracker = await getJobTracker();
       // Get the job
       let job;
       try {
