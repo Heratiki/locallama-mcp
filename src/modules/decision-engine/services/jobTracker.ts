@@ -334,17 +334,28 @@ class JobTracker extends EventEmitter {
 }
 
 // Initialize singleton instance immediately but safely
-let jobTrackerInstance: JobTracker;
+let jobTrackerInstance: JobTracker | null = null;
+let initializationPromise: Promise<JobTracker> | null = null;
 
 // Export async function to get singleton instance
 export const getJobTracker = async (): Promise<JobTracker> => {
-  if (!jobTrackerInstance) {
-    jobTrackerInstance = await JobTracker.getInstance();
+  if (initializationPromise) {
+    return initializationPromise;
   }
+  
+  if (!jobTrackerInstance) {
+    initializationPromise = JobTracker.getInstance().then(instance => {
+      jobTrackerInstance = instance;
+      initializationPromise = null;
+      return instance;
+    });
+    return initializationPromise;
+  }
+  
   return jobTrackerInstance;
 };
 
 // Export synchronous function to get instance without initialization
 export const getJobTrackerSync = (): JobTracker | undefined => {
-  return jobTrackerInstance;
+  return jobTrackerInstance || undefined;
 };

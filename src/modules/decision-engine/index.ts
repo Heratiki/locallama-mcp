@@ -65,8 +65,6 @@ export const decisionEngine = {
   async initialize(): Promise<void> {
     logger.info('Initializing decision engine');
     
-    let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
-
     try {
       // Initialize models database
       await modelsDbService.initialize();
@@ -96,9 +94,10 @@ export const decisionEngine = {
         logger.info('Model performance tracker successfully initialized');
       }
       
-      // Try to initialize job tracker with retry logic
+      // Initialize job tracker with retry logic
       let retries = 0;
       const maxRetries = 3;
+      let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
       
       while (retries < maxRetries) {
         try {
@@ -107,12 +106,13 @@ export const decisionEngine = {
           // Setup cleanup interval once successfully initialized
           setInterval(() => {
             try {
-              jobTracker.cleanupCompletedJobs();
+              jobTracker?.cleanupCompletedJobs();
             } catch (cleanupError) {
               logger.error('Error cleaning up completed jobs:', cleanupError);
             }
           }, 3600000); // Clean up every hour
           
+          logger.info('Job tracker successfully initialized');
           break; // Break out of retry loop on success
         } catch (getJobTrackerError) {
           retries++;
@@ -120,8 +120,28 @@ export const decisionEngine = {
           
           if (retries >= maxRetries) {
             logger.error('Failed to initialize JobTracker after maximum retries. Some functionality may be limited.');
+            throw getJobTrackerError;
           } else {
             // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
+
+      // Initialize model performance tracker with retry logic
+      let mpRetries = 0;
+      
+      while (mpRetries < maxRetries) {
+        try {
+          await modelPerformanceTracker.initialize(codeModelSelector);
+          break;
+        } catch (e) {
+          mpRetries++;
+          logger.error(`Error initializing model performance tracker (attempt ${mpRetries}/${maxRetries}):`, e);
+          
+          if (mpRetries >= maxRetries) {
+            logger.error('Failed to initialize model performance tracker after maximum retries. Some functionality may be limited.');
+          } else {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
@@ -144,6 +164,7 @@ export const decisionEngine = {
       logger.info('Decision engine initialized successfully');
     } catch (error) {
       logger.error('Error initializing decision engine:', error);
+      throw error;
     }
   },
 
