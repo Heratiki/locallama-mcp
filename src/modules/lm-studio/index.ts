@@ -357,7 +357,7 @@ export const lmStudioModule = {
       `${config.lmStudioEndpoint}/v1`;
     
     const url = `${baseUrl}/models`;
-    logger.info(`Attempting to connect to LM Studio API at: ${url}`); // Use INFO level
+    logger.info(`Attempting to connect to LM Studio API at: ${url}`); // Use INFO level to track in logs
 
     try {
       const response = await axios.get(url, {

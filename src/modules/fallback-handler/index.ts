@@ -139,7 +139,7 @@ export const fallbackHandler = {
             'openhermes' : config.defaultLocalModel;
           
           const apiEndpoint = fallbackOption === 'lm-studio' ? 
-            `${endpoint}/chat/completions` : `${endpoint}/chat`;
+            `${this.constructLMStudioUrl(endpoint, 'chat/completions')}` : `${endpoint}/chat`;
           
           try {
             const controller = new AbortController();
@@ -239,7 +239,7 @@ export const fallbackHandler = {
         case 'lm-studio':
           // Check if LM Studio is available
           endpoint = config.lmStudioEndpoint;
-          testEndpoint = `${endpoint}/models`;
+          testEndpoint = this.constructLMStudioUrl(endpoint, 'models');
           break;
         
         case 'ollama':
@@ -327,5 +327,17 @@ export const fallbackHandler = {
     
     // No fallback available
     return null;
+  },
+
+  /**
+   * Properly construct an LM Studio API URL to avoid duplicate /v1/ paths
+   */
+  constructLMStudioUrl(endpoint: string, path: string): string {
+    // Ensure we don't duplicate /v1/ in the URL
+    const baseUrl = endpoint.endsWith('/v1') ? 
+      endpoint : 
+      `${endpoint}/v1`;
+    
+    return `${baseUrl}/${path}`;
   },
 };

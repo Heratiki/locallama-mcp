@@ -539,6 +539,9 @@ export const decisionEngine = {
     logger.info('Executing decomposed code task:', decomposedTask.originalTask);
     
     try {
+      // Clear the subtask results log file to start fresh
+      codeTaskCoordinator.clearSubtaskLog();
+      
       // Execute all subtasks in order
       const subtaskResults = await codeTaskCoordinator.executeAllSubtasks(
         decomposedTask,
@@ -548,7 +551,8 @@ export const decisionEngine = {
       // Synthesize final result
       const synthesizedResult = await codeTaskCoordinator.synthesizeFinalResult(
         decomposedTask,
-        subtaskResults
+        subtaskResults,
+        modelAssignments  // Pass model assignments to track which model generated each part
       );
       
       return {

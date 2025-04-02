@@ -307,7 +307,8 @@ export async function getAvailableModels(): Promise<Model[]> {
     });
     logger.warn('No models found from any provider, using default model');
   } else {
-    logger.info(`Found a total of ${models.length} models from all providers`);
+    // Only log model count at debug level to reduce log spam
+    logger.debug(`Found a total of ${models.length} models from all providers`);
   }
 
   return models;

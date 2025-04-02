@@ -8,6 +8,11 @@ import { ollamaModule } from '../../ollama/index.js'; // Import Ollama module
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
+import fs from 'fs';
+import path from 'path';
+
+// Path for the subtask results log
+const SUBTASK_LOG_PATH = path.join(process.cwd(), 'subtask_results.log');
 
 /**
  * Coordinates the entire code task analysis flow
@@ -16,6 +21,51 @@ import { Model } from '../../../types/index.js';
 export const codeTaskCoordinator = {
   // Private properties
   _codeSearchEngine: null as CodeSearchEngine | null,
+
+  /**
+   * Clears the subtask results log file
+   * This should be called at the start of a new task execution
+   */
+  clearSubtaskLog(): void {
+    try {
+      // Create or clear the subtask log file
+      fs.writeFileSync(SUBTASK_LOG_PATH, `# Subtask Results Log - ${new Date().toISOString()}\n\n`, 'utf-8');
+      logger.info(`Cleared subtask results log at ${SUBTASK_LOG_PATH}`);
+    } catch (error) {
+      logger.error('Failed to clear subtask results log:', error);
+    }
+  },
+
+  /**
+   * Writes a subtask result to the log file
+   * 
+   * @param subtask The subtask that was executed
+   * @param model The model that executed the subtask
+   * @param result The result of the execution
+   */
+  logSubtaskResult(subtask: CodeSubtask, model: Model, result: string): void {
+    try {
+      const logEntry = `
+## Subtask: ${subtask.description}
+- **ID**: ${subtask.id}
+- **Type**: ${subtask.codeType || 'unknown'}
+- **Complexity**: ${subtask.complexity.toFixed(2)}
+- **Model**: ${model.id} (${model.provider})
+- **Time**: ${new Date().toISOString()}
+
+\`\`\`
+${result}
+\`\`\`
+
+---
+`;
+      
+      // Append to the log file
+      fs.appendFileSync(SUBTASK_LOG_PATH, logEntry, 'utf-8');
+    } catch (error) {
+      logger.error('Failed to log subtask result:', error);
+    }
+  },
 
   /**
    * Evaluate code quality based on simple heuristics
@@ -242,6 +292,14 @@ export const codeTaskCoordinator = {
     model: Model,
     fullContext?: string
   ): Promise<string> {
+    // Enhanced logging: Log detailed subtask information
+    logger.info(`------- SUBTASK EXECUTION START -------`);
+    logger.info(`Subtask ID: ${subtask.id}`);
+    logger.info(`Subtask Description: ${subtask.description}`);
+    logger.info(`Subtask Type: ${subtask.codeType || 'unknown'}`);
+    logger.info(`Subtask Complexity: ${subtask.complexity.toFixed(2)}`);
+    logger.info(`Assigned Model: ${model.id} (Provider: ${model.provider})`);
+    
     // Search for relevant code snippets before execution
     let relevantCodeSnippets = '';
     
@@ -252,11 +310,14 @@ export const codeTaskCoordinator = {
         const searchResults = await this.searchRelevantCode(subtask.description);
         
         if (searchResults.length > 0) {
+          logger.info(`Found ${searchResults.length} relevant code snippets for subtask: ${subtask.id}`);
           relevantCodeSnippets = '\n\nRelevant code snippets that may help with this task:\n\n';
           searchResults.forEach((result, index) => {
             relevantCodeSnippets += `Snippet ${index + 1} (from ${result.relativePath || 'unknown'}):\n`;
             relevantCodeSnippets += '```\n' + result.content.substring(0, 800) + '\n```\n\n';
           });
+        } else {
+          logger.info(`No relevant code snippets found for subtask: ${subtask.id}`);
         }
       }
     } catch (error) {
@@ -274,6 +335,9 @@ ${relevantCodeSnippets}
 Please provide a well-structured, high-quality implementation for this specific part of the task.
 Focus only on this subtask, don't worry about other parts of the larger task.`;
 
+    // Log the prompt we're sending to the model
+    logger.debug(`Prompt for subtask ${subtask.id}:\n${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}`);
+
     const timeout = 180000; // 3 minutes timeout
 
     try {
@@ -286,24 +350,32 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         case 'lm-studio': {
           // LM Studio model IDs might have a prefix like "lm-studio:", remove it
           const lmStudioModelId = model.id.startsWith('lm-studio:') ? model.id.substring(10) : model.id;
-          logger.info(`Executing subtask with LM Studio model: ${lmStudioModelId}`);
+          logger.info(`Executing subtask ${subtask.id} with LM Studio model: ${lmStudioModelId}`);
           const result = await lmStudioModule.callLMStudioApi(lmStudioModelId, prompt, timeout);
           success = result.success;
           resultText = result.text;
           if (!success) {
              errorInstance = new Error(`LM Studio Error: ${result.error}`);
+             logger.error(`Failed to execute subtask ${subtask.id} with LM Studio model ${lmStudioModelId}: ${result.error}`);
+          } else {
+             logger.info(`Successfully executed subtask ${subtask.id} with LM Studio model ${lmStudioModelId}`);
+             logger.debug(`Result for subtask ${subtask.id}:\n${resultText?.substring(0, 500)}${resultText && resultText.length > 500 ? '...' : ''}`);
           }
           break;
         }
         case 'ollama': {
           // Ollama model IDs might have a prefix like "ollama:", remove it
           const ollamaModelId = model.id.startsWith('ollama:') ? model.id.substring(7) : model.id;
-          logger.info(`Executing subtask with Ollama model: ${ollamaModelId}`);
+          logger.info(`Executing subtask ${subtask.id} with Ollama model: ${ollamaModelId}`);
           const result = await ollamaModule.callOllamaApi(ollamaModelId, prompt, timeout);
           success = result.success;
           resultText = result.text;
-           if (!success) {
+          if (!success) {
              errorInstance = new Error(`Ollama Error: ${result.error}`);
+             logger.error(`Failed to execute subtask ${subtask.id} with Ollama model ${ollamaModelId}: ${result.error}`);
+          } else {
+             logger.info(`Successfully executed subtask ${subtask.id} with Ollama model ${ollamaModelId}`);
+             logger.debug(`Result for subtask ${subtask.id}:\n${resultText?.substring(0, 500)}${resultText && resultText.length > 500 ? '...' : ''}`);
           }
           break;
         }
@@ -311,11 +383,17 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         default: { // Default to OpenRouter if provider is unknown or 'openrouter'
           // OpenRouter model IDs might have a prefix like "openrouter:", remove it if present
            const openRouterModelId = model.id.startsWith('openrouter:') ? model.id.substring(11) : model.id;
-          logger.info(`Executing subtask with OpenRouter model: ${openRouterModelId}`);
+          logger.info(`Executing subtask ${subtask.id} with OpenRouter model: ${openRouterModelId}`);
           const result = await openRouterModule.callOpenRouterApi(openRouterModelId, prompt, timeout);
           success = result.success;
           resultText = result.text;
           errorInstance = result.errorInstance; // Use the specific error instance
+          if (!success) {
+             logger.error(`Failed to execute subtask ${subtask.id} with OpenRouter model ${openRouterModelId}: ${result.error}`);
+          } else {
+             logger.info(`Successfully executed subtask ${subtask.id} with OpenRouter model ${openRouterModelId}`);
+             logger.debug(`Result for subtask ${subtask.id}:\n${resultText?.substring(0, 500)}${resultText && resultText.length > 500 ? '...' : ''}`);
+          }
           break;
         }
       }
@@ -326,6 +404,7 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
          throw errorToThrow;
       }
 
+      logger.info(`------- SUBTASK EXECUTION COMPLETE -------`);
       return resultText;
 
     } catch (error) {
@@ -334,12 +413,15 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
          logger.warn(`Model ${model.id} not found in ${model.provider} cache during execution.`);
          // Optionally: Implement retry logic here by calling codeModelSelector again
          // For now, just return the error message
+         logger.info(`------- SUBTASK EXECUTION FAILED (MODEL NOT FOUND) -------`);
          return `Error: Failed to execute subtask "${subtask.description}" - Model ${model.id} not found for provider ${model.provider}.`;
        }
       // General error handling
       if (error instanceof Error) {
+        logger.info(`------- SUBTASK EXECUTION FAILED (ERROR) -------`);
         return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): ${error.message}`;
       }
+      logger.info(`------- SUBTASK EXECUTION FAILED (UNKNOWN ERROR) -------`);
       return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): Unknown error`;
     }
   },
@@ -359,13 +441,46 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
     const executionOrder = dependencyMapper.sortByExecutionOrder(decomposedTask);
     const results = new Map<string, string>();
     
+    // Track model usage for better logging
+    const modelUsage = new Map<string, { count: number, subtasks: string[] }>();
+    
+    logger.info(`======= STARTING EXECUTION OF ALL SUBTASKS =======`);
+    logger.info(`Original task: ${decomposedTask.originalTask}`);
+    logger.info(`Total subtasks: ${executionOrder.length}`);
+    logger.info(`Execution order: ${executionOrder.map(s => s.id).join(' -> ')}`);
+    
+    // Log model assignments
+    logger.info(`===== MODEL ASSIGNMENTS =====`);
+    for (const subtask of executionOrder) {
+      const model = modelAssignments.get(subtask.id);
+      if (model) {
+        logger.info(`Subtask ${subtask.id} (${subtask.description.substring(0, 50)}${subtask.description.length > 50 ? '...' : ''}) -> ${model.id} (${model.provider})`);
+        
+        // Track model usage
+        if (!modelUsage.has(model.id)) {
+          modelUsage.set(model.id, { count: 0, subtasks: [] });
+        }
+        const usage = modelUsage.get(model.id)!;
+        usage.count++;
+        usage.subtasks.push(subtask.id);
+      } else {
+        logger.warn(`No model assigned for subtask ${subtask.id}`);
+      }
+    }
+    
     // Process subtasks in order
+    let completedCount = 0;
     for (const subtask of executionOrder) {
       const model = modelAssignments.get(subtask.id);
       if (!model) {
+        logger.warn(`Skipping subtask ${subtask.id}: No model assigned`);
         results.set(subtask.id, `Error: No model assigned for subtask "${subtask.description}"`);
         continue;
       }
+      
+      // Track progress
+      completedCount++;
+      logger.info(`Executing subtask ${completedCount}/${executionOrder.length}: ${subtask.id}`);
       
       // Gather context from dependencies
       let dependencyContext = '';
@@ -374,15 +489,35 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         if (depResult) {
           const depSubtask = decomposedTask.subtasks.find(s => s.id === depId);
           if (depSubtask) {
+            logger.info(`Including dependency ${depId} for subtask ${subtask.id}`);
             dependencyContext += `--- From dependency: ${depSubtask.description} ---\n\n`;
             dependencyContext += depResult + '\n\n';
           }
+        } else {
+          logger.warn(`Missing dependency result for ${depId} (required by subtask ${subtask.id})`);
         }
       }
       
       // Execute the subtask
       const result = await this.executeSubtask(subtask, model, dependencyContext);
       results.set(subtask.id, result);
+      
+      // Write the result to the subtask log file
+      this.logSubtaskResult(subtask, model, result);
+      
+      // Log progress
+      const progressPercent = Math.round((completedCount / executionOrder.length) * 100);
+      logger.info(`Progress: ${progressPercent}% (${completedCount}/${executionOrder.length} subtasks completed)`);
+    }
+    
+    // Log summary of execution
+    logger.info(`======= SUBTASK EXECUTION SUMMARY =======`);
+    logger.info(`Total subtasks executed: ${completedCount}/${executionOrder.length}`);
+    
+    // Log model usage
+    logger.info(`===== MODEL USAGE SUMMARY =====`);
+    for (const [modelId, usage] of modelUsage.entries()) {
+      logger.info(`Model ${modelId}: Used for ${usage.count} subtask(s): ${usage.subtasks.join(', ')}`);
     }
     
     return results;
@@ -397,19 +532,35 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
    */
   async synthesizeFinalResult(
     decomposedTask: DecomposedCodeTask,
-    subtaskResults: Map<string, string>
+    subtaskResults: Map<string, string>,
+    modelAssignments?: Map<string, Model> // Added parameter to track which model generated each part
   ): Promise<string> {
+    logger.info(`======= SYNTHESIZING FINAL RESULT =======`);
+    logger.info(`Original task: ${decomposedTask.originalTask}`);
+    logger.info(`Number of subtask results to synthesize: ${subtaskResults.size}`);
+    
     // Build a combined result with all outputs
     let combinedResults = `# Results for coding task: ${decomposedTask.originalTask}\n\n`;
     
     // Get execution order for a sensible presentation
     const executionOrder = dependencyMapper.sortByExecutionOrder(decomposedTask);
     
+    // Track models used for each part to include in the final result
+    logger.info(`===== RESULTS BY SUBTASK =====`);
     for (const subtask of executionOrder) {
       const result = subtaskResults.get(subtask.id);
       if (result) {
-        combinedResults += `## ${subtask.description}\n\n`;
+        // Get the model that was used for this subtask
+        const model = modelAssignments?.get(subtask.id);
+        const modelInfo = model ? ` (Generated by: ${model.id})` : '';
+        
+        logger.info(`Subtask ${subtask.id}${model ? ` used model: ${model.id}` : ''}`);
+        
+        // Add subtask and result to combined results with model information
+        combinedResults += `## ${subtask.description}${modelInfo}\n\n`;
         combinedResults += '```\n' + result + '\n```\n\n';
+      } else {
+        logger.warn(`Missing result for subtask ${subtask.id}`);
       }
     }
     
@@ -458,6 +609,8 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         };
       }
       
+      logger.info(`Using model ${synthesisModel.id} for final synthesis`);
+      
       const synthesisPrompt = `I've broken down a coding task into subtasks and have results for each. 
 Please synthesize these into a coherent final solution.
 Original Task: ${decomposedTask.originalTask}
@@ -465,6 +618,7 @@ Subtask Results:
 ${combinedResults}
 Please provide a clean, consolidated solution that integrates all the components properly.`;
       
+      logger.info(`Sending synthesis prompt to model ${synthesisModel.id}`);
       const result = await openRouterModule.callOpenRouterApi(
         synthesisModel.id,
         synthesisPrompt,
@@ -475,11 +629,35 @@ Please provide a clean, consolidated solution that integrates all the components
         throw new Error(`Failed to synthesize results: ${result.error}`);
       }
       
-      return result.text;
+      logger.info(`Successfully synthesized final result using model ${synthesisModel.id}`);
+      
+      // Add a note about the synthesis model used
+      const finalResult = `# Results for coding task: ${decomposedTask.originalTask}\n\n## ${decomposedTask.originalTask}\n\n${result.text}\n\n---\n\n*Final synthesis performed by: ${synthesisModel.id}*`;
+      
+      // Add a section with detailed model attribution for each subtask
+      if (modelAssignments) {
+        let attributionSection = '\n\n## Model Attribution\n\nThis solution was generated using multiple AI models:\n\n';
+        attributionSection += '| Subtask | Model Used |\n| --- | --- |\n';
+        
+        for (const subtask of executionOrder) {
+          const model = modelAssignments.get(subtask.id);
+          if (model) {
+            attributionSection += `| ${subtask.description.substring(0, 50)}${subtask.description.length > 50 ? '...' : ''} | ${model.id} |\n`;
+          }
+        }
+        
+        attributionSection += `| Final Synthesis | ${synthesisModel.id} |\n`;
+        
+        // Add the attribution section to the final result
+        return finalResult + attributionSection;
+      }
+      
+      return finalResult;
     } catch (error) {
       logger.error('Error synthesizing results:', error);
       
       // If synthesis fails, return the combined results without additional processing
+      logger.info('Synthesis failed, returning combined results without processing');
       combinedResults += '\n\n## Note\n\nAutomatic synthesis failed. The above components need to be manually integrated.';
       return combinedResults;
     }
