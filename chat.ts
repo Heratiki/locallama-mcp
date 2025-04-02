@@ -368,17 +368,17 @@ const clearOpenRouterTracking = () => {
   });
 };
 
-// Set model prompting strategy
+// Set model prompting strategy - CORRECTED ARGUMENT MAPPING
 const setModelStrategy = (modelId: string, systemPrompt: string, userPrompt: string,
                          assistantPrompt: string, useChat: boolean = true) => {
   sendJsonRpc('tools/call', {
     name: 'set_model_prompting_strategy',
     arguments: {
-      task: modelId, // The ID of the model to update
-      expected_output_length: systemPrompt, // The system prompt to use
-      priority: userPrompt, // The user prompt template to use
-      complexity: assistantPrompt, // The assistant prompt template to use
-      preemptive: useChat // Whether to use chat format
+      model_id: modelId, // Corrected: Use model_id
+      system_prompt: systemPrompt, // Corrected: Use system_prompt
+      user_prompt_template: userPrompt, // Corrected: Use user_prompt_template
+      assistant_prompt_template: assistantPrompt, // Corrected: Use assistant_prompt_template
+      use_chat_format: useChat // Corrected: Use use_chat_format
     }
   });
 };
@@ -401,13 +401,13 @@ const showHelp = () => {
 Resource Commands:
 - status                    : Get current status of the LocalLama MCP Server
 - models                    : List available local and API LLM models
-- usage <api>               : Get token usage and cost statistics for a specific API
 - benchmarks                : Get results of model benchmarks
+- usage <api>               : Get token usage and cost statistics for a specific API
 
 Tool Commands:
-- route <task> <context> <output> <complexity> <priority>
-                           : Route a task based on parameters
-                             Example: route "Generate code" 1000 200 0.7 quality
+- route "<task>" <context> <output> <complexity> <priority>
+                           : Route a task based on parameters. Task MUST be in quotes.
+                             Example: route "Generate react component for a button" 1000 200 0.7 quality
 - estimate <prompt> <completion>
                            : Estimate cost for token counts
                              Example: estimate 1000 500
@@ -421,19 +421,22 @@ Advanced Commands:
                              Example: retriv /path/to/code
 - free-models              : Get list of free models from OpenRouter
 - clear-tracking           : Clear OpenRouter tracking data
+- set-strategy <modelId> "<system>" "<user>" "<assistant>" [useChat=true|false]
+                           : Set prompting strategy for a model. Prompts MUST be in quotes.
+                             Example: set-strategy local:model "<sys_prompt>" "<user_tmpl>" "<asst_tmpl>" true
 
 System Commands:
 - list resources           : List all available resources
 - list tools               : List all available tools
-- call <tool> [args]       : Call a tool with arguments
-                             Example: call route_task task="Code review" context_length=2000
-                             Example: call benchmark_tasks tasks=[{...}] runs_per_task=3
+- call <tool> <json_args>  : Call a tool with arguments provided as a JSON string.
+                             Example: call route_task '{"task":"Code review", "context_length":2000}'
+                             Example: call benchmark_tasks '{"tasks":[{"taskId":"t1", "task":"...", ...}], "runs_per_task":3}'
 - help                     : Show this help message
 - exit                     : Exit the chat interface
 
 ========================================
 `;
-  
+
   log(helpText, true);
 };
 
@@ -475,50 +478,26 @@ rl.on('line', (input: string) => {
   } else if (trimmedInput === 'list tools') {
     sendJsonRpc('tools/list', {});
   } else if (trimmedInput.startsWith('route ')) {
-    const parts = trimmedInput.substring(6).split(' ');
-    if (parts.length < 5) {
-      log('Usage: route <task> <context_length> <output_length> <complexity> <priority>', true);
+    // Improved parsing for route command, requires task in quotes
+    const match = trimmedInput.match(/^route\s+"([^"]+)"\s+(\d+)\s+(\d+)\s+([\d.]+)\s+(speed|cost|quality)$/i);
+    if (!match) {
+      log('Usage: route "<task>" <context_length> <output_length> <complexity> <priority>', true);
       log('Example: route "Generate code" 1000 200 0.7 quality', true);
       return;
     }
-    
-    // Extract the task (which might contain spaces)
-    let endOfTaskIndex = 0;
-    let task = '';
-    
-    if (parts[0].startsWith('"')) {
-      // Find the closing quote
-      for (let i = 0; i < parts.length; i++) {
-        task += (i > 0 ? ' ' : '') + parts[i];
-        if (parts[i].endsWith('"')) {
-          endOfTaskIndex = i;
-          break;
-        }
-      }
-      task = task.substring(1, task.length - 1); // Remove quotes
-    } else {
-      task = parts[0];
-      endOfTaskIndex = 0;
-    }
-    
-    // Parse the remaining parameters
-    const contextLength = parseInt(parts[endOfTaskIndex + 1]);
-    const outputLength = parseInt(parts[endOfTaskIndex + 2]);
-    const complexity = parseFloat(parts[endOfTaskIndex + 3]);
-    const priority = parts[endOfTaskIndex + 4] as 'speed' | 'cost' | 'quality';
-    
+
+    const [, task, contextLengthStr, outputLengthStr, complexityStr, priority] = match;
+    const contextLength = parseInt(contextLengthStr);
+    const outputLength = parseInt(outputLengthStr);
+    const complexity = parseFloat(complexityStr);
+
     if (isNaN(contextLength) || isNaN(outputLength) || isNaN(complexity)) {
-      log('Error: Context length, output length, and complexity must be numbers', true);
+      log('Error: Context length, output length, and complexity must be valid numbers.', true);
       return;
     }
-    
-    if (!['speed', 'cost', 'quality'].includes(priority)) {
-      log('Error: Priority must be one of: speed, cost, quality', true);
-      return;
-    }
-    
-    routeTask(task, contextLength, outputLength, complexity, priority);
-    
+
+    routeTask(task, contextLength, outputLength, complexity, priority as 'speed' | 'cost' | 'quality');
+
   } else if (trimmedInput.startsWith('estimate ')) {
     const parts = trimmedInput.substring(9).trim().split(' ');
     if (parts.length !== 2) {
@@ -570,34 +549,55 @@ rl.on('line', (input: string) => {
   } else if (trimmedInput === 'clear-tracking') {
     clearOpenRouterTracking();
     
-  } else if (trimmedInput.startsWith('call ')) {
-    const parts = trimmedInput.substring(5).split(' ');
-    const toolName = parts[0];
-    
-    // No need to convert tool names - use them directly as specified in the server
-    const args = parts.slice(1).reduce((acc: any, arg) => {
-      const [key, value] = arg.split('=');
-      if (key && value) {
-        // Try to parse numbers and booleans
-        if (value === 'true') acc[key] = true;
-        else if (value === 'false') acc[key] = false;
-        else if (!isNaN(Number(value))) acc[key] = Number(value);
-        else acc[key] = value;
+  } else if (trimmedInput.startsWith('set-strategy ')) {
+      // Parsing for set-strategy command
+      const match = trimmedInput.match(/^set-strategy\s+([\w:\-]+)\s+"([^"]+)"\s+"([^"]+)"\s+"([^"]+)"(?:\s+(true|false))?$/i);
+      if (!match) {
+          log('Usage: set-strategy <modelId> "<systemPrompt>" "<userPrompt>" "<assistantPrompt>" [useChat=true|false]', true);
+          log('Example: set-strategy local:model "System prompt" "User: {{prompt}}" "Assistant:" true', true);
+          return;
       }
-      return acc;
-    }, {});
-    
-    sendJsonRpc('tools/call', { name: toolName, arguments: args });
+      const [, modelId, systemPrompt, userPrompt, assistantPrompt, useChatStr] = match;
+      const useChat = useChatStr ? useChatStr.toLowerCase() === 'true' : true; // Default to true if not provided
+      setModelStrategy(modelId, systemPrompt, userPrompt, assistantPrompt, useChat);
+  } else if (trimmedInput.startsWith('call ')) {
+    // Use regex to separate tool name and the rest as JSON string
+    const match = trimmedInput.match(/^call\s+([\w\/]+)\s+(.*)$/);
+    if (!match) {
+        log('Usage: call <tool_name> <json_arguments>', true);
+        log('Example: call tools/call \'{"name":"route_task", "arguments":{"task":"...", ...}}\'', true);
+        return;
+    }
+
+    const [, toolName, argsString] = match;
+    let args = {};
+    try {
+        // Trim potential single quotes often used in shells
+        const trimmedArgsString = argsString.trim().replace(/^'|'$/g, '');
+        args = JSON.parse(trimmedArgsString);
+        log(`Parsed arguments for ${toolName}: ${JSON.stringify(args, null, 2)}`, false); // Log parsed args to file
+        // Determine the correct method based on toolName structure
+        if (toolName.includes('/')) {
+            // If toolName looks like a path (e.g., 'tools/call'), use it directly as the method
+            sendJsonRpc(toolName, args);
+        } else {
+            // Otherwise, assume it's a tool name needing the 'tools/call' structure
+            sendJsonRpc('tools/call', { name: toolName, arguments: args });
+        }
+    } catch (e) {
+        log(`Error: Invalid JSON arguments provided for tool ${toolName}.`, true);
+        log(`Error details: ${e instanceof Error ? e.message : String(e)}`, false); // Log details to file
+        log(`Arguments received: ${argsString}`, false);
+        log('Please provide arguments as a valid JSON string.', true);
+        log('Example: call route_task \'{"task":"Code review", "context_length":2000}\'', true);
+    }
   } else {
     log('Unknown command. Type "help" to see available commands.', true);
   }
 });
 
 // Handle process termination
-process.on('SIGINT', () => {
-  log('\nReceived SIGINT. Cleaning up...', true);
-  serverProcess.kill();
-  logFile.end();
+process.on('SIGINT', () => {  log('\nReceived SIGINT. Cleaning up...', true);  serverProcess.kill();  logFile.end();
   rl.close();
   process.exit(0);
 });
