@@ -69,14 +69,32 @@ export const decisionEngine = {
 
     try {
       // Initialize models database
-      void modelsDbService.initialize();
+      await modelsDbService.initialize();
       // Initialize provider modules
-      void lmStudioModule.initialize();
-      void ollamaModule.initialize();
-
+      await lmStudioModule.initialize();
+      await ollamaModule.initialize();
 
       // Initialize module connections to resolve circular dependencies
+      // This is critical for proper model selection based on benchmarks
       modelPerformanceTracker.initialize(codeModelSelector);
+      
+      // Make sure the references are properly set
+      if (!codeModelSelector._modelPerformanceTracker) {
+        logger.warn('Model performance tracker not properly initialized. Trying to initialize again...');
+        try {
+          // Try again with explicit reference
+          codeModelSelector.setModelPerformanceTracker(modelPerformanceTracker);
+          if (codeModelSelector._modelPerformanceTracker) {
+            logger.info('Successfully re-initialized model performance tracker');
+          } else {
+            logger.error('Failed to initialize model performance tracker after retry');
+          }
+        } catch (e) {
+          logger.error('Error during model performance tracker retry:', e);
+        }
+      } else {
+        logger.info('Model performance tracker successfully initialized');
+      }
       
       // Try to initialize job tracker with retry logic
       let retries = 0;

@@ -92,9 +92,18 @@ class JobTracker extends EventEmitter {
 
     try {
       const port = await this.findAvailablePort();
-      this.wss = new WebSocketServer({ port });
+      try {
+        this.wss = new WebSocketServer({ port, noServer: false });
+        logger.info(`Job tracker WebSocket server started on port ${port}`);
+      } catch (wsError) {
+        logger.error('Failed to create WebSocket server:', wsError);
+        // Continue without WebSocket server
+        this.wss = null;
+      }
+      
+      // Mark as initialized even if WebSocket creation fails
+      // This allows the system to function without job tracking
       this.initialized = true;
-      logger.info(`Job tracker WebSocket server started on port ${port}`);
     } catch (error) {
       logger.error('Failed to initialize WebSocket server:', error instanceof Error ? error.message : String(error));
       // Continue without WebSocket server - the app can still function without real-time updates
@@ -103,8 +112,11 @@ class JobTracker extends EventEmitter {
   }
 
   async createJob(id: string, task: string, model?: string): Promise<string> {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn(`Attempted to create job ${id} before JobTracker was initialized`);
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
     }
     
     const job: Job = {
@@ -119,14 +131,22 @@ class JobTracker extends EventEmitter {
 
     this.activeJobs.set(id, job);
     logger.debug(`Created new job ${id} for task: ${task}`);
-    await this.broadcastUpdate();
+    try {
+      await this.broadcastUpdate();
+    } catch (error) {
+      logger.warn(`Failed to broadcast job creation for ${id}:`, error);
+    }
     this.emit('jobCreated', job);
     return id;
   }
 
   async updateJobProgress(id: string, progress: number, estimatedTimeRemaining?: number): Promise<void> {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn(`Attempted to update job ${id} before JobTracker was initialized`);
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return;
     }
 
     const job = this.activeJobs.get(id);
@@ -139,14 +159,22 @@ class JobTracker extends EventEmitter {
       
       this.activeJobs.set(id, job);
       logger.debug(`Updated job ${id} progress: ${job.progress}`);
-      await this.broadcastUpdate();
+      try {
+        await this.broadcastUpdate();
+      } catch (error) {
+        logger.warn(`Failed to broadcast progress update for job ${id}:`, error);
+      }
       this.emit('jobProgress', job);
     }
   }
 
   async completeJob(id: string, results?: string[]): Promise<void> {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn(`Attempted to complete job ${id} before JobTracker was initialized`);
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return;
     }
 
     const job = this.activeJobs.get(id);
@@ -163,14 +191,22 @@ class JobTracker extends EventEmitter {
       
       this.activeJobs.set(id, job);
       logger.debug(`Completed job ${id}`);
-      await this.broadcastUpdate();
+      try {
+        await this.broadcastUpdate();
+      } catch (error) {
+        logger.warn(`Failed to broadcast job completion for ${id}:`, error);
+      }
       this.emit('jobCompleted', job);
     }
   }
 
   async cancelJob(id: string): Promise<void> {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn(`Attempted to cancel job ${id} before JobTracker was initialized`);
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return;
     }
 
     const job = this.activeJobs.get(id);
@@ -180,14 +216,22 @@ class JobTracker extends EventEmitter {
       
       this.activeJobs.set(id, job);
       logger.debug(`Cancelled job ${id}`);
-      await this.broadcastUpdate();
+      try {
+        await this.broadcastUpdate();
+      } catch (error) {
+        logger.warn(`Failed to broadcast job cancellation for ${id}:`, error);
+      }
       this.emit('jobCancelled', job);
     }
   }
 
   async failJob(id: string, error?: string): Promise<void> {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn(`Attempted to fail job ${id} before JobTracker was initialized`);
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return;
     }
 
     const job = this.activeJobs.get(id);
@@ -198,37 +242,60 @@ class JobTracker extends EventEmitter {
       
       this.activeJobs.set(id, job);
       logger.error(`Job ${id} failed: ${error || 'Unknown error'}`);
-      await this.broadcastUpdate();
+      try {
+        await this.broadcastUpdate();
+      } catch (broadcastError) {
+        logger.warn(`Failed to broadcast job failure for ${id}:`, broadcastError);
+      }
       this.emit('jobFailed', job);
     }
   }
 
   getJob(id: string): Job | undefined {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn(`Attempted to get job ${id} before JobTracker was initialized`);
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return undefined;
     }
+    
     return this.activeJobs.get(id);
   }
 
   getActiveJobs(): Job[] {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn('Attempted to get active jobs before JobTracker was initialized');
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return [];
     }
+    
     return Array.from(this.activeJobs.values()).filter(
       job => job.status !== JobStatus.COMPLETED && job.status !== JobStatus.CANCELLED
     );
   }
 
   getAllJobs(): Job[] {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn('Attempted to get all jobs before JobTracker was initialized');
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return [];
     }
+    
     return Array.from(this.activeJobs.values());
   }
 
   cleanupCompletedJobs(maxAgeMs: number = 3600000): void {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn('Attempted to cleanup jobs before JobTracker was initialized');
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return;
     }
     
     const now = Date.now();
@@ -244,8 +311,12 @@ class JobTracker extends EventEmitter {
   }
 
   private async broadcastUpdate(): Promise<void> {
+    // Allow operation even if not fully initialized
     if (!this.initialized) {
-      throw new Error('JobTracker not initialized');
+      logger.warn('Attempted to broadcast update before JobTracker was initialized');
+      // Mark as initialized to allow operations to continue
+      this.initialized = true;
+      return;
     }
 
     if (this.wss) {

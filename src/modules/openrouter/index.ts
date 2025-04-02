@@ -415,7 +415,7 @@ export const openRouterModule = {
    * Get free models from OpenRouter
    * @param forceUpdate Optional flag to force update of models if no free models are found
    */
-  async getFreeModels(forceUpdate = false): Promise<Model[]> {
+  async getFreeModels(forceUpdate = true): Promise<Model[]> {
     logger.debug('Getting free models from OpenRouter');
     
     try {
@@ -423,6 +423,12 @@ export const openRouterModule = {
       if (!config.openRouterApiKey) {
         logger.warn('OpenRouter API key not configured, free models will not be available');
         return [];
+      }
+      
+      // Always force an update to make sure we have the latest free models
+      if (forceUpdate || this.modelTracking.freeModels.length === 0) {
+        logger.info('Updating OpenRouter models to get latest free models...');
+        await this.updateModels();
       }
       
       // Get all models
@@ -433,27 +439,21 @@ export const openRouterModule = {
         return this.modelTracking.freeModels.includes(model.id);
       });
       
-      logger.debug(`Found ${freeModels.length} free models out of ${allModels.length} total models`);
+      logger.info(`Found ${freeModels.length} free models out of ${allModels.length} total models from OpenRouter`);
       
-      // If no free models are found and forceUpdate is true, force an update
-      if (freeModels.length === 0 && forceUpdate) {
-        logger.info('No free models found, forcing update...');
-        await this.updateModels();
-        
-        // Try again after update
-        const updatedAllModels = await this.getAvailableModels();
-        const updatedFreeModels = updatedAllModels.filter(model => {
-          return this.modelTracking.freeModels.includes(model.id);
-        });
-        
-        logger.info(`After forced update: Found ${updatedFreeModels.length} free models out of ${updatedAllModels.length} total models`);
-        return updatedFreeModels;
+      // If still no free models, try one more time with a forced update
+      if (freeModels.length === 0 && !forceUpdate) {
+        logger.info('No free models found, forcing one final update...');
+        return this.getFreeModels(true);
       }
       
       return freeModels;
-    } catch {
-      logger.error('Error getting free models from OpenRouter:');
-      this.handleOpenRouterError(new Error('Unknown error'));
+    } catch (error) {
+      if (error instanceof Error) {
+        logger.error('Error getting free models from OpenRouter:', error);
+      } else {
+        logger.error('Unknown error getting free models from OpenRouter');
+      }
       return [];
     }
   },
@@ -758,9 +758,17 @@ export const openRouterModule = {
       logger.warn('Invalid response from OpenRouter API:', response.data);
       return { success: false, error: OpenRouterErrorType.INVALID_REQUEST };
     } catch (error) {
-      logger.error('Unknown OpenRouter error');
-      this.handleOpenRouterError(error as Error);
-      throw error; // Re-throw the original error
+      // Improved error logging and handling
+      const errorType = this.handleOpenRouterError(error as Error);
+      const errorInstance = error instanceof Error ? error : new Error(String(error));
+      logger.error(`Error calling OpenRouter API for model ${modelId}: ${errorInstance.message}`, errorInstance);
+      
+      // Return structured error instead of re-throwing
+      return {
+        success: false,
+        error: errorType,
+        errorInstance
+      };
     }
   },
 

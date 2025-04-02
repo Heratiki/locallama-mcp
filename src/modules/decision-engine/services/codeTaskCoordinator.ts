@@ -8,6 +8,7 @@ import { ollamaModule } from '../../ollama/index.js'; // Import Ollama module
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
+import { getJobTracker, JobStatus } from './jobTracker.js'; // Import job tracker
 import fs from 'fs';
 import path from 'path';
 
@@ -207,10 +208,14 @@ ${result}
         }
       }
 
-      // Step 2: Resolve any circular dependencies
-      const resolvedTask = dependencyMapper.resolveCircularDependencies(decomposedTask);
+      // Step 2: Resolve any circular dependencies using the new function
+      const resolvedSubtasks = await codeTaskCoordinator.resolveDependencyCycles(decomposedTask.subtasks);
+      const resolvedTask: DecomposedCodeTask = {
+        ...decomposedTask,
+        subtasks: resolvedSubtasks
+      };
       
-      // Step 3: Determine execution order
+      // Step 3: Determine execution order using the resolved task
       const executionOrder = dependencyMapper.sortByExecutionOrder(resolvedTask);
       
       // Step 4: Find the critical path
@@ -444,6 +449,15 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
     // Track model usage for better logging
     const modelUsage = new Map<string, { count: number, subtasks: string[] }>();
     
+    // Get the job tracker for registering subtasks as jobs
+    let jobTracker;
+    try {
+      jobTracker = await getJobTracker();
+    } catch (error) {
+      // Log the error but continue without job tracking
+      logger.error('Failed to initialize JobTracker, continuing without job tracking:', error);
+    }
+    
     logger.info(`======= STARTING EXECUTION OF ALL SUBTASKS =======`);
     logger.info(`Original task: ${decomposedTask.originalTask}`);
     logger.info(`Total subtasks: ${executionOrder.length}`);
@@ -478,9 +492,31 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         continue;
       }
       
+      // Register this subtask as a job with the job tracker (if available)
+      if (jobTracker) {
+        try {
+          await jobTracker.createJob(
+            subtask.id, 
+            `Subtask: ${subtask.description.substring(0, 100)}${subtask.description.length > 100 ? '...' : ''}`,
+            model.id
+          );
+        } catch (error) {
+          logger.warn(`Failed to create job for subtask ${subtask.id}:`, error);
+        }
+      }
+      
       // Track progress
       completedCount++;
       logger.info(`Executing subtask ${completedCount}/${executionOrder.length}: ${subtask.id}`);
+      
+      // Update job status to In Progress (if job tracker is available)
+      if (jobTracker) {
+        try {
+          await jobTracker.updateJobProgress(subtask.id, 10); // Start at 10%
+        } catch (error) {
+          logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
+        }
+      }
       
       // Gather context from dependencies
       let dependencyContext = '';
@@ -498,12 +534,45 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
         }
       }
       
-      // Execute the subtask
-      const result = await this.executeSubtask(subtask, model, dependencyContext);
-      results.set(subtask.id, result);
+      // Update job progress (if job tracker is available)
+      if (jobTracker) {
+        try {
+          await jobTracker.updateJobProgress(subtask.id, 30); // Update to 30%
+        } catch (error) {
+          logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
+        }
+      }
       
-      // Write the result to the subtask log file
-      this.logSubtaskResult(subtask, model, result);
+      try {
+        // Execute the subtask
+        const result = await this.executeSubtask(subtask, model, dependencyContext);
+        results.set(subtask.id, result);
+        
+        // Write the result to the subtask log file
+        this.logSubtaskResult(subtask, model, result);
+        
+        // Mark job as completed (if job tracker is available)
+        if (jobTracker) {
+          try {
+            await jobTracker.completeJob(subtask.id, [result]);
+          } catch (error) {
+            logger.warn(`Failed to complete job for subtask ${subtask.id}:`, error);
+          }
+        }
+      } catch (error) {
+        // If execution fails, mark the job as failed (if job tracker is available)
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (jobTracker) {
+          try {
+            await jobTracker.failJob(subtask.id, errorMessage);
+          } catch (trackerError) {
+            logger.warn(`Failed to mark job as failed for subtask ${subtask.id}:`, trackerError);
+          }
+        }
+        
+        // Still set the result, but with the error message
+        results.set(subtask.id, `Error executing subtask: ${errorMessage}`);
+      }
       
       // Log progress
       const progressPercent = Math.round((completedCount / executionOrder.length) * 100);
@@ -626,7 +695,9 @@ Please provide a clean, consolidated solution that integrates all the components
       );
       
       if (!result.success || !result.text) {
-        throw new Error(`Failed to synthesize results: ${result.error}`);
+        // Use the detailed error information from the result object
+        const errorMessage = result.errorInstance?.message || result.error || 'Unknown synthesis error';
+        throw new Error(`Failed to synthesize results: ${errorMessage}`);
       }
       
       logger.info(`Successfully synthesized final result using model ${synthesisModel.id}`);
@@ -654,7 +725,14 @@ Please provide a clean, consolidated solution that integrates all the components
       
       return finalResult;
     } catch (error) {
-      logger.error('Error synthesizing results:', error);
+      // Enhanced error logging with more details
+      if (error instanceof Error) {
+        logger.error(`Error synthesizing results: ${error.message}`, error);
+        // Also log the stack trace for debugging
+        logger.error(`Synthesis error stack trace: ${error.stack || 'No stack trace available'}`);
+      } else {
+        logger.error(`Error synthesizing results: ${JSON.stringify(error)}`);
+      }
       
       // If synthesis fails, return the combined results without additional processing
       logger.info('Synthesis failed, returning combined results without processing');

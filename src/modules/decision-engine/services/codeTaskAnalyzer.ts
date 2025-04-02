@@ -384,9 +384,25 @@ export const codeTaskAnalyzer = {
               logger.warn(`Capping subtask complexity from ${subtask.complexity} to ${complexityThreshold}`);
               subtask.complexity = complexityThreshold;
             }
+            
+            // Filter dependencies to only include valid UUIDs
+            let validDependencies: string[] = [];
+            if (Array.isArray(subtask.dependencies)) {
+              validDependencies = subtask.dependencies.filter(d => 
+                typeof d === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d)
+              );
+              
+              if (validDependencies.length !== subtask.dependencies.length) {
+                const originalDeps = subtask.dependencies.join(', ');
+                const filteredDeps = validDependencies.join(', ');
+                logger.warn(`Filtered invalid dependencies for subtask ${subtask.id || 'new'}. Original: [${originalDeps}], Filtered: [${filteredDeps}]`);
+              }
+            }
+            
             return {
               ...subtask,
               id: subtask.id ? String(subtask.id) : uuidv4(),
+              dependencies: validDependencies // Use filtered dependencies
             };
           };
           
@@ -427,13 +443,20 @@ export const codeTaskAnalyzer = {
             complexity = 0.8;
           }
           
+          // Filter dependencies to only include valid UUIDs
+          const validDependencies = dependenciesMatch ?
+            dependenciesMatch[1].split(',').map(d => d.trim()).filter(d => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d)) : [];
+            
+          if (dependenciesMatch && validDependencies.length !== dependenciesMatch[1].split(',').length) {
+            logger.warn(`Filtered out invalid dependencies for subtask ${id}. Original: [${dependenciesMatch[1]}], Filtered: [${validDependencies.join(', ')}]`);
+          }
+          
           return {
             id,
             description: descriptionMatch ? descriptionMatch[1].trim() : section.trim().split('\n')[0],
             complexity,
             estimatedTokens: tokensMatch ? parseInt(tokensMatch[1]) : 1000,
-            dependencies: dependenciesMatch ?
-              dependenciesMatch[1].split(',').map(d => d.trim()) : [],
+            dependencies: validDependencies, // Use filtered dependencies
             codeType: typeMatch ? typeMatch[1].toLowerCase() : 'other'
           };
         });
