@@ -12,9 +12,20 @@ import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { getJobTracker } from '../decision-engine/services/jobTracker.js';
 
-// Initialize jobTracker once and await it
+// Initialize jobTracker - use a better pattern to avoid race conditions 
 const jobTrackerPromise = getJobTracker();
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
+
+// Safely initialize the job tracker without creating unhandled rejections
+const initializeJobTracker = async () => {
+  try {
+    jobTracker = await jobTrackerPromise;
+    return true;
+  } catch (error) {
+    logger.error('Failed to initialize jobTracker in resources module:', error);
+    return false;
+  }
+};
 
 import { readFileSync, existsSync } from 'fs'; // Import necessary modules
 import { join, dirname } from 'path';
@@ -48,7 +59,7 @@ function isOpenRouterConfigured(): boolean {
  */
 export async function setupResourceHandlers(server: Server): Promise<void> {
   // Initialize jobTracker
-  jobTracker = await jobTrackerPromise;
+  await initializeJobTracker();
 
   // List available static resources
   server.setRequestHandler(ListResourcesRequestSchema, () => {
