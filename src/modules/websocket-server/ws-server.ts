@@ -907,22 +907,23 @@ async function init() {
   let trackerInstance: IJobManager | null = null;
   try {
     // Step 1: Get or initialize the JobTracker instance FIRST
-    trackerInstance = await getJobTracker().catch(error => {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to get JobTracker instance during init:', errorMessage);
-      logger.error('Error details:', error);
+    // Use a try-catch specifically for getting the tracker
+    try {
+      trackerInstance = await getJobTracker();
+      logger.info('JobTracker instance obtained successfully.');
+    } catch (trackerError) {
+      logger.error('Failed to get JobTracker instance during init:', trackerError);
       // Allow server to potentially continue without JobTracker functionality
-      return null; 
-    });
+      trackerInstance = null; 
+    }
 
     // Step 2: If JobTracker is available, set its broadcast function
+    // This needs to happen BEFORE the WebSocket server starts accepting connections
+    // that might trigger broadcasts.
     if (trackerInstance) {
       try {
-        // Ensure the broadcast function itself is correctly defined and exported
-        // The import { broadcastJobs } from './ws-server-types.js'; might be wrong
-        // Let's import directly from this file where it's defined
-        const { broadcastJobs: broadcastFn } = await import('./ws-server.js'); 
-        trackerInstance.setBroadcastFunction(broadcastFn);
+        // Import the function directly from this module where it's defined
+        trackerInstance.setBroadcastFunction(broadcastJobs); 
         logger.info('Successfully set broadcast function on JobTracker instance.');
         // Initialize the local module variable as well
         jobTracker = trackerInstance; 
@@ -943,9 +944,9 @@ async function init() {
       // Decide if this is critical; for now, log and continue
     }
 
-    // Step 4: Start WebSocket Server
+    // Step 4: Start WebSocket Server *after* attempting to set broadcast function
     try {
-      wss = await startWebSocketServer();
+      wss = await startWebSocketServer(); // wss is assigned here
       logger.info('WebSocket server started successfully.');
     } catch (error) {
       logger.error('Failed to start WebSocket server:', error);

@@ -166,11 +166,13 @@ export const codeTaskAnalyzer = {
           logger.debug('Error getting free models, falling back to default:', error);
         }
         
+        logger.debug(`Attempting decomposition API call with model: ${modelId}`);
         const decompositionResult = await openRouterModule.callOpenRouterApi(
           modelId,
           prompt,
           60000 // 60 seconds timeout
         );
+        logger.debug(`Decomposition API call completed. Success: ${decompositionResult.success}, Text available: ${!!decompositionResult.text}`);
         
         if (!decompositionResult.success || !decompositionResult.text) {
           // Capture detailed error information for later logging
@@ -454,8 +456,15 @@ export const codeTaskAnalyzer = {
             }
             
             // Non-retryable error or max retries exceeded
-            logger.warn(`Model API failed for complexity analysis: ${result.error || 'Unknown error'}`);
-            throw new Error(result.error ? `API error: ${result.error}` : 'API returned unsuccessful result');
+            // Log detailed error before throwing
+            const errorType = result.error || 'Unknown error';
+            const errorInstance = result.errorInstance;
+            const errorMessage = errorInstance ? errorInstance.message : 'API returned unsuccessful result';
+            logger.warn(`Model API failed for complexity analysis using model ${modelId}: Type=${errorType}, Message=${errorMessage}`);
+            if (errorInstance && errorInstance.stack) {
+              logger.debug(`Complexity analysis error stack trace: ${errorInstance.stack}`);
+            }
+            throw new Error(`API error: ${errorType} - ${errorMessage}`);
           }
 
           // Successful response, parse it
@@ -464,13 +473,19 @@ export const codeTaskAnalyzer = {
           
         } catch (apiError) {
           lastError = apiError instanceof Error ? apiError : new Error(String(apiError));
+          // Log error details including the model ID
+          logger.warn(`Exception during complexity analysis API call using model ${modelId}: ${lastError.message}`);
+          if (lastError.stack) {
+            logger.debug(`Complexity analysis exception stack trace: ${lastError.stack}`);
+          }
+          
           retryCount++;
           
           if (retryCount <= maxRetries) {
             // Try a different model if available on subsequent attempts
             if (freeModels.length > retryCount) {
               modelId = freeModels[retryCount].id;
-              logger.debug(`Retrying with different model ${modelId}`);
+              logger.debug(`Retrying complexity analysis with different model ${modelId}`);
             }
             
             // Wait before retrying (exponential backoff)
@@ -479,6 +494,7 @@ export const codeTaskAnalyzer = {
             await new Promise(resolve => setTimeout(resolve, backoffTime));
           } else {
             // Max retries exceeded, use pattern-based fallback
+            logger.warn(`Max retries exceeded for complexity analysis using model ${modelId}.`);
             break;
           }
         }
@@ -487,8 +503,8 @@ export const codeTaskAnalyzer = {
       // If all retries failed, use pattern-based fallback
       if (retryCount > maxRetries || !llmAnalysis) {
         // Use pattern-based fallback if API call fails
-        const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
-        logger.warn(`Using pattern-based fallback for complexity analysis: ${errorMessage}`);
+        const finalErrorMessage = lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error after retries');
+        logger.warn(`Using pattern-based fallback for complexity analysis after failures with model(s) ending with ${modelId}. Last error: ${finalErrorMessage}`);
         
         // Calculate an algorithmic complexity based on keywords in the task
         const algorithmicPatterns = [
@@ -553,7 +569,11 @@ export const codeTaskAnalyzer = {
         }
       };
     } catch (error) {
-      logger.error('Error during code complexity analysis:', error);
+      // Enhanced error logging for the entire complexity analysis process
+      logger.error('Error during code complexity analysis process:', error instanceof Error ? error.message : String(error));
+      if (error instanceof Error && error.stack) {
+        logger.debug(`Complexity analysis process error stack: ${error.stack}`);
+      }
       return {
         overallComplexity: 0.5,
         factors: {

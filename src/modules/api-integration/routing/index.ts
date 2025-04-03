@@ -33,30 +33,10 @@ export class Router implements IRouter {
         model: undefined
       });
 
-      // Task breakdown analysis
-      // NOTE: Removed cost confirmation logic as routeTask is now synchronous.
-      // Confirmation might need to be handled by the client before calling this tool.
-      let taskAnalysis = null;
-      let hasSubtasks = false;
-
-      // Check if the execution mode allows any API (free or paid)
-      const allowsAnyAPI = executionMode !== 'Local model only';
-
-      if (allowsAnyAPI) {
-        try {
-          const analysisResult = await decisionEngine.analyzeCodeTask(params.task);
-          taskAnalysis = analysisResult;
-          hasSubtasks = Boolean(analysisResult?.executionOrder?.length);
-          logger.info(`Task analysis complete. Found ${hasSubtasks ? analysisResult.executionOrder.length : 0} subtasks.`);
-        } catch (error) {
-          logger.warn('Error analyzing task:', error);
-          // Continue with normal processing if task analysis fails
-        }
-      }
-
-      // Retriv search
+      // Retriv search - Keep this logic, but maybe adjust condition if needed
       let retrivResults: RetrivSearchResult[] = [];
-      if (!hasSubtasks && userPreferences.prioritizeRetrivSearch) {
+      // We don't know if there are subtasks *yet*, so adjust Retriv logic if it depends on that
+      if (userPreferences.prioritizeRetrivSearch) { // Simplified condition for now
         try {
           const codeSearchEngine = await getCodeSearchEngine();
           const searchResults = await codeSearchEngine.search(params.task, 5);
@@ -97,6 +77,7 @@ export class Router implements IRouter {
       logger.info('Proceeding with full task processing (decomposition, execution, synthesis)');
 
       // Process the task: decompose, assign models, determine order
+      // THIS IS NOW THE *ONLY* PLACE DECOMPOSITION HAPPENS
       const processingResult = await codeTaskCoordinator.processCodeTask(
         params.task,
         { /* Add relevant options if needed, e.g., granularity */ }

@@ -227,9 +227,11 @@ ${result}
       
       // Step 6: Select models for each subtask
       const useResourceEfficient = options.granularity === 'coarse';
+      // Pass the original task description to the model selector for context
       const modelAssignments = await codeModelSelector.selectModelsForSubtasks(
         resolvedTask.subtasks,
-        useResourceEfficient
+        useResourceEfficient,
+        task // Pass original task description
       );
       
       // Step 7: Calculate estimated cost
@@ -291,12 +293,14 @@ ${result}
    * @param subtask The subtask to execute
    * @param model The model to use
    * @param fullContext Optional additional context for the model
+   * @param originalTask Optional original task description for context
    * @returns The model's response
    */
   async executeSubtask(
     subtask: CodeSubtask,
     model: Model,
-    fullContext?: string
+    fullContext?: string,
+    originalTask?: string // Add originalTask parameter
   ): Promise<string> {
     // Enhanced logging: Log detailed subtask information
     logger.info(`------- SUBTASK EXECUTION START -------`);
@@ -305,6 +309,9 @@ ${result}
     logger.info(`Subtask Type: ${subtask.codeType || 'unknown'}`);
     logger.info(`Subtask Complexity: ${subtask.complexity.toFixed(2)}`);
     logger.info(`Assigned Model: ${model.id} (Provider: ${model.provider})`);
+    if (originalTask) {
+      logger.info(`Original Task Context: ${originalTask.substring(0, 100)}...`);
+    }
     
     // Search for relevant code snippets before execution
     let relevantCodeSnippets = '';
@@ -331,15 +338,17 @@ ${result}
       logger.warn('Error finding relevant code snippets:', error);
     }
     
-    // Create a clear, focused prompt for the subtask
-    const prompt = `You are tasked with implementing the following specific part of a larger coding task:
-    
-Task: ${subtask.description}
-${fullContext ? `Context:\n${fullContext}\n\n` : ''}Code Type: ${subtask.codeType}
-Complexity: ${subtask.complexity.toFixed(2)} (0-1 scale)
+    // Create a clear, focused prompt for the subtask, including original task context
+    const prompt = `You are an expert software developer assisting with a larger coding task.
+Original Task: ${originalTask || '[Not Provided]'}
+
+You are now focused *only* on implementing the following specific subtask:
+Subtask Description: ${subtask.description}
+${fullContext ? `Context from dependent subtasks:\n${fullContext}\n\n` : ''}Code Type Expected: ${subtask.codeType}
+Complexity Level: ${subtask.complexity.toFixed(2)} (0-1 scale)
 ${relevantCodeSnippets}
-Please provide a well-structured, high-quality implementation for this specific part of the task.
-Focus only on this subtask, don't worry about other parts of the larger task.`;
+Please provide a high-quality implementation for *only this subtask*, ensuring it aligns with the original task's requirements (including the programming language mentioned in the original task, if any).
+Output only the code required for this subtask. Do not include explanations unless they are comments within the code.`;
 
     // Log the prompt we're sending to the model
     logger.debug(`Prompt for subtask ${subtask.id}:\n${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}`);
@@ -567,7 +576,7 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
       
       try {
         // Execute the subtask
-        const result = await this.executeSubtask(subtask, model, dependencyContext);
+        const result = await this.executeSubtask(subtask, model, dependencyContext, decomposedTask.originalTask); // Pass originalTask
         results.set(subtask.id, result);
         
         // Write the result to the subtask log file

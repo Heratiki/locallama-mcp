@@ -579,37 +579,59 @@ export const benchmarkService = {
       // Ensure the models database is initialized
       await modelsDbService.initialize();
       
-      // Get free models from OpenRouter
-      const freeModels = await costMonitor.getFreeModels();
+      // Create a map to track unique models by ID to prevent duplication
+      const uniqueModelsMap = new Map<string, Model>();
       
-      // Get available models to check for LM Studio models
+      // First, get ALL available models
       const availableModels = await costMonitor.getAvailableModels();
       
-      // Find LM Studio models and add them to the free models pool
+      // Store available LM Studio and Ollama models by ID
+      const localModelsById: Record<string, boolean> = {};
+      availableModels.forEach(model => {
+        if (model.provider === 'lm-studio' || model.provider === 'ollama') {
+          localModelsById[model.id] = true;
+        }
+      });
+      
+      // Get free models from OpenRouter
+      const freeOpenRouterModels = await costMonitor.getFreeModels();
+      logger.info(`Found ${freeOpenRouterModels.length} free models from OpenRouter`);
+      
+      // Add free OpenRouter models to unique models map
+      // Exclude any that might already be in local models (shouldn't happen, but just in case)
+      freeOpenRouterModels.forEach(model => {
+        if (!localModelsById[model.id]) {
+          uniqueModelsMap.set(model.id, model);
+        }
+      });
+      
+      // Find LM Studio models and add them to the unique models map
       const lmStudioModels = availableModels.filter(m => m.provider === 'lm-studio');
-      
-      // Find Ollama models and add them to the free models pool
-      const ollamaModels = availableModels.filter(m => m.provider === 'ollama');
-      
-      // Combine OpenRouter free models with LM Studio and Ollama models
-      let allFreeModels = [...freeModels];
-      
       if (lmStudioModels.length > 0) {
         logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool for benchmarking`);
-        allFreeModels = [...allFreeModels, ...lmStudioModels];
+        lmStudioModels.forEach(model => {
+          uniqueModelsMap.set(model.id, model);
+        });
       }
       
+      // Find Ollama models and add them to the unique models map
+      const ollamaModels = availableModels.filter(m => m.provider === 'ollama');
       if (ollamaModels.length > 0) {
         logger.info(`Including ${ollamaModels.length} Ollama models in free models pool for benchmarking`);
-        allFreeModels = [...allFreeModels, ...ollamaModels];
+        ollamaModels.forEach(model => {
+          uniqueModelsMap.set(model.id, model);
+        });
       }
+      
+      // Convert map to array for further processing
+      const allFreeModels = Array.from(uniqueModelsMap.values());
       
       if (allFreeModels.length === 0) {
         logger.warn('No free models available to benchmark');
         return;
       }
       
-      logger.info(`Found ${allFreeModels.length} free models to benchmark`);
+      logger.info(`Found ${allFreeModels.length} unique free models to benchmark`);
       
       // Define test tasks with normalized names and varying complexity
       const benchmarkTasks = [

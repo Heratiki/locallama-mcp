@@ -31,7 +31,7 @@ export type ModelPerformanceTracker = {
  */
 export const codeModelSelector = {
   // Public methods are now defined directly inside the object
-  async findBestModelForSubtask(subtask: CodeSubtask): Promise<Model | null> {
+  async findBestModelForSubtask(subtask: CodeSubtask, originalTask?: string): Promise<Model | null> {
     logger.debug(`Finding best model for subtask: ${subtask.description}`);
     
     try {
@@ -83,7 +83,7 @@ export const codeModelSelector = {
       // Score all suitable models
       const scoredModels = await Promise.all(
         suitableModels.map(async model => {
-          const score = await this.scoreModelForSubtask(model, subtask, perfAnalysis);
+          const score = await this.scoreModelForSubtask(model, subtask, perfAnalysis, originalTask);
           return { model, score };
         })
       );
@@ -120,10 +120,32 @@ export const codeModelSelector = {
   async scoreModelForSubtask(
     model: Model, 
     subtask: CodeSubtask,
-    perfAnalysis: ModelPerformanceAnalysis
+    perfAnalysis: ModelPerformanceAnalysis,
+    originalTask?: string // Add originalTask context
   ): Promise<number> {
       // Check if model performance tracker is initialized
       const hasPerformanceData = this._modelPerformanceTracker !== null;
+      
+      // --- Language Matching Boost ---
+      let languageBoost = 0;
+      if (originalTask) {
+        const taskLower = originalTask.toLowerCase();
+        const modelIdLower = model.id.toLowerCase();
+        // Basic keyword matching for common languages
+        if (taskLower.includes('python') && (modelIdLower.includes('python') || modelIdLower.includes('py'))) languageBoost = 0.15;
+        else if (taskLower.includes('javascript') && (modelIdLower.includes('javascript') || modelIdLower.includes('js'))) languageBoost = 0.15;
+        else if (taskLower.includes('typescript') && (modelIdLower.includes('typescript') || modelIdLower.includes('ts'))) languageBoost = 0.15;
+        else if (taskLower.includes('java') && modelIdLower.includes('java')) languageBoost = 0.15;
+        else if (taskLower.includes('go') && (modelIdLower.includes('go') || modelIdLower.includes('golang'))) languageBoost = 0.15;
+        else if (taskLower.includes('c++') && (modelIdLower.includes('c++') || modelIdLower.includes('cpp'))) languageBoost = 0.15;
+        else if (taskLower.includes('c#') && (modelIdLower.includes('c#') || modelIdLower.includes('csharp'))) languageBoost = 0.15;
+        // Add more languages as needed
+        
+        if (languageBoost > 0) {
+            logger.debug(`Applying language boost (${languageBoost.toFixed(2)}) for model ${model.id} based on task: "${originalTask.substring(0,50)}..."`);
+        }
+      }
+      // -----------------------------
       
       // If tracker isn't initialized or we can\'t access it, use balanced fallback scoring
       if (!this._modelPerformanceTracker) {
@@ -141,6 +163,9 @@ export const codeModelSelector = {
           if (model.id.toLowerCase().includes('instruct')) {
               score += 0.05;
           }
+          
+          // Apply language boost here as well
+          score += languageBoost;
           
           // Consider complexity - larger/remote models for complex tasks
           if (subtask.complexity > 0.7) {
@@ -199,6 +224,9 @@ export const codeModelSelector = {
     
     // Additional boosts for specific capabilities
     score = this.applyCapabilityBoosts(score, model, subtask);
+    
+    // Apply Language Matching Boost
+    score += languageBoost;
     
     // Boost OpenRouter models to encourage their selection
     if (model.provider === 'openrouter') {
@@ -310,8 +338,14 @@ export const codeModelSelector = {
 
   async selectModelsForSubtasks(
     subtasks: CodeSubtask[],
-    useResourceEfficient = false
+    useResourceEfficient = false,
+    originalTask?: string // Add originalTask as an optional parameter
   ): Promise<Map<string, Model>> {
+    // Add logging to show the original task context if provided
+    if (originalTask) {
+      logger.debug(`Selecting models for subtasks with original task context: "${originalTask.substring(0, 100)}..."`);
+    }
+    
     if (useResourceEfficient) {
       // Use the new optimized resource distribution method
       const availableModels = [
@@ -319,12 +353,14 @@ export const codeModelSelector = {
         ...(await costMonitor.getFreeModels())
       ];
 
-      return this.optimizeResourceUsage(subtasks, availableModels);
+      // Pass originalTask to the optimization method
+      return this.optimizeResourceUsage(subtasks, availableModels, originalTask);
     } else {
       // Simple strategy - just pick the best model for each subtask
       const assignments = new Map<string, Model>();
       for (const subtask of subtasks) {
-        const model = await this.findBestModelForSubtask(subtask);
+        // Pass originalTask to findBestModelForSubtask
+        const model = await this.findBestModelForSubtask(subtask, originalTask);
         if (model) {
           assignments.set(subtask.id, model);
         } else {
@@ -567,11 +603,13 @@ export const codeModelSelector = {
   // New method to optimize resource distribution
   async optimizeResourceUsage(
     subtasks: CodeSubtask[],
-    availableModels: Model[]
+    availableModels: Model[],
+    originalTask?: string // Accept originalTask here
   ): Promise<Map<string, Model>> {
     if (!this._modelPerformanceTracker) {
       logger.warn('Model performance tracker not initialized, using simple assignment');
-      return this.selectModelsForSubtasks(subtasks, false);
+      // Pass originalTask to the fallback simple assignment
+      return this.selectModelsForSubtasks(subtasks, false, originalTask);
     }
 
     const assignments = new Map<string, Model>();
@@ -595,7 +633,8 @@ export const codeModelSelector = {
       let bestScore = 0;
 
       for (const model of availableModels) {
-        const score = await this.scoreModelForSubtask(model, subtask, perfAnalysis);
+        // Pass originalTask to the scoring function
+        const score = await this.scoreModelForSubtask(model, subtask, perfAnalysis, originalTask);
         if (score > bestScore) {
           bestScore = score;
           bestModel = model;
@@ -639,7 +678,8 @@ export const codeModelSelector = {
               Math.max(0, subtask.complexity - 0.1),
               Math.min(1, subtask.complexity + 0.1)
             );
-            const score = await this.scoreModelForSubtask(m, subtask, perfAnalysis);
+            // Pass originalTask to scoring function for alternatives
+            const score = await this.scoreModelForSubtask(m, subtask, perfAnalysis, originalTask);
             return { model: m, score };
           });
 

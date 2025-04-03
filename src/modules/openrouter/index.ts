@@ -761,13 +761,30 @@ export const openRouterModule = {
       // Improved error logging and handling
       const errorType = this.handleOpenRouterError(error as Error);
       const errorInstance = error instanceof Error ? error : new Error(String(error));
-      logger.error(`Error calling OpenRouter API for model ${modelId}: ${errorInstance.message}`, errorInstance);
+      
+      // Log more details from AxiosError if available
+      let detailedErrorMessage = errorInstance.message;
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        if (axiosError.response?.data) {
+          detailedErrorMessage += ` | Response Data: ${JSON.stringify(axiosError.response.data)}`;
+        }
+        if (axiosError.response?.status) {
+          detailedErrorMessage += ` | Status: ${axiosError.response.status}`;
+        }
+        if (axiosError.code) {
+          detailedErrorMessage += ` | Code: ${axiosError.code}`;
+        }
+      }
+      
+      logger.error(`Error calling OpenRouter API for model ${modelId}: ${detailedErrorMessage}`, errorInstance);
       
       // Return structured error instead of re-throwing
       return {
         success: false,
         error: errorType,
-        errorInstance
+        // Pass the original error instance along for potentially more context
+        errorInstance: new Error(`${errorType}: ${detailedErrorMessage}`) 
       };
     }
   },
