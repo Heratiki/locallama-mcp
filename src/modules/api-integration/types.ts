@@ -1,5 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { BroadcastJobsFunction } from '../websocket-server/ws-server-types.js';
 
 export interface IToolDefinitionProvider {
   /**
@@ -151,43 +152,59 @@ export interface IJobManager {
   /**
    * Create a new job
    */
-  createJob(jobId: string, task: string, model: string): void;
+  createJob(jobId: string, task: string, model?: string): Promise<string>;
 
   /**
    * Update the progress of a job
    */
-  updateJobProgress(jobId: string, progress: number, timeout?: number): void;
+  updateJobProgress(jobId: string, progress: number, timeout?: number): Promise<void>;
 
   /**
    * Mark a job as completed
    */
-  completeJob(jobId: string, results?: string[]): void;
+  completeJob(jobId: string, results?: string[]): Promise<void>;
 
   /**
    * Mark a job as failed
    */
-  failJob(jobId: string, message: string): void;
+  failJob(jobId: string, message: string): Promise<void>;
 
   /**
    * Cancel a job
    */
-  cancelJob(jobId: string): void;
+  cancelJob(jobId: string): Promise<void>;
 
   /**
    * Get job details
    */
-  getJob(jobId: string): Job | null;
+  getJob(jobId: string): Job | undefined | null;
+
+  /**
+   * Get active jobs
+   */
+  getActiveJobs(): Job[];
+
+  /**
+   * Get all jobs
+   */
+  getAllJobs(): Job[];
+
+  /**
+   * Set the broadcast function - needed to break circular dependency
+   */
+  setBroadcastFunction(fn: BroadcastJobsFunction): void;
 }
 
 export interface Job {
   id: string;
   task: string;
-  model: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
-  progress: number;
+  status: string;
+  progress: string;
+  estimated_time_remaining: string;
   startTime: number;
-  endTime?: number;
+  model?: string;
   error?: string;
+  processId?: number;
 }
 
 export interface IRouter {

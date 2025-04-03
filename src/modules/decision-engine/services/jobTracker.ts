@@ -1,6 +1,7 @@
 import { logger } from '../../../utils/logger.js';
 import { WebSocketServer } from 'ws';
-import { broadcastJobs } from '../../websocket-server/ws-server.js';
+// Import this type but don't import the function directly to avoid circular dependency
+import type { BroadcastJobsFunction } from '../../websocket-server/ws-server-types.js';
 import net from 'net';
 import EventEmitter from 'events';
 
@@ -48,6 +49,8 @@ export class JobTracker extends EventEmitter {
   private wss: WebSocketServer | null = null;
   private readonly BASE_PORT = 8080;
   private readonly MAX_PORT = 8180;
+  // Store broadcast function dynamically to avoid circular dependency
+  private broadcastFunction: BroadcastJobsFunction | null = null;
 
   private constructor() {
     super();
@@ -61,6 +64,12 @@ export class JobTracker extends EventEmitter {
       await JobTracker.instance.initializeTracker();
     }
     return JobTracker.instance;
+  }
+
+  // Method to set the broadcast function after initialization to avoid circular dependency
+  public setBroadcastFunction(fn: BroadcastJobsFunction): void {
+    this.broadcastFunction = fn;
+    logger.debug('Broadcast function set in JobTracker');
   }
 
   private isPortAvailable(port: number): Promise<boolean> {
@@ -319,12 +328,14 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    if (this.wss) {
+    if (this.wss && this.broadcastFunction) {
       try {
-        await broadcastJobs(this.wss);
+        await this.broadcastFunction(this.wss);
       } catch (error) {
         logger.error('Failed to broadcast job update:', error);
       }
+    } else if (this.wss) {
+      logger.warn('Broadcast function not set in JobTracker');
     }
   }
 

@@ -9,8 +9,9 @@ import { initDatabase, getAllJobsFromDb } from './db.js';
 import { logger } from '../../utils/logger.js';
 import { benchmarkModule } from '../benchmark/index.js';
 import { config } from '../../config/index.js';
-// Import getJobTracker
+// Keep these imports, but we'll use getJobTracker differently
 import { getJobTracker } from '../decision-engine/services/jobTracker.js';
+import { BroadcastJobsFunction } from './ws-server-types.js';
 
 // Map internal job status to API job status
 const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' => {
@@ -37,6 +38,51 @@ export async function initJobTracker(tracker: unknown): Promise<void> {
   jobTracker = tracker as IJobManager;
   logger.info('JobTracker initialized in WebSocket server');
 }
+
+// Export broadcast function to be registered with JobTracker
+export const broadcastJobs: BroadcastJobsFunction = async (wss: WebSocketServer): Promise<void> => {
+    try {
+        // Ensure JobTracker is initialized - but do NOT try to get it here
+        // as that would reintroduce the circular dependency
+        if (!jobTracker) {
+            logger.warn('JobTracker not initialized in broadcastJobs');
+            // Don't attempt to re-initialize here - this would cause circular dependency
+            return;
+        }
+
+        // Get jobs from database even if JobTracker initialization fails
+        const allJobs = await getAllJobsFromDb();
+        const activeJobs = allJobs.filter(job => job.status === 'pending' || job.status === 'in_progress');
+        
+        const jobData = {
+            activeJobs,
+            allJobs
+        };
+
+        const clients = Array.from(wss.clients)
+            .filter(client => client.readyState === WebSocket.OPEN);
+
+        if (clients.length === 0) {
+            logger.debug('No connected clients to broadcast to');
+            return;
+        }
+
+        await Promise.all(
+            clients.map(client => 
+                new Promise<void>((resolve) => {
+                    client.send(JSON.stringify(jobData), (err) => {
+                        if (err) {
+                            logger.warn('Error broadcasting to client:', err);
+                        }
+                        resolve();
+                    });
+                })
+            )
+        );
+    } catch (error) {
+        logger.error('Error broadcasting jobs:', error instanceof Error ? error.message : String(error));
+    }
+};
 
 async function findAvailablePort(start: number, end: number): Promise<number> {
   for (let port = start; port <= end; port++) {
@@ -182,55 +228,6 @@ async function startExpressServer() {
       resolve(server);
     });
   });
-}
-
-export async function broadcastJobs(wss: WebSocketServer): Promise<void> {
-    try {
-        // Ensure JobTracker is initialized
-        if (!jobTracker) {
-            logger.warn('JobTracker not initialized in broadcastJobs');
-            try {
-                const tracker = await getJobTracker();
-                await initJobTracker(tracker);
-                logger.info('JobTracker initialized during broadcast');
-            } catch (error) {
-                logger.error('Failed to initialize JobTracker during broadcast:', error);
-                // Continue with database fallback
-            }
-        }
-
-        // Get jobs from database even if JobTracker initialization fails
-        const allJobs = await getAllJobsFromDb();
-        const activeJobs = allJobs.filter(job => job.status === 'pending' || job.status === 'in_progress');
-        
-        const jobData = {
-            activeJobs,
-            allJobs
-        };
-
-        const clients = Array.from(wss.clients)
-            .filter(client => client.readyState === WebSocket.OPEN);
-
-        if (clients.length === 0) {
-            logger.debug('No connected clients to broadcast to');
-            return;
-        }
-
-        await Promise.all(
-            clients.map(client => 
-                new Promise<void>((resolve) => {
-                    client.send(JSON.stringify(jobData), (err) => {
-                        if (err) {
-                            logger.warn('Error broadcasting to client:', err);
-                        }
-                        resolve();
-                    });
-                })
-            )
-        );
-    } catch (error) {
-        logger.error('Error broadcasting jobs:', error instanceof Error ? error.message : String(error));
-    }
 }
 
 async function cancelJob(jobId: string): Promise<void> {
@@ -865,6 +862,10 @@ async function init() {
     });
 
     try {
+      // Set broadcastJobs function on the tracker to avoid circular dependency
+      trackerInstance.setBroadcastFunction(broadcastJobs);
+      
+      // Then initialize JobTracker in this module
       await initJobTracker(trackerInstance);
       logger.info('JobTracker instance initialized in ws-server');
     } catch (error) {
