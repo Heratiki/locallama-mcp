@@ -825,18 +825,62 @@ export const codeTaskAnalyzer = {
    */
   parseComplexityFromResponse(response: string): CodeComplexityResult {
     try {
+      // Safety check for empty or array responses
+      if (!response || response.trim() === '' || 
+          response.trim() === '[]' || response.trim() === '[{}]' ||
+          response.trim() === '{}') {
+        logger.warn(`Received empty or invalid complexity response: "${response}"`);
+        return {
+          overallComplexity: 0.5,
+          factors: {
+            algorithmic: 0.5,
+            integration: 0.5,
+            domainKnowledge: 0.5,
+            technical: 0.5
+          },
+          explanation: 'Model returned empty or invalid complexity analysis.'
+        };
+      }
+
       // Try to extract JSON object first
       const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || 
                         response.match(/\{[\s\S]*?\}/);
       
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const parsed: unknown = JSON.parse(jsonStr);
+        
+        // Add additional safety checks before parsing
+        if (!jsonStr || jsonStr.trim() === '{}' || jsonStr.trim() === '[]' || jsonStr.trim() === '[{}]') {
+          logger.warn(`Matched JSON is empty or invalid: "${jsonStr}"`);
+          throw new Error('Empty or invalid JSON response');
+        }
+        
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(jsonStr);
+        } catch (jsonError) {
+          logger.warn(`Failed to parse complexity JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+          throw jsonError; // Re-throw to trigger fallback parsing
+        }
         
         // Use type-safe validation with Record<string, unknown>
         if (
           typeof parsed === 'object' && parsed !== null
         ) {
+          // Handle array responses (some models may wrap in an array)
+          if (Array.isArray(parsed)) {
+            if (parsed.length === 0) {
+              throw new Error('Empty array in response');
+            }
+            
+            // Try to use the first element if it's an object
+            if (typeof parsed[0] === 'object' && parsed[0] !== null) {
+              parsed = parsed[0];
+            } else {
+              throw new Error('Array does not contain valid complexity object');
+            }
+          }
+          
           const candidate = parsed as Record<string, unknown>;
           
           // Validate required fields and their types
