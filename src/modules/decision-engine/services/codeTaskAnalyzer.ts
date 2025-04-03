@@ -12,6 +12,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../../config/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
+import { Model } from '../../../types/index.js';
 
 // Define a type for the raw subtask data parsed from the model response
 type RawSubtask = {
@@ -262,34 +263,104 @@ export const codeTaskAnalyzer = {
       
       // Try to use a free model for complexity analysis
       let modelId = config.defaultLocalModel;
+      let freeModels: Model[] = [];
+      
       try {
-        const freeModels = await costMonitor.getFreeModels();
+        freeModels = await costMonitor.getFreeModels();
         if (freeModels.length > 0) {
           modelId = freeModels[0].id;
           logger.debug(`Using free model ${modelId} for complexity analysis`);
+        } else {
+          logger.warn('No free models available, falling back to default model');
         }
       } catch (error) {
         logger.debug('Error getting free models, falling back to default:', error);
       }
       
-      let llmAnalysis: CodeComplexityResult;
+      // Initialize llmAnalysis with a default value
+      let llmAnalysis: CodeComplexityResult = {
+        overallComplexity: 0.5,
+        factors: {
+          algorithmic: 0.5,
+          integration: avgIntegrationComplexity,
+          domainKnowledge: avgDomainComplexity,
+          technical: avgTechnicalComplexity
+        },
+        explanation: 'Default complexity analysis before model API call.'
+      };
       
-      try {
-        const result = await openRouterModule.callOpenRouterApi(
-          modelId,
-          prompt,
-          30000 // 30 seconds timeout
-        );
+      // Add retry mechanism for OpenRouter API calls
+      let retryCount = 0;
+      const maxRetries = 2;
+      let lastError: Error | null = null;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          logger.debug(`Attempt ${retryCount + 1}/${maxRetries + 1} to call model API for complexity analysis`);
+          
+          const result = await openRouterModule.callOpenRouterApi(
+            modelId,
+            prompt,
+            30000 // 30 seconds timeout
+          );
 
-        if (!result.success || !result.text) {
-          logger.warn('Model API failed for complexity analysis, using fallback strategy');
-          throw new Error('API returned unsuccessful result');
+          if (!result.success || !result.text) {
+            // Check for specific error types to determine if retry is appropriate
+            if (result.error && ['rate_limit', 'server_error'].includes(result.error)) {
+              // These errors are retryable
+              lastError = result.errorInstance || new Error(`API error: ${result.error}`);
+              retryCount++;
+              
+              if (retryCount <= maxRetries) {
+                // Try a different model if available on subsequent attempts
+                if (freeModels.length > retryCount) {
+                  modelId = freeModels[retryCount].id;
+                  logger.debug(`Retrying with different model ${modelId}`);
+                }
+                
+                // Wait before retrying (exponential backoff)
+                const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
+                logger.debug(`Waiting ${backoffTime}ms before retry`);
+                await new Promise(resolve => setTimeout(resolve, backoffTime));
+                continue;
+              }
+            }
+            
+            // Non-retryable error or max retries exceeded
+            logger.warn(`Model API failed for complexity analysis: ${result.error || 'Unknown error'}`);
+            throw new Error(result.error ? `API error: ${result.error}` : 'API returned unsuccessful result');
+          }
+
+          // Successful response, parse it
+          llmAnalysis = this.parseComplexityFromResponse(result.text);
+          break; // Exit the retry loop on success
+          
+        } catch (apiError) {
+          lastError = apiError instanceof Error ? apiError : new Error(String(apiError));
+          retryCount++;
+          
+          if (retryCount <= maxRetries) {
+            // Try a different model if available on subsequent attempts
+            if (freeModels.length > retryCount) {
+              modelId = freeModels[retryCount].id;
+              logger.debug(`Retrying with different model ${modelId}`);
+            }
+            
+            // Wait before retrying (exponential backoff)
+            const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
+            logger.debug(`Waiting ${backoffTime}ms before retry`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          } else {
+            // Max retries exceeded, use pattern-based fallback
+            break;
+          }
         }
-
-        llmAnalysis = this.parseComplexityFromResponse(result.text);
-      } catch (apiError) {
+      }
+      
+      // If all retries failed, use pattern-based fallback
+      if (retryCount > maxRetries || !llmAnalysis) {
         // Use pattern-based fallback if API call fails
-        const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+        const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
         logger.warn(`Using pattern-based fallback for complexity analysis: ${errorMessage}`);
         
         // Calculate an algorithmic complexity based on keywords in the task
