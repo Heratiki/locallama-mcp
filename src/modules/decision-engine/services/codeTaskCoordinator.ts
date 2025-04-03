@@ -621,262 +621,275 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
   },
   
   /**
-   * Synthesize final results after executing all subtasks
+   * Helper function to integrate a small group of related subtasks.
    * 
-   * @param decomposedTask The decomposed task
-   * @param subtaskResults The results from each subtask
-   * @returns Synthesized final result
+   * @param subtasksToIntegrate List of subtasks to integrate.
+   * @param subtaskResults Map containing results for these subtasks.
+   * @param originalTask The original high-level task description.
+   * @returns The integrated code snippet.
+   */
+  async integrateSubtasks(
+    subtasksToIntegrate: CodeSubtask[],
+    subtaskResults: Map<string, string>,
+    originalTask: string
+  ): Promise<string> {
+    if (subtasksToIntegrate.length === 0) return '';
+    if (subtasksToIntegrate.length === 1) return subtaskResults.get(subtasksToIntegrate[0].id) || '';
+
+    logger.info(`Integrating ${subtasksToIntegrate.length} subtasks: ${subtasksToIntegrate.map(s => s.id).join(', ')}`);
+
+    let integrationContext = `Original Task: ${originalTask}\n\nSubtasks to Integrate:\n`;
+    for (const subtask of subtasksToIntegrate) {
+      const result = subtaskResults.get(subtask.id);
+      if (result) {
+        integrationContext += `\n--- Subtask: ${subtask.description} (ID: ${subtask.id}) ---\n`;
+        integrationContext += '```\n' + result + '\n```\n';
+      }
+    }
+
+    const integrationPrompt = `You are an expert software developer tasked with integrating code components.
+Given the original task and the following code snippets generated for specific subtasks, please integrate them into a single, coherent code block.
+Ensure that functions call each other correctly, data flows appropriately, and the combined code addresses the integration requirements implied by the subtask descriptions and original task.
+
+${integrationContext}
+
+Please provide only the integrated code, without explanations or wrappers, unless the integration itself requires comments.`;
+
+    // Model selection logic (similar to synthesizeFinalResult, maybe slightly smaller models are okay here)
+    const modelsToTry = await this.selectModelsForIntegration(integrationContext.length);
+    
+    let integratedCode: string | null = null;
+    let integrationModel: Model | null = null;
+
+    for (const model of modelsToTry) {
+      try {
+        logger.debug(`Attempting integration step with model: ${model.id}`);
+        let result;
+        switch (model.provider) {
+          case 'lm-studio':
+            const lmId = model.id.startsWith('lm-studio:') ? model.id.substring(10) : model.id;
+            result = await lmStudioModule.callLMStudioApi(lmId, integrationPrompt, 120000); // 2 min timeout
+            break;
+          case 'ollama':
+            const olId = model.id.startsWith('ollama:') ? model.id.substring(7) : model.id;
+            result = await ollamaModule.callOllamaApi(olId, integrationPrompt, 120000);
+            break;
+          default:
+            result = await openRouterModule.callOpenRouterApi(model.id, integrationPrompt, 120000);
+            break;
+        }
+
+        if (result.success && result.text) {
+          // Basic validation: check if it's not empty and contains some code-like structure
+          if (result.text.trim().length > 50 && result.text.includes('def ') || result.text.includes('class ') || result.text.includes('import ')) {
+            integratedCode = result.text;
+            integrationModel = model;
+            logger.info(`Integration step successful with model ${model.id}`);
+            break; // Success
+          } else {
+            logger.warn(`Model ${model.id} returned minimal or non-code content for integration.`);
+          }
+        } else {
+          logger.warn(`Integration step failed with model ${model.id}: ${result.error || 'Unknown error'}`);
+        }
+      } catch (error) {
+        logger.warn(`Error during integration step with model ${model.id}:`, error);
+      }
+    }
+
+    if (!integratedCode) {
+      logger.error(`Integration step failed for subtasks: ${subtasksToIntegrate.map(s => s.id).join(', ')}. Returning combined inputs.`);
+      // Fallback: return the combined inputs if integration fails
+      return subtasksToIntegrate.map(s => subtaskResults.get(s.id) || '').join('\n\n# --- End of Subtask ---\n\n');
+    }
+
+    return integratedCode;
+  },
+
+  /**
+   * Helper to select models suitable for an integration step.
+   * @param contextLength Estimated length of the context for the integration prompt.
+   * @returns Array of models to try.
+   */
+  async selectModelsForIntegration(contextLength: number): Promise<Model[]> {
+      const availableModels = await costMonitor.getAvailableModels();
+      const freeModels = await costMonitor.getFreeModels();
+      const allModels = [...freeModels, ...availableModels]; // Prioritize free models
+
+      // Filter models that can handle the context length and are generally good at coding/instruct
+      const suitableModels = allModels
+        .filter(model => 
+          (model.contextWindow || 4096) >= contextLength &&
+          (model.id.toLowerCase().includes('code') || 
+           model.id.toLowerCase().includes('instruct') || 
+           model.id.toLowerCase().includes('opus') || // High capability models
+           model.id.toLowerCase().includes('sonnet') ||
+           model.id.toLowerCase().includes('gpt-4'))
+        )
+        .sort((a, b) => (b.contextWindow || 0) - (a.contextWindow || 0)); // Sort by context window
+
+      // Limit the number of models to try for integration steps
+      const modelsToTry = suitableModels.slice(0, 5); 
+
+      if (modelsToTry.length === 0) {
+          // Fallback if no suitable models found
+          modelsToTry.push({
+              id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai',
+              capabilities: { chat: true, completion: true }, costPerToken: { prompt: 0.000001, completion: 0.000002 }
+          });
+      }
+      return modelsToTry;
+  },
+
+  /**
+   * Synthesize final results after executing all subtasks using progressive integration.
+   * 
+   * @param decomposedTask The decomposed task.
+   * @param subtaskResults The results from each subtask.
+   * @param modelAssignments Map of subtask IDs to the models that executed them.
+   * @returns Synthesized final result.
    */
   async synthesizeFinalResult(
     decomposedTask: DecomposedCodeTask,
     subtaskResults: Map<string, string>,
-    modelAssignments?: Map<string, Model> // Added parameter to track which model generated each part
+    modelAssignments?: Map<string, Model> 
   ): Promise<string> {
-    logger.info(`======= SYNTHESIZING FINAL RESULT =======`);
+    logger.info(`======= STARTING PROGRESSIVE SYNTHESIS =======`);
     logger.info(`Original task: ${decomposedTask.originalTask}`);
-    logger.info(`Number of subtask results to synthesize: ${subtaskResults.size}`);
-    
-    // Build a combined result with all outputs
-    let combinedResults = `# Results for coding task: ${decomposedTask.originalTask}\n\n`;
-    
-    // Get execution order for a sensible presentation
+    logger.info(`Number of subtask results: ${subtaskResults.size}`);
+
     const executionOrder = dependencyMapper.sortByExecutionOrder(decomposedTask);
-    
-    // Track models used for each part to include in the final result
-    logger.info(`===== RESULTS BY SUBTASK =====`);
-    for (const subtask of executionOrder) {
-      const result = subtaskResults.get(subtask.id);
-      if (result) {
-        // Get the model that was used for this subtask
-        const model = modelAssignments?.get(subtask.id);
-        const modelInfo = model ? ` (Generated by: ${model.id})` : '';
-        
-        logger.info(`Subtask ${subtask.id}${model ? ` used model: ${model.id}` : ''}`);
-        
-        // Add subtask and result to combined results with model information
-        combinedResults += `## ${subtask.description}${modelInfo}\n\n`;
-        combinedResults += '```\n' + result + '\n```\n\n';
-      } else {
-        logger.warn(`Missing result for subtask ${subtask.id}`);
-      }
+    const integratedResults = new Map<string, string>(subtaskResults); // Start with raw results
+    let finalIntegratedCode = '';
+    let finalIntegrationModelId = 'N/A';
+
+    if (executionOrder.length === 0) {
+      logger.warn('No subtasks found in execution order for synthesis.');
+      return '# Error: No subtasks were executed.';
     }
     
-    // Use a model to synthesize the final result
-    try {
-      // Get all available models, sorted by capability
-      const availableModels = await costMonitor.getAvailableModels();
-      const freeModels = await costMonitor.getFreeModels();
-      
-      // Create an array of models to try, prioritizing free ones first
-      const modelsToTry: Model[] = [];
-      
-      // Add free models first (they're usually faster)
-      if (freeModels.length > 0) {
-        // Sort free models by potential quality (larger context windows often correlate with better quality)
-        const sortedFreeModels = [...freeModels].sort((a, b) => 
-          (b.contextWindow || 0) - (a.contextWindow || 0)
-        );
-        
-        for (const model of sortedFreeModels) {
-          if ((model.contextWindow || 0) >= combinedResults.length) {
-            modelsToTry.push(model);
-          }
-        }
-      }
-      
-      // Check if LM-Studio is available
-      let lmStudioModels: Model[] = [];
-      try {
-        const lmStudioAvailable = await fallbackHandler.checkServiceAvailability('lm-studio');
-        if (lmStudioAvailable) {
-          lmStudioModels = await lmStudioModule.getAvailableModels();
-          // Add LM-Studio models to the list of models to try
-          if (lmStudioModels.length > 0) {
-            // Prioritize larger context windows and instruct models
-            const sortedLMStudioModels = lmStudioModels
-              .filter(model => (model.contextWindow || 0) >= combinedResults.length)
-              .sort((a, b) => {
-                // Prioritize models with "instruct" in their name
-                const aHasInstruct = a.id.toLowerCase().includes('instruct') ? 1 : 0;
-                const bHasInstruct = b.id.toLowerCase().includes('instruct') ? 1 : 0;
-                
-                if (aHasInstruct !== bHasInstruct) {
-                  return bHasInstruct - aHasInstruct;
-                }
-                
-                // Then sort by context window size
-                return (b.contextWindow || 0) - (a.contextWindow || 0);
-              });
-            
-            // Add top 3 LM-Studio models (to avoid trying too many)
-            modelsToTry.push(...sortedLMStudioModels.slice(0, 3));
-          }
-        }
-      } catch (error) {
-        logger.warn('Error checking LM-Studio availability:', error);
-      }
-      
-      // Check if Ollama is available
-      let ollamaModels: Model[] = [];
-      try {
-        const ollamaAvailable = await fallbackHandler.checkServiceAvailability('ollama');
-        if (ollamaAvailable) {
-          ollamaModels = await ollamaModule.getAvailableModels();
-          // Add Ollama models to the list of models to try
-          if (ollamaModels.length > 0) {
-            // Prioritize larger context windows and instruct models
-            const sortedOllamaModels = ollamaModels
-              .filter(model => (model.contextWindow || 0) >= combinedResults.length)
-              .sort((a, b) => {
-                // Prioritize models with "instruct" in their name
-                const aHasInstruct = a.id.toLowerCase().includes('instruct') ? 1 : 0;
-                const bHasInstruct = b.id.toLowerCase().includes('instruct') ? 1 : 0;
-                
-                if (aHasInstruct !== bHasInstruct) {
-                  return bHasInstruct - aHasInstruct;
-                }
-                
-                // Then sort by context window size
-                return (b.contextWindow || 0) - (a.contextWindow || 0);
-              });
-            
-            // Add top 3 Ollama models (to avoid trying too many)
-            modelsToTry.push(...sortedOllamaModels.slice(0, 3));
-          }
-        }
-      } catch (error) {
-        logger.warn('Error checking Ollama availability:', error);
-      }
-      
-      // If we have no models to try, use GPT-3.5 Turbo as fallback
-      if (modelsToTry.length === 0) {
-        modelsToTry.push({
-          id: 'gpt-3.5-turbo',
-          name: 'GPT-3.5 Turbo',
-          provider: 'openai',
-          capabilities: {
-            chat: true,
-            completion: true
-          },
-          costPerToken: {
-            prompt: 0.000001,
-            completion: 0.000002
-          }
-        });
-      }
-      
-      logger.info(`Will try synthesis with ${modelsToTry.length} models: ${modelsToTry.map(m => m.id).join(', ')}`);
-      
-      const synthesisPrompt = `I've broken down a coding task into subtasks and have results for each. 
-Please synthesize these into a coherent final solution.
-Original Task: ${decomposedTask.originalTask}
-Subtask Results:
-${combinedResults}
-Please provide a clean, consolidated solution that integrates all the components properly. Your output should include complete code that combines all the subtask solutions into a working implementation.`;
+    if (executionOrder.length === 1) {
+        // If only one subtask, return its result directly
+        const singleSubtaskId = executionOrder[0].id;
+        finalIntegratedCode = integratedResults.get(singleSubtaskId) || '';
+        finalIntegrationModelId = modelAssignments?.get(singleSubtaskId)?.id || 'N/A';
+        logger.info('Only one subtask, returning its result directly.');
+    } else {
+        // Process subtasks iteratively based on dependencies
+        const processedSubtasks = new Set<string>();
 
-      // Try multiple models sequentially until we get a good result
-      let synthesisModel: Model | null = null;
-      let synthesizedText: string | null = null;
-      
-      for (const model of modelsToTry) {
-        try {
-          logger.info(`Attempting synthesis with model: ${model.id} (${model.provider})`);
-          let result;
-          
-          // Use the appropriate API based on the model provider
-          switch (model.provider) {
-            case 'lm-studio': {
-              // Remove prefix if present
-              const modelId = model.id.startsWith('lm-studio:') ? model.id.substring(10) : model.id;
-              result = await lmStudioModule.callLMStudioApi(modelId, synthesisPrompt, 180000); // 3 minutes timeout
-              break;
+        for (const currentSubtask of executionOrder) {
+            if (processedSubtasks.has(currentSubtask.id)) {
+                continue; // Already processed as part of an earlier integration
             }
-            case 'ollama': {
-              // Remove prefix if present
-              const modelId = model.id.startsWith('ollama:') ? model.id.substring(7) : model.id;
-              result = await ollamaModule.callOllamaApi(modelId, synthesisPrompt, 180000); // 3 minutes timeout
-              break;
-            }
-            default: {
-              // Use OpenRouter for other providers
-              result = await openRouterModule.callOpenRouterApi(model.id, synthesisPrompt, 180000); // 3 minutes timeout
-              break;
-            }
-          }
-          
-          if (result.success && result.text) {
-            // Check if the synthesized result is meaningful
-            const text = result.text;
-            const lines = text.split('\n').filter(line => line.trim().length > 0);
-            const significantLines = lines.filter(line => 
-              !line.startsWith('#') && !line.startsWith('---') && !line.startsWith('*') && line.length > 3
-            );
+
+            const dependencies = currentSubtask.dependencies || [];
+            const relevantSubtaskIds = [currentSubtask.id, ...dependencies];
             
-            const isMinimalResult = significantLines.length < 10 || text.length < 300;
+            // Filter to get only the subtasks relevant for this integration step
+            const subtasksToIntegrate = decomposedTask.subtasks.filter(s => relevantSubtaskIds.includes(s.id));
             
-            if (!isMinimalResult) {
-              logger.info(`Successfully synthesized with model ${model.id} (${model.provider})`);
-              synthesisModel = model;
-              synthesizedText = text;
-              break; // We found a good model, stop trying
+            // Ensure we have results for all dependencies needed for this step
+            const canIntegrate = dependencies.every(depId => integratedResults.has(depId));
+
+            if (dependencies.length > 0 && canIntegrate) {
+                logger.info(`Integrating subtask ${currentSubtask.id} with its dependencies: ${dependencies.join(', ')}`);
+                
+                // Create a temporary map with only the necessary results for this integration step
+                const currentStepResults = new Map<string, string>();
+                for (const id of relevantSubtaskIds) {
+                    const result = integratedResults.get(id);
+                    if (result) {
+                        currentStepResults.set(id, result);
+                    } else {
+                        logger.warn(`Missing result for subtask ${id} during integration step for ${currentSubtask.id}`);
+                        // Handle missing dependency result - maybe skip integration or use placeholder?
+                        // For now, we'll proceed but the integration might be incomplete.
+                    }
+                }
+
+                // Call the integration helper
+                const integratedCode = await this.integrateSubtasks(
+                    subtasksToIntegrate,
+                    currentStepResults, // Pass only the relevant results
+                    decomposedTask.originalTask
+                );
+
+                // Store the integrated result, replacing the individual components used
+                integratedResults.set(currentSubtask.id, integratedCode); 
+                // Mark dependencies as processed within this integration context
+                dependencies.forEach(depId => processedSubtasks.add(depId)); 
+                
+                // The result for the current subtask now represents the integrated whole
+                finalIntegratedCode = integratedCode; 
+                // TODO: Track the model used for *this specific* integration step if needed for detailed attribution
+                // For now, we'll capture the last model used in the final step
+                // finalIntegrationModelId = integrationModel?.id || 'N/A'; 
+
+            } else if (dependencies.length === 0) {
+                 // Leaf node or task with no dependencies yet, its result is its current state
+                 finalIntegratedCode = integratedResults.get(currentSubtask.id) || '';
+                 logger.debug(`Subtask ${currentSubtask.id} is a leaf node or has no processed dependencies yet.`);
             } else {
-              logger.warn(`Model ${model.id} returned minimal content (${text.length} chars, ${significantLines.length} significant lines). Trying next model.`);
+                logger.warn(`Cannot integrate subtask ${currentSubtask.id} yet, missing results for dependencies: ${dependencies.filter(d => !integratedResults.has(d)).join(', ')}`);
+                // Keep its individual result for now, might be integrated later if another task depends on it
+                finalIntegratedCode = integratedResults.get(currentSubtask.id) || '';
             }
-          } else {
-            logger.warn(`Synthesis failed with model ${model.id}: ${result.error || 'Unknown error'}`);
-          }
-        } catch (error) {
-          logger.warn(`Error trying to synthesize with model ${model.id}:`, error);
-          // Continue to the next model
+            processedSubtasks.add(currentSubtask.id);
         }
+        
+        // After the loop, the result associated with the last task(s) in the order *should* be the most complete
+        // If there are multiple final tasks (parallel branches), we might need a final merge step.
+        // For simplicity now, we assume the result of the last task in the order is the final one.
+        const lastSubtaskId = executionOrder[executionOrder.length - 1].id;
+        finalIntegratedCode = integratedResults.get(lastSubtaskId) || finalIntegratedCode; // Use the result of the last task
+        // TODO: Need a better way to determine the *actual* final integration model
+        finalIntegrationModelId = modelAssignments?.get(lastSubtaskId)?.id || 'FallbackModel'; 
+    }
+
+    // --- Final Output Formatting --- 
+    try {
+      // Basic check if the final code seems valid
+      if (!finalIntegratedCode || finalIntegratedCode.trim().length < 100) {
+          logger.warn('Progressive integration resulted in minimal or empty code. Returning combined raw results.');
+          // Fallback to combined raw results if integration failed badly
+          let combinedRawResults = `# Results for coding task: ${decomposedTask.originalTask}\n\n## Note: Progressive integration failed to produce a complete result. Raw subtask outputs below:\n\n`;
+          for (const subtask of executionOrder) {
+              const result = subtaskResults.get(subtask.id);
+              if (result) {
+                  const model = modelAssignments?.get(subtask.id);
+                  const modelInfo = model ? ` (Generated by: ${model.id})` : '';
+                  combinedRawResults += `## ${subtask.description}${modelInfo}\n\n`;
+                  combinedRawResults += '```\n' + result + '\n```\n\n';
+              }
+          }
+          return combinedRawResults;
       }
-      
-      // If we successfully synthesized the results
-      if (synthesisModel && synthesizedText) {
-        logger.info(`Final synthesis completed with model: ${synthesisModel.id} (${synthesisModel.provider})`);
-        
-        // Add a note about the synthesis model used
-        const finalResult = `# Results for coding task: ${decomposedTask.originalTask}\n\n## ${decomposedTask.originalTask}\n\n${synthesizedText}\n\n---\n\n*Final synthesis performed by: ${synthesisModel.id}*`;
-        
-        // Add a section with detailed model attribution for each subtask
-        if (modelAssignments) {
+
+      // Format the final successful result
+      const finalResultOutput = `# Results for coding task: ${decomposedTask.originalTask}\n\n## ${decomposedTask.originalTask}\n\n${finalIntegratedCode}\n\n---\n\n*Final integration step performed by model similar to: ${finalIntegrationModelId}*`;
+
+      // Add model attribution section
+      if (modelAssignments) {
           let attributionSection = '\n\n## Model Attribution\n\nThis solution was generated using multiple AI models:\n\n';
           attributionSection += '| Subtask | Model Used |\n| --- | --- |\n';
-          
           for (const subtask of executionOrder) {
-            const model = modelAssignments.get(subtask.id);
-            if (model) {
-              attributionSection += `| ${subtask.description.substring(0, 50)}${subtask.description.length > 50 ? '...' : ''} | ${model.id} |\n`;
-            }
+              const model = modelAssignments.get(subtask.id);
+              if (model) {
+                  attributionSection += `| ${subtask.description.substring(0, 50)}${subtask.description.length > 50 ? '...' : ''} | ${model.id} |\n`;
+              }
           }
-          
-          attributionSection += `| Final Synthesis | ${synthesisModel.id} |\n`;
-          
-          // Add the attribution section to the final result
-          return finalResult + attributionSection;
-        }
-        
-        return finalResult;
-      } else {
-        // All models failed, return the combined results
-        logger.warn(`Synthesis failed with all ${modelsToTry.length} models. Returning combined results.`);
-        combinedResults += '\n\n## Note\n\nAutomatic synthesis failed with all available models. The above components need to be manually integrated.';
-        return combinedResults;
+          // Add the final integration model info
+          attributionSection += `| Final Integration | ${finalIntegrationModelId} |\n`;
+          return finalResultOutput + attributionSection;
       }
+
+      return finalResultOutput;
+
     } catch (error) {
-      // Enhanced error logging with more details
-      if (error instanceof Error) {
-        logger.error(`Error synthesizing results: ${error.message}`, error);
-        // Also log the stack trace for debugging
-        logger.error(`Synthesis error stack trace: ${error.stack || 'No stack trace available'}`);
-      } else {
-        logger.error(`Error synthesizing results: ${JSON.stringify(error)}`);
-      }
-      
-      // If synthesis fails, return the combined results without additional processing
-      logger.info('Synthesis failed, returning combined results without processing');
-      combinedResults += '\n\n## Note\n\nAutomatic synthesis failed. The above components need to be manually integrated.';
-      return combinedResults;
+      logger.error('Error during final synthesis formatting:', error);
+      // Fallback if formatting fails
+      return `# Error during final synthesis formatting\n\n${finalIntegratedCode || 'No code generated.'}`;
     }
   },
 

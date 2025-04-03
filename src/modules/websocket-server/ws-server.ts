@@ -43,21 +43,34 @@ export async function initJobTracker(tracker: unknown): Promise<void> {
 // Export broadcast function to be registered with JobTracker
 export const broadcastJobs: BroadcastJobsFunction = async (wss: WebSocketServer): Promise<void> => {
     try {
-        // Ensure JobTracker is initialized - but do NOT try to get it here
-        // as that would reintroduce the circular dependency
-        if (!jobTracker) {
-            logger.warn('JobTracker not initialized in broadcastJobs');
-            // Don't attempt to re-initialize here - this would cause circular dependency
+        // Get the JobTracker instance *inside* the broadcast function
+        const currentJobTracker = await getJobTracker();
+        if (!currentJobTracker) {
+            logger.warn('JobTracker instance not available in broadcastJobs');
             return;
         }
 
-        // Get jobs from database even if JobTracker initialization fails
-        const allJobs = await getAllJobsFromDb();
-        const activeJobs = allJobs.filter(job => job.status === 'pending' || job.status === 'in_progress');
+        // Get jobs directly from the tracker instance now
+        const allJobsInternal = currentJobTracker.getAllJobs(); 
+        
+        // Map internal jobs to the format expected by the UI
+        const allJobsAPI = allJobsInternal.map(job => ({
+            id: job.id,
+            task: job.task,
+            status: mapStatus(job.status), // Use the mapping function
+            progress: job.progress,
+            estimated_time_remaining: job.estimated_time_remaining,
+            startTime: job.startTime,
+            model: job.model,
+            error: job.error,
+            results: job.results
+        }));
+        
+        const activeJobsAPI = allJobsAPI.filter(job => job.status === 'pending' || job.status === 'in_progress');
         
         const jobData = {
-            activeJobs,
-            allJobs
+            activeJobs: activeJobsAPI,
+            allJobs: allJobsAPI
         };
 
         const clients = Array.from(wss.clients)
@@ -68,18 +81,29 @@ export const broadcastJobs: BroadcastJobsFunction = async (wss: WebSocketServer)
             return;
         }
 
-        await Promise.all(
+        // Use Promise.allSettled to handle potential errors sending to individual clients
+        const results = await Promise.allSettled(
             clients.map(client => 
-                new Promise<void>((resolve) => {
+                new Promise<void>((resolve, reject) => {
                     client.send(JSON.stringify(jobData), (err) => {
                         if (err) {
-                            logger.warn('Error broadcasting to client:', err);
+                            // Reject the promise for this specific client
+                            reject(new Error(`Failed to send to client: ${err.message}`)); 
+                        } else {
+                            resolve();
                         }
-                        resolve();
                     });
                 })
             )
         );
+        
+        // Log any errors that occurred during broadcast
+        results.forEach(result => {
+            if (result.status === 'rejected') {
+                logger.warn('Error broadcasting to a client:', result.reason);
+            }
+        });
+
     } catch (error) {
         logger.error('Error broadcasting jobs:', error instanceof Error ? error.message : String(error));
     }
@@ -213,20 +237,47 @@ async function startExpressServer() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const uiPath = path.resolve(__dirname, '../../../ui.html');
 
+  // Check if ui.html exists before setting up routes
+  try {
+    await fs.promises.access(uiPath, fs.constants.R_OK); // Check read access
+    logger.info(`Found UI file at: ${uiPath}`);
+  } catch (err) {
+    logger.error(`Cannot access ui.html at ${uiPath}. UI will not be available. Error: ${err instanceof Error ? err.message : String(err)}`);
+    // Optionally, we could decide not to start the server if UI is critical
+    // For now, we'll let it start but log the error clearly.
+  }
+
   // Serve the UI file at the root
   app.get('/', (req, res) => {
-    res.sendFile(uiPath);
+    // Add logging for UI requests
+    logger.debug(`Serving ui.html for request to /`);
+    res.sendFile(uiPath, (err) => {
+      if (err) {
+        logger.error(`Error sending ui.html: ${err.message}`);
+        // Send a simple error response if file sending fails
+        res.status(500).send('Error loading UI');
+      }
+    });
   });
 
   app.get(WS_PORT_API, (req, res) => {
-    const port = fs.readFileSync(PORT_FILE, 'utf-8');
-    res.json({ port });
+    try {
+      const port = fs.readFileSync(PORT_FILE, 'utf-8');
+      res.json({ port });
+    } catch (err) {
+      logger.error(`Error reading port file ${PORT_FILE}: ${err instanceof Error ? err.message : String(err)}`);
+      res.status(500).json({ error: 'Could not read WebSocket port information' });
+    }
   });
 
-  return new Promise<ReturnType<typeof express.application.listen>>((resolve) => {
+  return new Promise<ReturnType<typeof express.application.listen>>((resolve, reject) => {
     const server = app.listen(3001, () => {
-      logger.info('Express server started on port 3001');
+      logger.info('Express server started successfully and listening on port 3001');
       resolve(server);
+    }).on('error', (err) => {
+      // Add specific error handling for server start failure (e.g., port in use)
+      logger.error(`Failed to start Express server on port 3001: ${err.message}`);
+      reject(err); // Reject the promise if the server fails to start
     });
   });
 }
@@ -853,72 +904,68 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
  * Main server initialization function to start both WebSocket and Express servers
  */
 async function init() {
+  let trackerInstance: IJobManager | null = null;
   try {
-    // Set the initialization promise to track completion
-    initializationPromise = (async () => {
-      try {
-        // Get the JobTracker instance first to ensure it's ready
-        const trackerInstance = await getJobTracker().catch(error => {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          logger.error('Failed to get JobTracker instance:', errorMessage);
-          logger.error('Error details:', error);
-          throw error;
-        });
-    
-        // Set broadcastJobs function on the tracker to avoid circular dependency
-        trackerInstance.setBroadcastFunction(broadcastJobs);
-        
-        // Then initialize JobTracker in this module
-        await initJobTracker(trackerInstance);
-        logger.info('JobTracker instance initialized in ws-server');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error('Failed to initialize JobTracker:', errorMessage);
-        logger.error('Error details:', error);
-        // Don't rethrow the error here to allow other initialization to continue
-      }
-    })();
-    
-    // Let's make sure the initialization promise completes before continuing
-    await initializationPromise;
-    initializationPromise = null;
+    // Step 1: Get or initialize the JobTracker instance FIRST
+    trackerInstance = await getJobTracker().catch(error => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to get JobTracker instance during init:', errorMessage);
+      logger.error('Error details:', error);
+      // Allow server to potentially continue without JobTracker functionality
+      return null; 
+    });
 
-    // Then initialize other services
+    // Step 2: If JobTracker is available, set its broadcast function
+    if (trackerInstance) {
+      try {
+        // Ensure the broadcast function itself is correctly defined and exported
+        // The import { broadcastJobs } from './ws-server-types.js'; might be wrong
+        // Let's import directly from this file where it's defined
+        const { broadcastJobs: broadcastFn } = await import('./ws-server.js'); 
+        trackerInstance.setBroadcastFunction(broadcastFn);
+        logger.info('Successfully set broadcast function on JobTracker instance.');
+        // Initialize the local module variable as well
+        jobTracker = trackerInstance; 
+      } catch (error) {
+        logger.error('Failed to set broadcast function on JobTracker:', error);
+        // Continue, but broadcasting won't work
+      }
+    } else {
+      logger.warn('JobTracker instance is null, cannot set broadcast function.');
+    }
+
+    // Step 3: Initialize other services (Database)
     try {
       await initDatabase();
+      logger.info('Database initialized successfully.');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to initialize database:', errorMessage);
-      logger.error('Error details:', error);
-      // Continue with other initialization steps even if database failed
+      logger.error('Failed to initialize database:', error);
+      // Decide if this is critical; for now, log and continue
     }
 
+    // Step 4: Start WebSocket Server
     try {
       wss = await startWebSocketServer();
+      logger.info('WebSocket server started successfully.');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to start WebSocket server:', errorMessage);
-      logger.error('Error details:', error);
-      throw error;
+      logger.error('Failed to start WebSocket server:', error);
+      throw error; // WebSocket server is likely critical
     }
 
+    // Step 5: Start Express Server (for UI)
     try {
       await startExpressServer();
+      logger.info('Express server started successfully.');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to start Express server:', errorMessage);
-      logger.error('Error details:', error);
-      throw error;
+      logger.error('Failed to start Express server:', error);
+      // Decide if this is critical; for now, log and continue if UI isn't essential
     }
 
+    logger.info('Server initialization sequence complete.');
+
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('Error during server initialization:', errorMessage);
-    logger.error('Error details:', error);
-    // Don't exit on JobTracker error, just log it
-    if (error instanceof Error && !error.message.includes('JobTracker')) {
-      process.exit(1);
-    }
+    logger.error('Critical error during server initialization:', error);
+    process.exit(1); // Exit if a critical component failed
   }
 }
 

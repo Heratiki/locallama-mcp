@@ -575,6 +575,9 @@ export const codeTaskAnalyzer = {
    */
   parseSubtasksFromResponse(response: string): RawSubtask[] {
     try {
+      // Log the raw response for debugging
+      logger.debug(`Raw response for subtask parsing:\n---\n${response}\n---`);
+
       // First attempt: try to extract a structured JSON array using more flexible pattern matching
       let jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || // Standard code block format
                      response.match(/\[\s*\{\s*"id"\s*:[\s\S]*\}\s*\]/); // Direct JSON array

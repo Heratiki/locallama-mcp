@@ -328,14 +328,35 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    if (this.wss && this.broadcastFunction) {
-      try {
-        await this.broadcastFunction(this.wss);
-      } catch (error) {
-        logger.error('Failed to broadcast job update:', error);
+    // Add a small delay and retry mechanism for broadcast function availability
+    let attempt = 0;
+    const maxAttempts = 3;
+    const delayMs = 100;
+
+    while (attempt < maxAttempts) {
+      if (this.wss && this.broadcastFunction) {
+        try {
+          await this.broadcastFunction(this.wss);
+          return; // Success
+        } catch (error) {
+          logger.error('Failed to broadcast job update:', error);
+          return; // Don't retry on broadcast error
+        }
+      } else if (this.wss) {
+        // Broadcast function not set yet, wait and retry
+        logger.debug(`Broadcast function not set yet (attempt ${attempt + 1}/${maxAttempts}), waiting ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        attempt++;
+      } else {
+        // WebSocket server itself is not ready, unlikely but possible
+        logger.warn('WebSocket server not available for broadcast');
+        return;
       }
-    } else if (this.wss) {
-      logger.warn('Broadcast function not set in JobTracker');
+    }
+
+    // If still not set after retries, log the final warning
+    if (!this.broadcastFunction) {
+      logger.warn('Broadcast function not set in JobTracker after multiple checks');
     }
   }
 
