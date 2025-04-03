@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../../config/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { Model } from '../../../types/index.js';
+import { lmStudioModule } from '../../lm-studio/index.js';
 
 // Define a type for the raw subtask data parsed from the model response
 type RawSubtask = {
@@ -135,42 +136,154 @@ export const codeTaskAnalyzer = {
         };
       }
       
-      // For more complex tasks, use a model to decompose the task
-      // Prefer free models for decomposition if they're capable enough
-      let modelId = config.defaultLocalModel;
-      try {
-        const freeModels = await costMonitor.getFreeModels();
-        if (freeModels.length > 0) {
-          const suitableModels = freeModels.filter(model => 
-            model.id.toLowerCase().includes('instruct') || 
-            model.id.toLowerCase().includes('coder')
-          );
-          
-          if (suitableModels.length > 0) {
-            modelId = suitableModels[0].id;
-            logger.debug(`Using free model ${modelId} for task decomposition`);
-          }
-        }
-      } catch (error) {
-        logger.debug('Error getting free models, falling back to default:', error);
-      }
-      
       // Format the prompt with the task
       const prompt = DECOMPOSE_TASK_PROMPT.replace('{task}', task);
       
-      const decompositionResult = await openRouterModule.callOpenRouterApi(
-        modelId,
-        prompt,
-        60000 // 60 seconds timeout
-      );
+      // Try using OpenRouter first
+      let response = null;
+      let errorDetails = null;
+
+      try {
+        // For more complex tasks, use a model to decompose the task
+        // Prefer free models for decomposition if they're capable enough
+        let modelId = config.defaultLocalModel;
+        let freeModels: Model[] = [];
+        
+        try {
+          freeModels = await costMonitor.getFreeModels();
+          if (freeModels.length > 0) {
+            const suitableModels = freeModels.filter(model => 
+              model.id.toLowerCase().includes('instruct') || 
+              model.id.toLowerCase().includes('coder')
+            );
+            
+            if (suitableModels.length > 0) {
+              modelId = suitableModels[0].id;
+              logger.debug(`Using free model ${modelId} for task decomposition`);
+            }
+          }
+        } catch (error) {
+          logger.debug('Error getting free models, falling back to default:', error);
+        }
+        
+        const decompositionResult = await openRouterModule.callOpenRouterApi(
+          modelId,
+          prompt,
+          60000 // 60 seconds timeout
+        );
+        
+        if (!decompositionResult.success || !decompositionResult.text) {
+          // Capture detailed error information for later logging
+          const errorType = decompositionResult.error || 'unknown';
+          const errorInstance = decompositionResult.errorInstance;
+          const errorMessage = errorInstance ? errorInstance.message : 'Unknown error';
+          errorDetails = {
+            type: errorType,
+            message: errorMessage,
+            instance: errorInstance
+          };
+          
+          logger.warn(`OpenRouter API failed for task decomposition: ${errorType} - ${errorMessage}`);
+          throw new Error(`OpenRouter API failed: ${errorType}`);
+        }
+        
+        response = decompositionResult.text;
+        
+      } catch (openRouterError) {
+        // If OpenRouter failed, try LM-Studio as a fallback
+        logger.info('OpenRouter decomposition failed, trying LM-Studio as fallback');
+        
+        try {
+          if (config.lmStudioEndpoint) {
+            // Check if LM-Studio is available by attempting to get models
+            let lmStudioAvailable = false;
+            try {
+              const models = await lmStudioModule.getAvailableModels();
+              lmStudioAvailable = models.length > 0;
+            } catch (error) {
+              logger.debug('LM-Studio availability check failed:', error);
+            }
+            
+            if (lmStudioAvailable) {
+              // Find a suitable model from LM-Studio
+              const lmModels = await lmStudioModule.getAvailableModels();
+              
+              if (lmModels.length > 0) {
+                // Try to find a coding-specific or instruction-following model
+                const preferredModels = lmModels.filter(model => 
+                  model.id.toLowerCase().includes('code') || 
+                  model.id.toLowerCase().includes('instruct') ||
+                  model.id.toLowerCase().includes('chat')
+                );
+                
+                const selectedModel = preferredModels.length > 0 ? preferredModels[0] : lmModels[0];
+                logger.info(`Using LM-Studio model ${selectedModel.id} for task decomposition`);
+                
+                // Call LM-Studio API using the callLMStudioApi method on the module
+                const result = await lmStudioModule.callLMStudioApi(
+                  selectedModel.id,
+                  prompt,
+                  60000 // 60 seconds timeout
+                );
+                
+                if (result.success && result.text) {
+                  logger.info('Successfully used LM-Studio for task decomposition');
+                  response = result.text;
+                } else {
+                  // Log specific LM-Studio error
+                  logger.error('LM-Studio fallback failed:', result.error || 'Unknown error');
+                  
+                  // If we have detailed error info from OpenRouter, log it for diagnostics
+                  if (errorDetails) {
+                    logger.error('Original OpenRouter error details:', errorDetails);
+                    if (errorDetails.instance && errorDetails.instance.stack) {
+                      logger.debug('OpenRouter error stack:', errorDetails.instance.stack);
+                    }
+                  }
+                  
+                  // Both OpenRouter and LM-Studio failed, throw combined error
+                  throw new Error('Both OpenRouter and LM-Studio fallback failed for task decomposition');
+                }
+              } else {
+                logger.error('No LM-Studio models available for fallback');
+                throw new Error('No LM-Studio models available for fallback');
+              }
+            } else {
+              logger.error('LM-Studio is not available for fallback');
+              throw new Error('LM-Studio is not available for fallback');
+            }
+          } else {
+            logger.error('LM-Studio endpoint not configured for fallback');
+            throw new Error('LM-Studio endpoint not configured');
+          }
+        } catch (lmStudioError) {
+          // Comprehensive error logging when both methods fail
+          logger.error('All task decomposition methods failed:');
+          
+          // Log OpenRouter error details
+          if (errorDetails) {
+            logger.error(`OpenRouter error: ${errorDetails.type} - ${errorDetails.message}`);
+            if (errorDetails.instance && errorDetails.instance.stack) {
+              logger.debug('OpenRouter error stack:', errorDetails.instance.stack);
+            }
+          } else {
+            logger.error('OpenRouter error:', openRouterError);
+          }
+          
+          // Log LM-Studio error
+          logger.error('LM-Studio error:', lmStudioError);
+          
+          // Re-throw with combined error message
+          throw new Error('Both OpenRouter and LM-Studio failed for task decomposition');
+        }
+      }
       
-      if (!decompositionResult.success || !decompositionResult.text) {
-        logger.error('Failed to decompose task:', decompositionResult.error);
-        throw new Error('Failed to decompose task');
+      if (!response) {
+        throw new Error('No valid response from any decomposition method');
       }
       
       // Parse the result, expecting a JSON structure
-      const subtasksRaw = this.parseSubtasksFromResponse(decompositionResult.text);
+      const subtasksRaw = this.parseSubtasksFromResponse(response);
       
       // Process and validate subtasks
       const subtasks: CodeSubtask[] = subtasksRaw.map((subtask: RawSubtask) => ({
@@ -189,6 +302,11 @@ export const codeTaskAnalyzer = {
         })(),
         recommendedModelSize: this.determineRecommendedModelSize(subtask.complexity || 0.5)
       }));
+      
+      if (subtasks.length === 0) {
+        logger.warn('Decomposition returned 0 subtasks. Creating fallback decomposition.');
+        return this.createFallbackDecomposition(task);
+      }
 
       // Generate dependency map
       const dependencyMap: Record<string, string[]> = {};
@@ -213,7 +331,16 @@ export const codeTaskAnalyzer = {
         }
       };
     } catch (error) {
-      logger.error('Error during code task decomposition:', error);
+      // Additional error details for diagnostics
+      if (error instanceof Error) {
+        logger.error(`Error during code task decomposition: ${error.message}`);
+        if (error.stack) {
+          logger.debug(`Stack trace: ${error.stack}`);
+        }
+      } else {
+        logger.error('Error during code task decomposition:', error);
+      }
+      
       // Fallback to a simple decomposition
       return this.createFallbackDecomposition(task);
     }
@@ -448,120 +575,246 @@ export const codeTaskAnalyzer = {
    */
   parseSubtasksFromResponse(response: string): RawSubtask[] {
     try {
-      // Try to extract JSON object
-      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-                        response.match(/\{[\s\S]*?\}/);
+      // First attempt: try to extract a structured JSON array using more flexible pattern matching
+      let jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || // Standard code block format
+                     response.match(/\[\s*\{\s*"id"\s*:[\s\S]*\}\s*\]/); // Direct JSON array
       
+      // If not found, look for any array-like structure
+      if (!jsonMatch) {
+        jsonMatch = response.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      }
+      
+      // If found a potential JSON match, try to parse it
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const cleanedJsonStr = jsonStr.trim()
+          // Handle potential trailing commas which are invalid in JSON
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*\]/g, ']')
+          // Fix potential missing quotes around keys
+          .replace(/(\s*)(\w+)(\s*):/g, '$1"$2"$3:');
+          
         try {
-          const parsed: unknown = JSON.parse(jsonStr);
+          logger.debug('Attempting to parse JSON subtasks:', cleanedJsonStr.substring(0, 100) + '...');
           
-          // Ensure all subtask IDs are strings
-          // Define minimal type for raw subtask data
-          type RawSubtask = {
-            id?: string | number;
-            complexity?: number;
-            [key: string]: unknown;
-          };
+          const parsed: unknown = JSON.parse(cleanedJsonStr);
           
-          // Apply complexity capping to prevent extremely high complexity values
-          const complexityThreshold = 0.8;
-          const processSubtask = (subtask: RawSubtask) => {
-            // Cap complexity at threshold if it exceeds it
-            if (subtask.complexity && subtask.complexity > complexityThreshold) {
-              logger.warn(`Capping subtask complexity from ${subtask.complexity} to ${complexityThreshold}`);
-              subtask.complexity = complexityThreshold;
-            }
+          // More flexible validation of the parsed structure
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Direct array of subtasks
+            logger.debug(`Successfully parsed JSON array with ${parsed.length} subtasks`);
             
-            // Filter dependencies to only include valid UUIDs
-            let validDependencies: string[] = [];
-            if (Array.isArray(subtask.dependencies)) {
-              validDependencies = subtask.dependencies.filter(d => 
-                typeof d === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d)
-              );
-              
-              if (validDependencies.length !== subtask.dependencies.length) {
-                const originalDeps = subtask.dependencies.join(', ');
-                const filteredDeps = validDependencies.join(', ');
-                logger.warn(`Filtered invalid dependencies for subtask ${subtask.id || 'new'}. Original: [${originalDeps}], Filtered: [${filteredDeps}]`);
-              }
-            }
+            // Apply processing to each subtask
+            return parsed.map(this.processParsedSubtask);
+          } else if (
+            typeof parsed === 'object' && 
+            parsed !== null && 
+            'subtasks' in parsed && 
+            Array.isArray((parsed as Record<string, unknown>).subtasks)
+          ) {
+            // Wrapped subtasks array
+            const subtasks = (parsed as Record<string, unknown>).subtasks as unknown[];
+            logger.debug(`Successfully parsed wrapped JSON with ${subtasks.length} subtasks`);
             
-            return {
-              ...subtask,
-              id: subtask.id ? String(subtask.id) : uuidv4(),
-              dependencies: validDependencies // Use filtered dependencies
-            };
-          };
-          
-          if (Array.isArray(parsed)) {
-            return parsed.map(processSubtask);
-          } else if (isSubtasksWrapper(parsed)) {
-            // Handle case where JSON contains a wrapper object with subtasks array
-            return parsed.subtasks.map(processSubtask);
-          } else {
-            logger.warn('JSON does not match expected subtasks format');
-            return []; // Return empty array if JSON doesn't match expected format
+            return subtasks.map(this.processParsedSubtask);
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            // Single subtask object
+            logger.debug('Successfully parsed single subtask object');
+            return [this.processParsedSubtask(parsed)];
           }
+          
+          logger.warn('JSON does not match expected subtasks format, falling back to heuristic parsing');
         } catch (jsonError: unknown) {
           const errorMessage = jsonError instanceof Error ? jsonError.message : String(jsonError);
-          logger.warn(`Failed to parse JSON: ${errorMessage}`);
+          logger.warn(`Failed to parse JSON: ${errorMessage}, falling back to heuristic parsing`);
         }
       }
+      
+      // Second attempt: use enhanced heuristic parsing if JSON extraction fails
+      logger.debug('Using heuristic parsing for subtasks');
+      
+      // Try to identify subtask sections using various markers
+      const subtaskSections = this.extractSubtaskSections(response);
+      
+      if (subtaskSections.length > 0) {
+        logger.debug(`Found ${subtaskSections.length} subtask sections using heuristics`);
         
-      // Fallback to heuristic parsing if JSON extraction fails
-      const sections = response.split(/\n\s*\d+\.\s+/);
-      const subtasks = sections
-        .filter(section => section.trim().length > 0)
-        .map(section => {
-          const descriptionMatch = section.match(/(?:Title|Description|Task):\s*(.+?)(?:\n|$)/i);
-          const complexityMatch = section.match(/Complexity:\s*(\d+(?:\.\d+)?)/i);
-          const tokensMatch = section.match(/Tokens?:\s*(\d+)/i);
-          const dependenciesMatch = section.match(/Dependencies?:\s*(.+?)(?:\n|$)/i);
-          const typeMatch = section.match(/Type:\s*(\w+)/i);
-          const idMatch = section.match(/ID:\s*(.+?)(?:\n|$)/i);
-          
-          // Ensure ID is always a string, using provided ID or generating a new UUID
-          const id = idMatch ? String(idMatch[1].trim()) : uuidv4();
-          
-          // Parse complexity with a cap at 0.8
-          let complexity = complexityMatch ? parseFloat(complexityMatch[1]) : 0.5;
-          if (complexity > 0.8) {
-            logger.warn(`Capping subtask complexity from ${complexity} to 0.8`);
-            complexity = 0.8;
-          }
-          
-          // Filter dependencies to only include valid UUIDs
-          const validDependencies = dependenciesMatch ?
-            dependenciesMatch[1].split(',').map(d => d.trim()).filter(d => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d)) : [];
-            
-          if (dependenciesMatch && validDependencies.length !== dependenciesMatch[1].split(',').length) {
-            logger.warn(`Filtered out invalid dependencies for subtask ${id}. Original: [${dependenciesMatch[1]}], Filtered: [${validDependencies.join(', ')}]`);
-          }
-          
-          return {
-            id,
-            description: descriptionMatch ? descriptionMatch[1].trim() : section.trim().split('\n')[0],
-            complexity,
-            estimatedTokens: tokensMatch ? parseInt(tokensMatch[1]) : 1000,
-            dependencies: validDependencies, // Use filtered dependencies
-            codeType: typeMatch ? typeMatch[1].toLowerCase() : 'other'
-          };
+        // Parse each subtask section
+        return subtaskSections.map((section, index) => {
+          const parsed = this.parseSubtaskSection(section, index);
+          logger.debug(`Parsed subtask ${index + 1}: ${parsed.description?.substring(0, 30)}...`);
+          return parsed;
         });
-      return subtasks;
+      }
+      
+      // Last resort: treat the entire response as a single subtask
+      logger.warn('Could not parse multiple subtasks, treating entire response as a single subtask');
+      return [{
+        id: uuidv4(),
+        description: 'Complete the entire task: ' + response.split('\n')[0].substring(0, 100),
+        complexity: 0.7,
+        estimatedTokens: 2000,
+        dependencies: [],
+        codeType: 'other'
+      }];
     } catch (error) {
       logger.error('Error parsing subtasks from response:', error);
-      // Return a basic subtask if parsing fails
+      // Return at least one subtask as a fallback
       return [{
         id: uuidv4(),
         description: 'Complete the original task',
-        complexity: 0.5,
-        estimatedTokens: 1500,
+        complexity: 0.7,
+        estimatedTokens: 2000,
         dependencies: [],
         codeType: 'other'
       }];
     }
+  },
+  
+  /**
+   * Process a parsed subtask to ensure it has all required fields
+   * 
+   * @param subtask A raw subtask object from JSON parsing
+   * @returns A processed subtask with all required fields
+   */
+  processParsedSubtask(subtask: unknown): RawSubtask {
+    if (typeof subtask !== 'object' || subtask === null) {
+      return {
+        id: uuidv4(),
+        description: 'Unknown subtask',
+        complexity: 0.5,
+        dependencies: [],
+        codeType: 'other'
+      };
+    }
+    
+    const result = subtask as Record<string, unknown>;
+    
+    // Ensure the ID is in the right format
+    if (!result.id || (typeof result.id !== 'string' && typeof result.id !== 'number')) {
+      result.id = uuidv4();
+    }
+    
+    // Ensure we have a description
+    if (!result.description || typeof result.description !== 'string') {
+      result.description = result.title && typeof result.title === 'string' 
+        ? result.title 
+        : 'Subtask ' + result.id;
+    }
+    
+    // Validate complexity
+    if (!result.complexity || typeof result.complexity !== 'number' || 
+        result.complexity < 0 || result.complexity > 1) {
+      result.complexity = 0.5;
+    }
+    
+    // Ensure dependencies is an array
+    if (!result.dependencies || !Array.isArray(result.dependencies)) {
+      result.dependencies = [];
+    }
+    
+    // Validate code type
+    if (!result.codeType || typeof result.codeType !== 'string') {
+      result.codeType = 'other';
+    }
+    
+    return result as RawSubtask;
+  },
+  
+  /**
+   * Extract subtask sections from a text response using heuristics
+   * 
+   * @param response The model's response text
+   * @returns Array of subtask section texts
+   */
+  extractSubtaskSections(response: string): string[] {
+    // Try several pattern-matching approaches to identify subtasks
+    
+    // Look for numbered subtasks (1., 2., etc.)
+    const numberedSections = response.split(/\n\s*\d+\.\s+/);
+    if (numberedSections.length > 1) {
+      return numberedSections.slice(1); // Skip the first element which is before first match
+    }
+    
+    // Look for "Subtask 1:", "Task 1:", etc.
+    const labeledSections = response.split(/\n\s*(?:Subtask|Task|Step)\s+\d+\s*(?::|\.)\s*/i);
+    if (labeledSections.length > 1) {
+      return labeledSections.slice(1);
+    }
+    
+    // Look for sections separated by ## or ### headers
+    const headeredSections = response.split(/\n\s*#{2,3}\s+[^\n]+\n/);
+    if (headeredSections.length > 1) {
+      // Check if these are actually subtask headers
+      const headersText = response.match(/#{2,3}\s+[^\n]+/g) || [];
+      if (headersText.some(h => /task|step|part/i.test(h))) {
+        return headeredSections.slice(1);
+      }
+    }
+    
+    // Look for empty line separated sections that mention ID or dependencies
+    const potentialSections = response.split(/\n\s*\n/);
+    if (potentialSections.length > 1) {
+      const filteredSections = potentialSections.filter(section => 
+        /\b(?:id|dependencies?|complexity)\b/i.test(section)
+      );
+      if (filteredSections.length > 0) {
+        return filteredSections;
+      }
+    }
+    
+    return [];
+  },
+  
+  /**
+   * Parse a subtask section using heuristics
+   * 
+   * @param section The text of a subtask section
+   * @param index The index of this section in the array of sections
+   * @returns A parsed subtask
+   */
+  parseSubtaskSection(section: string, index: number): RawSubtask {
+    // Extract key properties using regex
+    const idMatch = section.match(/(?:ID|Id|id):\s*([^,\n]+)/);
+    const descMatch = section.match(/(?:Description|Title|Task):\s*([^\n]+)/i) || 
+                      section.match(/^([^\n:]+)/);
+    const complexityMatch = section.match(/Complexity:\s*(\d+(?:\.\d+)?)/i);
+    const dependenciesMatch = section.match(/Dependencies:\s*([^\n]+)/i);
+    const typeMatch = section.match(/(?:Type|CodeType):\s*([^\n,]+)/i);
+    
+    // Extract dependencies as an array
+    let dependencies: string[] = [];
+    if (dependenciesMatch) {
+      // Handle different dependency formats
+      if (/\[.*\]/.test(dependenciesMatch[1])) {
+        // Try to parse as JSON array
+        try {
+          const depArray = JSON.parse(dependenciesMatch[1].replace(/'/g, '"'));
+          if (Array.isArray(depArray)) {
+            dependencies = depArray.map(d => String(d));
+          }
+        } catch {
+          // If JSON parsing fails, split by commas
+          dependencies = dependenciesMatch[1].replace(/[\[\]'"\s]/g, '').split(',');
+        }
+      } else {
+        // Split by commas
+        dependencies = dependenciesMatch[1].split(',').map(d => d.trim());
+      }
+      
+      // Filter out empty dependencies
+      dependencies = dependencies.filter(d => d.length > 0);
+    }
+    
+    // Return the parsed subtask
+    return {
+      id: idMatch ? idMatch[1].trim() : uuidv4(),
+      description: descMatch ? descMatch[1].trim() : `Subtask ${index + 1}`,
+      complexity: complexityMatch ? Math.min(Math.max(parseFloat(complexityMatch[1]), 0), 1) : 0.5,
+      estimatedTokens: 1000 + (index * 200), // Simple estimate based on order
+      dependencies,
+      codeType: typeMatch ? typeMatch[1].trim().toLowerCase() : 'other'
+    };
   },
   
   /**
