@@ -98,3 +98,4 @@ locallama.lock
 openrouter-models.json
 data/benchmark-results.db
 
+classDiagram.md
