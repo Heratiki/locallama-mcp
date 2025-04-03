@@ -25,7 +25,7 @@ const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'f
 };
 
 // Will be initialized later to avoid circular dependency
-let jobTracker: IJobManager;
+let jobTracker: IJobManager | null = null;
 
 const PORT_RANGE_START = 4000;
 const PORT_RANGE_END = 4100;
@@ -33,8 +33,9 @@ const PORT_FILE = path.resolve('.locallama_port');
 const WS_PORT_API = '/ws-port';
 
 // Function to initialize the job tracker
-export function initJobTracker(tracker: unknown): void {
+export async function initJobTracker(tracker: unknown): Promise<void> {
   jobTracker = tracker as IJobManager;
+  logger.info('JobTracker initialized in WebSocket server');
 }
 
 async function findAvailablePort(start: number, end: number): Promise<number> {
@@ -187,10 +188,15 @@ export async function broadcastJobs(wss: WebSocketServer): Promise<void> {
     try {
         // Ensure JobTracker is initialized
         if (!jobTracker) {
-            logger.warn('JobTracker not initialized in broadcastJobs, fetching instance...');
-            const tracker = await getJobTracker();
-            initJobTracker(tracker);
-            logger.info('JobTracker initialized during broadcast');
+            logger.warn('JobTracker not initialized in broadcastJobs');
+            try {
+                const tracker = await getJobTracker();
+                await initJobTracker(tracker);
+                logger.info('JobTracker initialized during broadcast');
+            } catch (error) {
+                logger.error('Failed to initialize JobTracker during broadcast:', error);
+                // Continue with database fallback
+            }
         }
 
         // Get jobs from database even if JobTracker initialization fails
@@ -859,7 +865,7 @@ async function init() {
     });
 
     try {
-      initJobTracker(trackerInstance);
+      await initJobTracker(trackerInstance);
       logger.info('JobTracker instance initialized in ws-server');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

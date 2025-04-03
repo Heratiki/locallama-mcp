@@ -12,8 +12,7 @@ import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { getJobTracker } from '../decision-engine/services/jobTracker.js';
 
-// Initialize jobTracker once and await it
-const jobTrackerPromise = getJobTracker();
+// Remove immediate initialization at module level
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
 import { readFileSync, existsSync } from 'fs'; // Import necessary modules
@@ -37,7 +36,7 @@ const version = packageJson.version;
  * Check if OpenRouter API key is configured
  */
 function isOpenRouterConfigured(): boolean {
-  return !!config.openRouterApiKey;
+  return Boolean(config.openRouterApiKey);
 }
 
 /**
@@ -47,8 +46,14 @@ function isOpenRouterConfigured(): boolean {
  * such as token usage, costs, and available models.
  */
 export async function setupResourceHandlers(server: Server): Promise<void> {
-  // Initialize jobTracker
-  jobTracker = await jobTrackerPromise;
+  try {
+    // Initialize jobTracker here, not at the module level
+    jobTracker = await getJobTracker();
+  } catch (error) {
+    logger.error('Error initializing JobTracker in resources.ts:', error);
+    // Continue with setup even if jobTracker fails to initialize
+    // It will be retried when actually needed
+  }
 
   // List available static resources
   server.setRequestHandler(ListResourcesRequestSchema, () => {
