@@ -5,6 +5,7 @@ import { codeModelSelector } from './codeModelSelector.js';
 import { openRouterModule, ModelNotFoundError } from '../../openrouter/index.js'; // Import ModelNotFoundError
 import { lmStudioModule } from '../../lm-studio/index.js'; // Import LM Studio module
 import { ollamaModule } from '../../ollama/index.js'; // Import Ollama module
+import { fallbackHandler } from '../../fallback-handler/index.js'; // Import fallback handler for service availability checks
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
@@ -662,35 +663,94 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
     
     // Use a model to synthesize the final result
     try {
-      // Find a suitable model for synthesis - preferably a larger one
+      // Get all available models, sorted by capability
       const availableModels = await costMonitor.getAvailableModels();
       const freeModels = await costMonitor.getFreeModels();
       
-      // Prefer a free model if available and suitable
-      let synthesisModel: Model | null = null;
+      // Create an array of models to try, prioritizing free ones first
+      const modelsToTry: Model[] = [];
       
+      // Add free models first (they're usually faster)
       if (freeModels.length > 0) {
-        const suitableModel = freeModels.find(model => 
-          (model.contextWindow || 0) >= combinedResults.length
+        // Sort free models by potential quality (larger context windows often correlate with better quality)
+        const sortedFreeModels = [...freeModels].sort((a, b) => 
+          (b.contextWindow || 0) - (a.contextWindow || 0)
         );
-        if (suitableModel) {
-          synthesisModel = suitableModel;
+        
+        for (const model of sortedFreeModels) {
+          if ((model.contextWindow || 0) >= combinedResults.length) {
+            modelsToTry.push(model);
+          }
         }
       }
       
-      // If no suitable free model, try available models
-      if (!synthesisModel && availableModels.length > 0) {
-        const suitableModel = availableModels.find(model => 
-          (model.contextWindow || 0) >= combinedResults.length
-        );
-        if (suitableModel) {
-          synthesisModel = suitableModel;
+      // Check if LM-Studio is available
+      let lmStudioModels: Model[] = [];
+      try {
+        const lmStudioAvailable = await fallbackHandler.checkServiceAvailability('lm-studio');
+        if (lmStudioAvailable) {
+          lmStudioModels = await lmStudioModule.getAvailableModels();
+          // Add LM-Studio models to the list of models to try
+          if (lmStudioModels.length > 0) {
+            // Prioritize larger context windows and instruct models
+            const sortedLMStudioModels = lmStudioModels
+              .filter(model => (model.contextWindow || 0) >= combinedResults.length)
+              .sort((a, b) => {
+                // Prioritize models with "instruct" in their name
+                const aHasInstruct = a.id.toLowerCase().includes('instruct') ? 1 : 0;
+                const bHasInstruct = b.id.toLowerCase().includes('instruct') ? 1 : 0;
+                
+                if (aHasInstruct !== bHasInstruct) {
+                  return bHasInstruct - aHasInstruct;
+                }
+                
+                // Then sort by context window size
+                return (b.contextWindow || 0) - (a.contextWindow || 0);
+              });
+            
+            // Add top 3 LM-Studio models (to avoid trying too many)
+            modelsToTry.push(...sortedLMStudioModels.slice(0, 3));
+          }
         }
+      } catch (error) {
+        logger.warn('Error checking LM-Studio availability:', error);
       }
       
-      // If still no suitable model, use GPT-3.5 Turbo as fallback
-      if (!synthesisModel) {
-        synthesisModel = {
+      // Check if Ollama is available
+      let ollamaModels: Model[] = [];
+      try {
+        const ollamaAvailable = await fallbackHandler.checkServiceAvailability('ollama');
+        if (ollamaAvailable) {
+          ollamaModels = await ollamaModule.getAvailableModels();
+          // Add Ollama models to the list of models to try
+          if (ollamaModels.length > 0) {
+            // Prioritize larger context windows and instruct models
+            const sortedOllamaModels = ollamaModels
+              .filter(model => (model.contextWindow || 0) >= combinedResults.length)
+              .sort((a, b) => {
+                // Prioritize models with "instruct" in their name
+                const aHasInstruct = a.id.toLowerCase().includes('instruct') ? 1 : 0;
+                const bHasInstruct = b.id.toLowerCase().includes('instruct') ? 1 : 0;
+                
+                if (aHasInstruct !== bHasInstruct) {
+                  return bHasInstruct - aHasInstruct;
+                }
+                
+                // Then sort by context window size
+                return (b.contextWindow || 0) - (a.contextWindow || 0);
+              });
+            
+            // Add top 3 Ollama models (to avoid trying too many)
+            modelsToTry.push(...sortedOllamaModels.slice(0, 3));
+          }
+        }
+      } catch (error) {
+        logger.warn('Error checking Ollama availability:', error);
+      }
+      
+      // If we have no models to try, use GPT-3.5 Turbo as fallback
+      if (modelsToTry.length === 0) {
+        modelsToTry.push({
           id: 'gpt-3.5-turbo',
           name: 'GPT-3.5 Turbo',
           provider: 'openai',
@@ -702,55 +762,107 @@ Focus only on this subtask, don't worry about other parts of the larger task.`;
             prompt: 0.000001,
             completion: 0.000002
           }
-        };
+        });
       }
       
-      logger.info(`Using model ${synthesisModel.id} for final synthesis`);
+      logger.info(`Will try synthesis with ${modelsToTry.length} models: ${modelsToTry.map(m => m.id).join(', ')}`);
       
       const synthesisPrompt = `I've broken down a coding task into subtasks and have results for each. 
 Please synthesize these into a coherent final solution.
 Original Task: ${decomposedTask.originalTask}
 Subtask Results:
 ${combinedResults}
-Please provide a clean, consolidated solution that integrates all the components properly.`;
+Please provide a clean, consolidated solution that integrates all the components properly. Your output should include complete code that combines all the subtask solutions into a working implementation.`;
+
+      // Try multiple models sequentially until we get a good result
+      let synthesisModel: Model | null = null;
+      let synthesizedText: string | null = null;
       
-      logger.info(`Sending synthesis prompt to model ${synthesisModel.id}`);
-      const result = await openRouterModule.callOpenRouterApi(
-        synthesisModel.id,
-        synthesisPrompt,
-        120000 // 2 minutes timeout
-      );
-      
-      if (!result.success || !result.text) {
-        // Use the detailed error information from the result object
-        const errorMessage = result.errorInstance?.message || result.error || 'Unknown synthesis error';
-        throw new Error(`Failed to synthesize results: ${errorMessage}`);
+      for (const model of modelsToTry) {
+        try {
+          logger.info(`Attempting synthesis with model: ${model.id} (${model.provider})`);
+          let result;
+          
+          // Use the appropriate API based on the model provider
+          switch (model.provider) {
+            case 'lm-studio': {
+              // Remove prefix if present
+              const modelId = model.id.startsWith('lm-studio:') ? model.id.substring(10) : model.id;
+              result = await lmStudioModule.callLMStudioApi(modelId, synthesisPrompt, 180000); // 3 minutes timeout
+              break;
+            }
+            case 'ollama': {
+              // Remove prefix if present
+              const modelId = model.id.startsWith('ollama:') ? model.id.substring(7) : model.id;
+              result = await ollamaModule.callOllamaApi(modelId, synthesisPrompt, 180000); // 3 minutes timeout
+              break;
+            }
+            default: {
+              // Use OpenRouter for other providers
+              result = await openRouterModule.callOpenRouterApi(model.id, synthesisPrompt, 180000); // 3 minutes timeout
+              break;
+            }
+          }
+          
+          if (result.success && result.text) {
+            // Check if the synthesized result is meaningful
+            const text = result.text;
+            const lines = text.split('\n').filter(line => line.trim().length > 0);
+            const significantLines = lines.filter(line => 
+              !line.startsWith('#') && !line.startsWith('---') && !line.startsWith('*') && line.length > 3
+            );
+            
+            const isMinimalResult = significantLines.length < 10 || text.length < 300;
+            
+            if (!isMinimalResult) {
+              logger.info(`Successfully synthesized with model ${model.id} (${model.provider})`);
+              synthesisModel = model;
+              synthesizedText = text;
+              break; // We found a good model, stop trying
+            } else {
+              logger.warn(`Model ${model.id} returned minimal content (${text.length} chars, ${significantLines.length} significant lines). Trying next model.`);
+            }
+          } else {
+            logger.warn(`Synthesis failed with model ${model.id}: ${result.error || 'Unknown error'}`);
+          }
+        } catch (error) {
+          logger.warn(`Error trying to synthesize with model ${model.id}:`, error);
+          // Continue to the next model
+        }
       }
       
-      logger.info(`Successfully synthesized final result using model ${synthesisModel.id}`);
-      
-      // Add a note about the synthesis model used
-      const finalResult = `# Results for coding task: ${decomposedTask.originalTask}\n\n## ${decomposedTask.originalTask}\n\n${result.text}\n\n---\n\n*Final synthesis performed by: ${synthesisModel.id}*`;
-      
-      // Add a section with detailed model attribution for each subtask
-      if (modelAssignments) {
-        let attributionSection = '\n\n## Model Attribution\n\nThis solution was generated using multiple AI models:\n\n';
-        attributionSection += '| Subtask | Model Used |\n| --- | --- |\n';
+      // If we successfully synthesized the results
+      if (synthesisModel && synthesizedText) {
+        logger.info(`Final synthesis completed with model: ${synthesisModel.id} (${synthesisModel.provider})`);
         
-        for (const subtask of executionOrder) {
-          const model = modelAssignments.get(subtask.id);
-          if (model) {
-            attributionSection += `| ${subtask.description.substring(0, 50)}${subtask.description.length > 50 ? '...' : ''} | ${model.id} |\n`;
+        // Add a note about the synthesis model used
+        const finalResult = `# Results for coding task: ${decomposedTask.originalTask}\n\n## ${decomposedTask.originalTask}\n\n${synthesizedText}\n\n---\n\n*Final synthesis performed by: ${synthesisModel.id}*`;
+        
+        // Add a section with detailed model attribution for each subtask
+        if (modelAssignments) {
+          let attributionSection = '\n\n## Model Attribution\n\nThis solution was generated using multiple AI models:\n\n';
+          attributionSection += '| Subtask | Model Used |\n| --- | --- |\n';
+          
+          for (const subtask of executionOrder) {
+            const model = modelAssignments.get(subtask.id);
+            if (model) {
+              attributionSection += `| ${subtask.description.substring(0, 50)}${subtask.description.length > 50 ? '...' : ''} | ${model.id} |\n`;
+            }
           }
+          
+          attributionSection += `| Final Synthesis | ${synthesisModel.id} |\n`;
+          
+          // Add the attribution section to the final result
+          return finalResult + attributionSection;
         }
         
-        attributionSection += `| Final Synthesis | ${synthesisModel.id} |\n`;
-        
-        // Add the attribution section to the final result
-        return finalResult + attributionSection;
+        return finalResult;
+      } else {
+        // All models failed, return the combined results
+        logger.warn(`Synthesis failed with all ${modelsToTry.length} models. Returning combined results.`);
+        combinedResults += '\n\n## Note\n\nAutomatic synthesis failed with all available models. The above components need to be manually integrated.';
+        return combinedResults;
       }
-      
-      return finalResult;
     } catch (error) {
       // Enhanced error logging with more details
       if (error instanceof Error) {
