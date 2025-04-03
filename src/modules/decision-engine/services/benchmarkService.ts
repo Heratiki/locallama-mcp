@@ -611,48 +611,6 @@ export const benchmarkService = {
       
       logger.info(`Found ${allFreeModels.length} free models to benchmark`);
       
-      // Create a set of all current model IDs for quick lookup
-      const currentModelIds = new Set<string>();
-      allFreeModels.forEach(model => {
-        currentModelIds.add(model.id);
-        // Handle model IDs with and without prefixes
-        if (model.id.includes(':')) {
-          currentModelIds.add(model.id.split(':')[1]);
-        } else if (model.provider === 'lm-studio') {
-          currentModelIds.add(`lm-studio:${model.id}`);
-        } else if (model.provider === 'ollama') {
-          currentModelIds.add(`ollama:${model.id}`);
-        }
-      });
-      
-      // Check for models in the database that are no longer available
-      const modelsDb = modelsDbService.getDatabase();
-      const unavailableModels: string[] = [];
-      
-      for (const modelId in modelsDb.models) {
-        const isAvailable = currentModelIds.has(modelId) || 
-                           (modelId.includes(':') && currentModelIds.has(modelId.split(':')[1])) ||
-                           currentModelIds.has(`lm-studio:${modelId}`) || 
-                           currentModelIds.has(`ollama:${modelId}`);
-        
-        if (!isAvailable) {
-          unavailableModels.push(modelId);
-        }
-      }
-      
-      // Remove unavailable models from the database
-      if (unavailableModels.length > 0) {
-        logger.info(`Removing ${unavailableModels.length} unavailable models from the database`);
-        for (const modelId of unavailableModels) {
-          delete modelsDb.models[modelId];
-          logger.debug(`Removed unavailable model from database: ${modelId}`);
-        }
-        
-        // Save the database after cleaning up
-        await modelsDbService.saveDatabase();
-        logger.info(`Successfully removed ${unavailableModels.length} unavailable models from the database`);
-      }
-      
       // Define test tasks with normalized names and varying complexity
       const benchmarkTasks = [
         {
@@ -692,6 +650,7 @@ export const benchmarkService = {
       ];
       
       // Check which models have already been benchmarked
+      const modelsDb = modelsDbService.getDatabase();
       const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
       const modelBenchmarkStatus = new Map<string, Set<string>>();
       
@@ -1399,43 +1358,6 @@ export const benchmarkService = {
 
       logger.info(`Found ${results.length} benchmark results for summarization`);
 
-      // Get the current list of available models from all services
-      const openRouterModels = await openRouterModule.getAvailableModels();
-      const lmStudioModels = await costMonitor.getAvailableModels();
-      const ollamaModels = await costMonitor.getAvailableModels(); 
-      
-      // Create a set of all available model IDs for quick lookup
-      const availableModelIds = new Set<string>();
-      
-      // Add all model IDs to the set, handling possible prefixes
-      openRouterModels.forEach(model => {
-        availableModelIds.add(model.id);
-        // OpenRouter models sometimes have prefixes removed in different parts of the code
-        if (model.id.includes(':')) {
-          availableModelIds.add(model.id.split(':')[1]);
-        }
-      });
-      
-      lmStudioModels.filter(m => m.provider === 'lm-studio').forEach(model => {
-        availableModelIds.add(model.id);
-        // LM Studio models sometimes have prefixes
-        if (model.id.includes(':')) {
-          availableModelIds.add(model.id.split(':')[1]);
-        } else {
-          availableModelIds.add(`lm-studio:${model.id}`);
-        }
-      });
-      
-      ollamaModels.filter(m => m.provider === 'ollama').forEach(model => {
-        availableModelIds.add(model.id);
-        // Ollama models sometimes have prefixes
-        if (model.id.includes(':')) {
-          availableModelIds.add(model.id.split(':')[1]);
-        } else {
-          availableModelIds.add(`ollama:${model.id}`);
-        }
-      });
-
       // Generate summary using the benchmark module's functionality
       const summary = benchmarkUtils.generateSummary(results);
 
@@ -1471,17 +1393,6 @@ export const benchmarkService = {
       let modelCount = 0;
       
       for (const [modelId, modelResultList] of modelResults.entries()) {
-        // Skip models that are no longer available from any service
-        const isModelStillAvailable = availableModelIds.has(modelId) || 
-                                     (modelId.includes(':') && availableModelIds.has(modelId.split(':')[1])) ||
-                                     availableModelIds.has(`lm-studio:${modelId}`) || 
-                                     availableModelIds.has(`ollama:${modelId}`);
-                                     
-        if (!isModelStillAvailable) {
-          logger.debug(`Skipping removed model ${modelId} in benchmark results`);
-          continue;
-        }
-        
         let successRateSum = 0;
         let qualityScoreSum = 0;
         let responseTimeSum = 0;
