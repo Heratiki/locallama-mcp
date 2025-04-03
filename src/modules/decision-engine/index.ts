@@ -10,7 +10,7 @@ import { COMPLEXITY_THRESHOLDS, TOKEN_THRESHOLDS } from './types/index.js';
 import { codeTaskCoordinator } from './services/codeTaskCoordinator.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from './types/codeTask.js';
 import { apiHandlers } from './services/apiHandlers.js';
-import { getJobTracker } from './services/jobTracker.js';
+import { getJobTracker, JobTracker } from './services/jobTracker.js';
 import { codeModelSelector } from './services/codeModelSelector.js';
 import { modelPerformanceTracker } from './services/modelPerformance.js';
 import { lmStudioModule } from '../lm-studio/index.js';
@@ -94,10 +94,10 @@ export const decisionEngine = {
         logger.info('Model performance tracker successfully initialized');
       }
       
-      // Initialize job tracker with retry logic
+      // First initialize the job tracker with retry logic
       let retries = 0;
       const maxRetries = 3;
-      let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
+      let jobTracker: JobTracker;
       
       while (retries < maxRetries) {
         try {
@@ -106,7 +106,7 @@ export const decisionEngine = {
           // Setup cleanup interval once successfully initialized
           setInterval(() => {
             try {
-              jobTracker?.cleanupCompletedJobs();
+              jobTracker.cleanupCompletedJobs();
             } catch (cleanupError) {
               logger.error('Error cleaning up completed jobs:', cleanupError);
             }

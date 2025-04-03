@@ -41,7 +41,7 @@ export interface Job {
 /**
  * JobTracker - Manages and tracks the status of all tasks in the system
  */
-class JobTracker extends EventEmitter {
+export class JobTracker extends EventEmitter {
   private activeJobs: Map<string, Job> = new Map();
   private static instance: JobTracker;
   private initialized = false;
@@ -356,6 +356,6 @@ export const getJobTracker = async (): Promise<JobTracker> => {
 };
 
 // Export synchronous function to get instance without initialization
-export const getJobTrackerSync = (): JobTracker | undefined => {
-  return jobTrackerInstance || undefined;
+export const getJobTrackerSync = (): JobTracker | null => {
+  return jobTrackerInstance;
 };
