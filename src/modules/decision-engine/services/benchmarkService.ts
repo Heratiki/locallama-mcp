@@ -582,6 +582,19 @@ export const benchmarkService = {
       // Create a map to track unique models by ID to prevent duplication
       const uniqueModelsMap = new Map<string, Model>();
       
+      // Helper function to normalize model IDs to prevent duplication
+      const normalizeModelId = (model: Model): string => {
+        // Strip 'lm-studio:' prefix if present
+        if (model.provider === 'lm-studio' && model.id.startsWith('lm-studio:')) {
+          return model.id.substring(10); // Remove the 'lm-studio:' prefix
+        }
+        // Strip 'ollama:' prefix if present
+        if (model.provider === 'ollama' && model.id.startsWith('ollama:')) {
+          return model.id.substring(7); // Remove the 'ollama:' prefix 
+        }
+        return model.id;
+      };
+      
       // First, get ALL available models
       const availableModels = await costMonitor.getAvailableModels();
       
@@ -589,7 +602,8 @@ export const benchmarkService = {
       const localModelsById: Record<string, boolean> = {};
       availableModels.forEach(model => {
         if (model.provider === 'lm-studio' || model.provider === 'ollama') {
-          localModelsById[model.id] = true;
+          // Use normalized IDs for checking
+          localModelsById[normalizeModelId(model)] = true;
         }
       });
       
@@ -600,8 +614,9 @@ export const benchmarkService = {
       // Add free OpenRouter models to unique models map
       // Exclude any that might already be in local models (shouldn't happen, but just in case)
       freeOpenRouterModels.forEach(model => {
-        if (!localModelsById[model.id]) {
-          uniqueModelsMap.set(model.id, model);
+        const normalizedId = normalizeModelId(model);
+        if (!localModelsById[normalizedId]) {
+          uniqueModelsMap.set(normalizedId, model);
         }
       });
       
@@ -610,7 +625,10 @@ export const benchmarkService = {
       if (lmStudioModels.length > 0) {
         logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool for benchmarking`);
         lmStudioModels.forEach(model => {
-          uniqueModelsMap.set(model.id, model);
+          const normalizedId = normalizeModelId(model);
+          if (!uniqueModelsMap.has(normalizedId)) {
+            uniqueModelsMap.set(normalizedId, model);
+          }
         });
       }
       
@@ -619,7 +637,10 @@ export const benchmarkService = {
       if (ollamaModels.length > 0) {
         logger.info(`Including ${ollamaModels.length} Ollama models in free models pool for benchmarking`);
         ollamaModels.forEach(model => {
-          uniqueModelsMap.set(model.id, model);
+          const normalizedId = normalizeModelId(model);
+          if (!uniqueModelsMap.has(normalizedId)) {
+            uniqueModelsMap.set(normalizedId, model);
+          }
         });
       }
       
