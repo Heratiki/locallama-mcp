@@ -27,6 +27,7 @@ const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'f
 
 // Will be initialized later to avoid circular dependency
 let jobTracker: IJobManager | null = null;
+let initializationPromise: Promise<void> | null = null;
 
 const PORT_RANGE_START = 4000;
 const PORT_RANGE_END = 4100;
@@ -853,27 +854,34 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
  */
 async function init() {
   try {
-    // Get the JobTracker instance first to ensure it's ready
-    const trackerInstance = await getJobTracker().catch(error => {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to get JobTracker instance:', errorMessage);
-      logger.error('Error details:', error);
-      throw error;
-    });
-
-    try {
-      // Set broadcastJobs function on the tracker to avoid circular dependency
-      trackerInstance.setBroadcastFunction(broadcastJobs);
-      
-      // Then initialize JobTracker in this module
-      await initJobTracker(trackerInstance);
-      logger.info('JobTracker instance initialized in ws-server');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to initialize JobTracker:', errorMessage);
-      logger.error('Error details:', error);
-      throw error;
-    }
+    // Set the initialization promise to track completion
+    initializationPromise = (async () => {
+      try {
+        // Get the JobTracker instance first to ensure it's ready
+        const trackerInstance = await getJobTracker().catch(error => {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error('Failed to get JobTracker instance:', errorMessage);
+          logger.error('Error details:', error);
+          throw error;
+        });
+    
+        // Set broadcastJobs function on the tracker to avoid circular dependency
+        trackerInstance.setBroadcastFunction(broadcastJobs);
+        
+        // Then initialize JobTracker in this module
+        await initJobTracker(trackerInstance);
+        logger.info('JobTracker instance initialized in ws-server');
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Failed to initialize JobTracker:', errorMessage);
+        logger.error('Error details:', error);
+        // Don't rethrow the error here to allow other initialization to continue
+      }
+    })();
+    
+    // Let's make sure the initialization promise completes before continuing
+    await initializationPromise;
+    initializationPromise = null;
 
     // Then initialize other services
     try {
@@ -882,7 +890,7 @@ async function init() {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to initialize database:', errorMessage);
       logger.error('Error details:', error);
-      throw error;
+      // Continue with other initialization steps even if database failed
     }
 
     try {
