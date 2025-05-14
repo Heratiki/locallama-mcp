@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/heratiki-locallama-mcp-badge.png)](https://mseep.ai/app/heratiki-locallama-mcp)
+
 # LocaLLama MCP Server
 
 An MCP Server that works with Roo Code or Cline.Bot (Currently Untested with Claude Desktop or CoPilot MCP VS Code Extension) to optimize costs by intelligently routing coding tasks between local LLMs and paid APIs.
