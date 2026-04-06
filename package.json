@@ -27,7 +27,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@types/glob": "^8.1.0",
     "@types/node": "^22.13.5",
     "@types/uuid": "^10.0.0",
