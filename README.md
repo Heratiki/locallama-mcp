@@ -1,10 +1,28 @@
-# LocaLLama MCP Server (Testing Branch)
+# LocalLama MCP Server
 
-An MCP Server that works with Roo Code or Cline.Bot (Currently Untested with Claude Desktop or CoPilot MCP VS Code Extension) to optimize costs by intelligently routing coding tasks between local LLMs and paid APIs. Lot's of broken implementation in this.
+LocalLama MCP is a local-first, provider-neutral Model Context Protocol server for modern coding-agent workflows. It is being revived to support current MCP-capable tools such as Codex, Claude Code, Claw Code, Cursor, GitHub Copilot Agent mode, and generic MCP clients.
+
+The project routes coding work across local models, free or low-cost remote models, and paid frontier models using cost, latency, context capacity, benchmark history, and task fit. It is no longer designed around Cline or Roo Code as primary clients.
+
+> Revival status: this repository has useful architecture, but several development commands and benchmark paths are stale. See `docs/ROADMAP.md` for the active modernization plan.
 
 ## Overview
 
-LocalLama MCP Server is designed to reduce token usage and costs by dynamically deciding whether to offload a coding task to a local, less capable instruct LLM (e.g., LM Studio, Ollama) versus using a paid API. Version 1.7.0 introduces smart code task analysis, advanced dependency mapping, and intelligent task decomposition features.
+LocalLama MCP Server is designed to reduce token usage and costs without giving up quality. It dynamically decides whether a coding task should run on a local model, a free or low-cost remote model, or a paid frontier model. The long-term direction is to make those decisions from measured provider capabilities and executable benchmark results instead of hardcoded model assumptions.
+
+## Current Baseline
+
+- `npx tsc --project tsconfig.json --noEmit` succeeds.
+- `npm run build` currently fails on native Windows because the package script uses Unix `cp`.
+- `npm run lint` currently fails because `eslint-plugin-import` is referenced but not installed.
+- `npm run benchmark` and `npm run benchmark:comprehensive` currently reference a missing `run-benchmarks.js`.
+
+## Project Memory and Roadmap
+
+- `AGENTS.md` is the shared operating guide for coding agents.
+- `CLAUDE.md` points Claude Code at the same shared guidance.
+- `memory-bank/` contains multi-author project memory.
+- `docs/ROADMAP.md` is the modernization roadmap and implementation plan.
 
 ## Key Components
 
@@ -263,9 +281,9 @@ PYTHON_DETECT_VENV=true
   - `LOCK_FILE_CHECK_ACTIVE_PROCESS`: Verify if processes in lock files are still running
   - `REMOVE_STALE_LOCK_FILES`: Automatically clean up stale lock files from crashed processes
 
-### Environment Variables for Cline.Bot and Roo Code
+### Environment Variables for MCP Clients
 
-When integrating with Cline.Bot or Roo Code, you can pass these environment variables directly:
+When integrating with Codex, Claude Code, Claw Code, Cursor, GitHub Copilot Agent mode, or another MCP-capable client, pass these environment variables through that client's MCP server configuration:
 
 - For **simple configuration**: Use the basic env variables in your MCP setup
 - For **advanced routing**: Configure thresholds to fine-tune when local vs. cloud models are used
@@ -352,16 +370,18 @@ The server now provides job tracking resources:
 - **Job Progress**: Track the progress of a specific job via `locallama://jobs/progress/{jobId}`
 - **Job Cancellation**: Cancel a running job using the `cancel_job` tool
 
-### Using with Cline.Bot
+### Using with Modern MCP Clients
 
-To use this MCP Server with Cline.Bot, add it to your Cline MCP settings:
+Build the server, then configure your MCP client to launch `node dist/index.js` with the environment variables relevant to your local setup.
+
+Generic stdio MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "locallama": {
       "command": "node",
-      "args": ["/path/to/locallama-mcp"],
+      "args": ["/path/to/locallama-mcp/dist/index.js"],
       "env": {
         "LM_STUDIO_ENDPOINT": "http://localhost:1234/v1",
         "OLLAMA_ENDPOINT": "http://localhost:11434/api",
@@ -379,7 +399,9 @@ To use this MCP Server with Cline.Bot, add it to your Cline MCP settings:
 }
 ```
 
-Once configured, you can use the MCP tools in Cline.Bot:
+Claude Code project-scoped configuration can use the same server shape in `.mcp.json`. Codex users should add this server through Codex MCP configuration or the Codex CLI, using the same command, args, and environment values.
+
+Once configured, the MCP client can discover and use tools such as:
 
 - `get_free_models`: Retrieve the list of free models from OpenRouter
 - `clear_openrouter_tracking`: Force a fresh update of OpenRouter models if you encounter issues
@@ -389,7 +411,7 @@ Once configured, you can use the MCP tools in Cline.Bot:
 - `retriv_init`: Initialize and configure Retriv for code search and indexing
 - `cancel_job`: Cancel a running job to prevent runaway costs
 
-Example usage in Cline.Bot:
+Example tool call:
 
 ```
 /use_mcp_tool locallama clear_openrouter_tracking {}

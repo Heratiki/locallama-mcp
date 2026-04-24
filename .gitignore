@@ -1,8 +1,8 @@
-# Cline/Roo specific - IDE and tool configuration
+# Legacy Cline/Roo specific IDE and tool configuration
 .clinerules-architect
 .clinerules-ask
 .clinerules-code
-memory-bank/
+memory-bank/*.code-workspace
 
 # Dependency directories
 node_modules/
@@ -105,6 +105,5 @@ locallama.bk1
 mcp-chat.bk1
 lm-studio-models.json
 chats.db
-CLAUDE.md
 package-lock.json
 job-results.txt
