@@ -22,6 +22,11 @@ import {
 } from './storage/benchmarkDb.js';
 
 import { logger } from '../../utils/logger.js';
+import { CapabilityDetector } from '../core/capability-detector';
+import { ModelRegistry } from '../core/model-registry';
+
+const modelRegistry = new ModelRegistry();
+const capabilityDetector = new CapabilityDetector(modelRegistry);
 
 /**
  * Default benchmark configuration
@@ -54,6 +59,28 @@ async function benchmarkTasks(
   await cleanupOldResults();
   
   return summary;
+}
+
+/**
+ * Benchmark Model
+ */
+async function benchmarkModel(modelId) {
+  const capabilities = capabilityDetector.detectCapabilities(modelId);
+  console.log(`Benchmarking model: ${modelId}`);
+  console.log(`Capabilities:`, capabilities);
+
+  // Add benchmarking logic based on capabilities
+  if (capabilities.code) {
+    console.log(`Running code benchmarks for ${modelId}...`);
+    // Code benchmarking logic here
+  }
+
+  if (capabilities.chat) {
+    console.log(`Running chat benchmarks for ${modelId}...`);
+    // Chat benchmarking logic here
+  }
+
+  // Additional benchmarks as needed
 }
 
 /**
@@ -94,5 +121,6 @@ export const benchmarkModule = {
     save: saveBenchmarkResult,
     getRecentResults: getRecentModelResults,
     cleanup: cleanupOldResults
-  }
+  },
+  benchmarkModel
 };

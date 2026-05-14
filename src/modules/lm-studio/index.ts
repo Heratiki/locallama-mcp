@@ -20,36 +20,17 @@ const TRACKING_FILE_PATH = path.join(config.rootDir, 'lm-studio-models.json');
 const STRATEGIES_FILE_PATH = path.join(config.rootDir, 'lm-studio-strategies.json');
 
 // Default prompting strategies for different model families
-const DEFAULT_PROMPTING_STRATEGIES: Record<string, Partial<PromptingStrategy>> = {
-  'llama': {
-    systemPrompt: 'You are a helpful assistant.',
-    useChat: true
-  },
-  'mistral': {
-    systemPrompt: 'You are a helpful assistant.',
-    useChat: true
-  },
-  'mixtral': {
-    systemPrompt: 'You are a helpful assistant.',
-    useChat: true
-  },
-  'qwen': {
-    systemPrompt: 'You are a helpful assistant.',
-    useChat: true
-  },
-  'phi': {
-    systemPrompt: 'You are a helpful assistant.',
-    useChat: true
-  },
-  'gemma': {
-    systemPrompt: 'You are a helpful assistant.',
-    useChat: true
-  },
-  'default': {
-    systemPrompt: 'You are a helpful assistant.',
-    useChat: true
-  }
-};
+import promptingStrategies from '../../config/prompting-strategies.json';
+
+const DEFAULT_PROMPTING_STRATEGIES = promptingStrategies.strategies.reduce((acc, strategy) => {
+  acc[strategy.id] = strategy;
+  return acc;
+}, {});
+
+// Use DEFAULT_PROMPTING_STRATEGIES dynamically
+function getPromptingStrategy(modelId) {
+  return DEFAULT_PROMPTING_STRATEGIES[modelId] || DEFAULT_PROMPTING_STRATEGIES['default'];
+}
 
 // Default speculative inference configuration
 const DEFAULT_SPECULATIVE_INFERENCE_CONFIG: SpeculativeInferenceConfig = {

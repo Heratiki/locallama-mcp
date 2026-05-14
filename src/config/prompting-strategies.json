@@ -1,0 +1,19 @@
+{
+  "strategies": [
+    {
+      "id": "default",
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "llama",
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "claude",
+      "systemPrompt": "You are a coding assistant specialized in AI tasks.",
+      "useChat": true
+    }
+  ]
+}

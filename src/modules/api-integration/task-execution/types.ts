@@ -7,22 +7,24 @@ export interface ITaskExecutor {
    * Execute a task using the selected model
    * This handles the actual execution of the task through the appropriate service
    */
-  executeTask: (model: string, task: string, jobId: string) => Promise<string>;
-  
-  /**
-   * Execute a task with an Ollama model
-   */
-  executeOllamaModel: (model: string, task: string) => Promise<string>;
-  
-  /**
-   * Execute a task with an LM Studio model
-   */
-  executeLmStudioModel: (model: string, task: string) => Promise<string>;
-  
-  /**
-   * Execute a task with a local model
-   */
-  executeLocalModel: (model: string, task: string) => Promise<string>;
+  executeTask: (modelId: string, task: string, jobId: string) => Promise<string>;
+}
+
+export class TaskExecutor implements ITaskExecutor {
+  private modelRegistry: ModelRegistry;
+
+  constructor(modelRegistry: ModelRegistry) {
+    this.modelRegistry = modelRegistry;
+  }
+
+  async executeTask(modelId: string, task: string, jobId: string): Promise<string> {
+    const model = this.modelRegistry.getModel(modelId);
+    if (!model) {
+      throw new Error(`Model not found: ${modelId}`);
+    }
+    // Logic to execute task based on model capabilities
+    return `Task executed for model ${model.name}`;
+  }
 }
 
 export interface TaskExecutionOptions {

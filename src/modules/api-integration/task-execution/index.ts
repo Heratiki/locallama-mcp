@@ -6,6 +6,13 @@ import { ollamaModule } from '../../ollama/index.js'; // Added import
 import { lmStudioModule } from '../../lm-studio/index.js'; // Added import
 import { ITaskExecutor } from '../types.js';
 import { indexDocuments } from '../../cost-monitor/codeSearchEngine.js';
+import { ProviderRegistry } from '../../core/provider-registry';
+
+const providerRegistry = new ProviderRegistry();
+
+// Register providers (example)
+providerRegistry.register(new OpenRouterProvider());
+providerRegistry.register(new LocalModelProvider());
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -39,134 +46,21 @@ export class TaskExecutor implements ITaskExecutor {
       let result: string;
 
       // Determine the execution path based on model provider
-      if (model.startsWith('openrouter:')) {
-        // Handle OpenRouter execution via explicit prefix
-        try {
-          // Update progress to 50% before API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 50, 60000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-
-          // Execute the task via OpenRouter
-          result = await openRouterModule.executeTask(model.replace('openrouter:', ''), task);
-
-          // Update progress to 75% after successful API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 75, 30000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to execute task with OpenRouter: ${error instanceof Error ? error.message : String(error)}`);
-          throw error;
-        }
-        /*
-        Author: Roo
-        Date: March 11, 2025, 8:34:22 PM
-        Original code preserved below - improved model provider handling logic
-        } else if (model.startsWith('mistralai/') || model.includes('/') || model === 'mistralai/mistral-small-24b-instruct-2501') {
-          // Handle OpenRouter models with provider/model format (e.g., google/gemini-exp-1206:free)
-        */
-      } else if (model.startsWith('mistralai/') ||
-        model.startsWith('google/') ||
-        model.startsWith('anthropic/') ||
-        (model.includes('/') && !model.includes(':'))) {
-        // Handle OpenRouter models with provider/model format
-        // Explicitly support known providers and handle generic provider/model formats
-        // Skip if it contains ':' as that's likely a local provider format (e.g., 'ollama:llama2')
-        try {
-          // Update progress to 50% before API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 50, 60000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-
-          // Execute the task via OpenRouter
-          result = await openRouterModule.executeTask(model, task);
-
-          // Update progress to 75% after successful API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 75, 30000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to execute task with OpenRouter model ${model}: ${error instanceof Error ? error.message : String(error)}`);
-          throw error;
-        }
-      } else {
-        // For all other model types (local, ollama, lm-studio), handle execution directly
-        try {
-          // Update progress to 50% before execution
-          try {
-            void jobTracker.updateJobProgress(jobId, 50, 60000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-
-          // Extract provider and model name
-          const modelParts = model.split(':');
-          const provider = modelParts[0];
-          const modelName = modelParts.slice(1).join(':');
-
-          // Execute based on provider type
-          switch (provider) {
-            case 'ollama':
-              result = await this.executeOllamaModel(modelName, task);
-              break;
-            case 'lm-studio':
-              result = await this.executeLmStudioModel(modelName, task);
-              break;
-            case 'local':
-              result = await this.executeLocalModel(modelName, task);
-              break;
-            default:
-              throw new Error(`Unsupported model provider: ${model}`);
-          }
-
-          // Update progress to 75% after execution
-          try {
-            void jobTracker.updateJobProgress(jobId, 75, 30000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to execute task with model ${model}: ${error instanceof Error ? error.message : String(error)}`);
-          throw error;
-        }
+      const provider = providerRegistry.getProviderForModel(model);
+      if (!provider) {
+        throw new Error(`No provider found for model: ${model}`);
       }
+      result = await provider.executeTask(model, task, jobId);
 
-      // Process and format result if needed
-      const formattedResult = typeof result === 'string' ? result : JSON.stringify(result);
-
-      // Index the result in Retriv if possible
+      // Update progress to 75% after successful API call
       try {
-        // Use the indexDocuments function directly instead of a method on CodeSearchEngine
-        await indexDocuments([
-          {
-            content: formattedResult,
-            path: `job_${jobId}`,
-            language: 'code'
-          }
-        ]);
-        logger.info(`Successfully indexed result for job ${jobId} in Retriv`);
-      } catch (error) {
-        logger.warn(`Failed to index result in Retriv: ${error instanceof Error ? error.message : String(error)}`);
-        // Continue even if indexing fails
-      }
-
-      // Complete the job (100%)
-      try {
-        void jobTracker.completeJob(jobId, [formattedResult]);
-      } catch (completeJobError) {
-        logger.error(`Failed to complete job ${jobId}: ${completeJobError instanceof Error ? completeJobError.message : String(completeJobError)}`);
+        void jobTracker.updateJobProgress(jobId, 75, 30000);
+      } catch (updateJobProgressError) {
+        logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
       }
       logger.info(`Job ${jobId} completed successfully`);
 
-      return formattedResult;
+      return result;
     } catch (error) {
       logger.error(`Error executing task for job ${jobId}:`, error);
       try {
