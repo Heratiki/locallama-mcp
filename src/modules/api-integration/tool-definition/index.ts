@@ -3,6 +3,7 @@ import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { IToolDefinitionProvider, ITool } from './types.js';
 import { logger } from '../../../utils/logger.js';
 import { config } from '../../../config/index.js';
+import { getProviderRegistry } from '../../core/provider/index.js';
 import { execSync } from 'child_process';
 
 /**
@@ -41,9 +42,13 @@ function isPythonModuleInstalled(moduleName: string): boolean {
 }
 
 /**
- * Check if OpenRouter API key is configured
+ * Whether OpenRouter is available as a provider. Prefers the runtime
+ * provider registry (set up by `LocalLamaMcpServer.run()`); falls back to the
+ * raw env config so that callers running before bootstrap (e.g. unit tests
+ * that import this module directly) still get a sensible answer.
  */
 export function isOpenRouterConfigured(): boolean {
+  if (getProviderRegistry().has('openrouter')) return true;
   return !!config.openRouterApiKey;
 }
 

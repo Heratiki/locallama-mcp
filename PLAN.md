@@ -86,7 +86,7 @@ The repo was cloned to this machine recently and is **not yet adapted**:
 
 Without this, none of the rest builds.
 
-**Status:** ⏳ Not started.
+**Status:** ✅ Completed — commit `778b82d` (2026-05-15). `npm run build` clean; `npm test` 27/27 passing; phantom `TaskExecutor` class in `types.ts` removed; dead `CapabilityDetector`/`ModelRegistry` instances in `benchmark/index.ts` removed; no unused `core/*` symbols.
 
 **Tasks:**
 
@@ -103,7 +103,13 @@ Without this, none of the rest builds.
 
 ## Section 1 — Real ProviderRegistry abstraction
 
-**Status:** ⏳ Not started. (Prior stub is broken; treat as un-done.)
+**Status:** ✅ Completed — 2026-05-15. `npm run build` clean; `npm test` 35/35 passing; grep returns 0 hardcoded provider conditionals outside the comment in `registry.ts`.
+
+**Acceptance criteria check:**
+- [x] All 44 hardcoded provider conditionals replaced; `grep -rn "provider === '\(local\|lm-studio\|ollama\|openrouter\|paid\|free\)'" src/` returns 0 live code hits.
+- [x] Unit tests for `ProviderRegistry` (8 cases: register/get, listByCostClass, isLocalProvider, duplicate-overwrite warning, initAll failure isolation, initAll idempotency, unregister, singleton accessor).
+- [x] `isOpenRouterConfigured()` in `tool-definition/index.ts` gates on `registry.has('openrouter')` before falling back to config key check.
+- [ ] Smoke test: `route_task` end-to-end with a real LM Studio / Ollama instance — requires a running provider; not automated yet (pending Section 3 integration tests).
 
 ### Design
 
@@ -173,18 +179,14 @@ if (config.openRouterApiKey) registry.register(openRouterProvider);
 await registry.initAll();
 ```
 
-### Migration of the 45 hardcoded conditionals
+### Migration of the 44 hardcoded conditionals ✅
 
-Replace each `model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama'` with `registry.get(model.provider)?.isLocal ?? false`. Replace `provider === 'paid'` with `registry.get(model.provider)?.costClass !== 'local'`. Files to touch (from the audit):
+All 44 sites replaced using two helpers from [src/modules/core/provider/helpers.ts](src/modules/core/provider/helpers.ts):
 
-- [src/modules/decision-engine/services/taskRouter.ts:126, 489-491, 703-705](src/modules/decision-engine/services/taskRouter.ts#L126)
-- [src/modules/decision-engine/services/modelSelector.ts:54, 108](src/modules/decision-engine/services/modelSelector.ts#L54)
-- [src/modules/decision-engine/services/modelPerformance.ts:300-302, 546-548](src/modules/decision-engine/services/modelPerformance.ts#L300)
-- [src/modules/decision-engine/index.ts:521](src/modules/decision-engine/index.ts#L521)
-- [src/modules/benchmark/core/runner.ts:81, 93, 245-246, 264](src/modules/benchmark/core/runner.ts#L81)
-- [src/modules/fallback-handler/index.ts:65, 85, 201](src/modules/fallback-handler/index.ts#L65)
+- `isProviderLocal(id)` — replaces `id === 'local' || id === 'lm-studio' || id === 'ollama'`. Falls back to a hard-coded known-local set when the registry is empty (e.g., unit tests).
+- `isProviderId(modelProvider, expectedId)` — replaces `model.provider === 'lm-studio'` dispatch checks. Routes through registry when populated; falls back to direct string compare for legacy deserialized data.
 
-Total: 45 sites (per `grep -c`). Plan to do these as a single mechanical PR after the registry is in place and has unit tests.
+**fallback-handler note:** The `handleError` context field was `provider: 'local' | 'paid'` (a cost-class union, not a real provider id). Renamed to `costClass` throughout [src/modules/fallback-handler/index.ts](src/modules/fallback-handler/index.ts) — also renames `FallbackResult.provider` to `FallbackResult.costClass` which is a minor interface change; the module has no external callers in the current codebase.
 
 ### Risks / gotchas
 

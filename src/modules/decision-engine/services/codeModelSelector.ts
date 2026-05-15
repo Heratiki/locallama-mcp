@@ -7,6 +7,7 @@ import { CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { config } from '../../../config/index.js';
+import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
 
 /**
  * Interface for the model performance tracker methods
@@ -185,13 +186,13 @@ export const codeModelSelector = {
               }
               
               // For simple tasks, slightly prefer local models for efficiency
-              if (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') {
+              if (isProviderLocal(model.provider)) {
                   score += 0.05;
               }
           }
-          
+
           // Consider model provider variety
-          if (model.provider === 'openrouter') {
+          if (isProviderId(model.provider, 'openrouter')) {
               score += 0.15; // Boost OpenRouter models to increase their selection chance
           }
           
@@ -229,7 +230,7 @@ export const codeModelSelector = {
     score += languageBoost;
     
     // Boost OpenRouter models to encourage their selection
-    if (model.provider === 'openrouter') {
+    if (isProviderId(model.provider, 'openrouter')) {
       score += 0.05;
     }
     
@@ -264,11 +265,7 @@ export const codeModelSelector = {
         case 'medium': {
           // Try to find a medium-sized local model
           const localModels = await costMonitor.getAvailableModels();
-          const mediumModel = localModels.find(m => 
-            m.provider === 'local' || 
-            m.provider === 'lm-studio' || 
-            m.provider === 'ollama'
-          );
+          const mediumModel = localModels.find(m => isProviderLocal(m.provider));
           
           return mediumModel || {
             id: config.defaultLocalModel,
@@ -520,7 +517,7 @@ export const codeModelSelector = {
     }
 
     // Provider-based efficiency
-    if (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') {
+    if (isProviderLocal(model.provider)) {
       score += 0.3; // Local models are generally more resource-efficient
 
       // Additional optimizations for local models

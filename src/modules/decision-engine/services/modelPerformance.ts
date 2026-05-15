@@ -3,6 +3,7 @@ import { Model } from '../../../types/index.js';
 import { ModelPerformanceData, ModelPerformanceAnalysis } from '../types/index.js';
 import { modelsDbService } from './modelsDb.js';
 import { openRouterModule } from '../../openrouter/index.js';
+import { isProviderLocal } from '../../core/provider/index.js';
 
 interface SystemResources {
   cpuUsage?: number;
@@ -297,9 +298,7 @@ export const modelPerformanceTracker = {
         .filter(([_, data]) => {
           const typedData = data as ModelPerformanceData;
           if (options?.requireLocalOnly) {
-            return typedData.provider === 'local' || 
-                   typedData.provider === 'lm-studio' || 
-                   typedData.provider === 'ollama';
+            return isProviderLocal(typedData.provider);
           }
           return true;
         })
@@ -542,17 +541,8 @@ export const modelPerformanceTracker = {
       const leastEfficientModels = [...scoredModels].reverse().slice(0, 3);
       
       // Calculate averages by provider type
-      const localModels = scoredModels.filter(m => 
-        m.provider === 'local' || 
-        m.provider === 'lm-studio' || 
-        m.provider === 'ollama'
-      );
-      
-      const remoteModels = scoredModels.filter(m => 
-        m.provider !== 'local' && 
-        m.provider !== 'lm-studio' && 
-        m.provider !== 'ollama'
-      );
+      const localModels = scoredModels.filter(m => isProviderLocal(m.provider));
+      const remoteModels = scoredModels.filter(m => !isProviderLocal(m.provider));
       
       const averageLocalModelEfficiency = localModels.length > 0 ?
         localModels.reduce((sum, m) => sum + m.efficiency, 0) / localModels.length : 0;

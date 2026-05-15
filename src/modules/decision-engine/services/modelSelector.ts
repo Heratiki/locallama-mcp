@@ -6,6 +6,7 @@ import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 // import { modelProfiles } from '../utils/modelProfiles.js';
 import { isOpenRouterConfigured } from '../../api-integration/tool-definition/index.js';
+import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
 
 /**
  * Model Selector Service
@@ -50,8 +51,8 @@ export const modelSelector = {
       
       // Get local models
       const localModels = await costMonitor.getAvailableModels();
-      const filteredLocalModels = localModels.filter(model => 
-        (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') &&
+      const filteredLocalModels = localModels.filter(model =>
+        isProviderLocal(model.provider) &&
         (model.contextWindow === undefined || model.contextWindow >= totalTokens)
       );
       
@@ -105,7 +106,7 @@ export const modelSelector = {
           
           // For local models, we also consider system resource usage
           // This is a local-specific optimization
-          if (model.provider === 'local' || model.provider === 'lm-studio') {
+          if (isProviderId(model.provider, 'local') || isProviderId(model.provider, 'lm-studio')) {
             // Prefer models that use fewer resources for the same quality
             // This is a heuristic based on model size
             if (model.id.toLowerCase().includes('1.5b') || 

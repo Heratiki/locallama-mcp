@@ -301,12 +301,35 @@ export class LocalLamaMcpServer {
       }
       
       // No lock file or stale lock file was removed, continue starting the server
-      
+
       // Connection information for the lock file
       const connectionInfo = `LocalLama MCP Server running on stdio`;
-      
+
       // Create lock file with current process info and connection details
       createLockFile({ connectionInfo });
+
+      // Bootstrap the provider registry before anything that needs to know which
+      // providers exist (decision engine, tool listing). Provider init failures
+      // are isolated inside registry.initAll().
+      try {
+        const { getProviderRegistry } = await import('./modules/core/provider/index.js');
+        const registry = getProviderRegistry();
+        const { lmStudioProvider } = await import('./modules/lm-studio/provider.js');
+        const { ollamaProvider } = await import('./modules/ollama/provider.js');
+        registry.register(lmStudioProvider);
+        registry.register(ollamaProvider);
+        const { config: cfg } = await import('./config/index.js');
+        if (cfg.openRouterApiKey) {
+          const { openRouterProvider } = await import('./modules/openrouter/provider.js');
+          registry.register(openRouterProvider);
+        }
+        const ready = await registry.initAll();
+        logger.info(`Provider registry initialized: [${ready.join(', ')}]`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Failed to bootstrap provider registry:', errorMessage);
+        throw error;
+      }
 
       // Initialize the decision engine
       const { decisionEngine } = await import('./modules/decision-engine/index.js');

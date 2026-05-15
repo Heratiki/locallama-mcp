@@ -12,6 +12,7 @@ import { getOpenRouterUsage, getAvailableModels } from './api.js';
 import { tokenManager, TokenUsage, CodeTaskContext } from './tokenManager.js';
 import { codeCache, CodePattern } from './codeCache.js';
 import { CodeSubtask } from '../decision-engine/types/codeTask.js';
+import { isProviderLocal } from '../core/provider/index.js';
 import { CodeSearchEngine, CodeSearchResult } from './codeSearch.js';
 import { BM25Searcher, BM25Options } from './bm25.js';
 // Import ModelPerformanceData interface
@@ -581,8 +582,8 @@ export const costMonitor = {
     const performanceData = this.getModelPerformanceData();
 
     // Filter to local models with sufficient context window
-    const suitableModels = localModels.filter(model => 
-      (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') &&
+    const suitableModels = localModels.filter(model =>
+      isProviderLocal(model.provider) &&
       (!model.contextWindow || model.contextWindow >= params.context_length + params.expected_output_length)
     );
 

@@ -9,6 +9,7 @@ import { simulateOpenAiApi, simulateGenericApi } from '../api/simulation.js';
 import { evaluateQuality } from '../evaluation/quality.js';
 import { codeEvaluationService } from '../../decision-engine/services/codeEvaluationService.js';
 import { saveBenchmarkResult, getRecentModelResults } from '../storage/benchmarkDb.js';
+import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
 
 // Track model failure counts in memory
 const modelFailures = new Map<string, number>();
@@ -78,7 +79,7 @@ export async function runModelBenchmark(
       let completionTokens = 0;
       let runOutput = '';
       
-      if (model.provider === 'lm-studio') {
+      if (isProviderId(model.provider, 'lm-studio')) {
         logger.info(`Calling LM Studio API for model ${model.id}`);
         response = await callLmStudioApi(model.id, task, dynamicTimeout);
         success = response.success;
@@ -90,7 +91,7 @@ export async function runModelBenchmark(
           // Store the latest successful output
           output = runOutput;
         }
-      } else if (model.provider === 'ollama') {
+      } else if (isProviderId(model.provider, 'ollama')) {
         response = await callOllamaApi(model.id, task, config.taskTimeout);
         success = response.success;
         qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
@@ -241,16 +242,16 @@ export async function benchmarkTask(
   const availableModels = await costMonitor.getAvailableModels();
   
   // Determine which models to use
-  const localModel = params.localModel 
-    ? availableModels.find(m => m.id === params.localModel && (m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama'))
-    : availableModels.find(m => m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama');
+  const localModel = params.localModel
+    ? availableModels.find(m => m.id === params.localModel && isProviderLocal(m.provider))
+    : availableModels.find(m => isProviderLocal(m.provider));
   
   // For paid model, check if we should use a free model from OpenRouter
   let paidModel: Model | undefined;
   let skipBenchmark = false;
   
   if (params.paidModel) {
-    paidModel = availableModels.find(m => m.id === params.paidModel && m.provider !== 'local' && m.provider !== 'lm-studio' && m.provider !== 'ollama');
+    paidModel = availableModels.find(m => m.id === params.paidModel && !isProviderLocal(m.provider));
   } else if ('isConfigured' in openRouterModule && typeof openRouterModule.isConfigured === 'function') {
     try {
       if (Object.keys(openRouterModule.modelTracking.models).length === 0) {
@@ -261,7 +262,7 @@ export async function benchmarkTask(
       const freeModels = await costMonitor.getFreeModels();
       
       // Find LM Studio models and add them to the free models pool
-      const lmStudioModels = availableModels.filter(m => m.provider === 'lm-studio');
+      const lmStudioModels = availableModels.filter(m => isProviderId(m.provider, 'lm-studio'));
       if (lmStudioModels.length > 0) {
         logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool`);
         

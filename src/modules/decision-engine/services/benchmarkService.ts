@@ -11,6 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { speculativeDecodingService } from '../services/speculativeDecoding.js';
 import { Model } from '../../../types/index.js';
+import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
 
 // Add this interface at the top of the file with other types
 /**
@@ -477,14 +478,14 @@ export const benchmarkService = {
       
       let result;
       // Call the appropriate API
-      if (provider === 'lm-studio') {
+      if (isProviderId(provider, 'lm-studio')) {
         logger.info(`Calling LM Studio API for model ${modelId}`);
         result = await callLmStudioApi(
           modelId,
           task,
           Math.round(dynamicTimeout) // Use dynamic timeout
         );
-      } else if (provider === 'ollama') {
+      } else if (isProviderId(provider, 'ollama')) {
         logger.info(`Calling Ollama API for model ${modelId}`);
         result = await callOllamaApi(
           modelId,
@@ -585,12 +586,12 @@ export const benchmarkService = {
       // Helper function to normalize model IDs to prevent duplication
       const normalizeModelId = (model: Model): string => {
         // Strip 'lm-studio:' prefix if present
-        if (model.provider === 'lm-studio' && model.id.startsWith('lm-studio:')) {
+        if (isProviderId(model.provider, 'lm-studio') && model.id.startsWith('lm-studio:')) {
           return model.id.substring(10); // Remove the 'lm-studio:' prefix
         }
         // Strip 'ollama:' prefix if present
-        if (model.provider === 'ollama' && model.id.startsWith('ollama:')) {
-          return model.id.substring(7); // Remove the 'ollama:' prefix 
+        if (isProviderId(model.provider, 'ollama') && model.id.startsWith('ollama:')) {
+          return model.id.substring(7); // Remove the 'ollama:' prefix
         }
         return model.id;
       };
@@ -601,7 +602,7 @@ export const benchmarkService = {
       // Store available LM Studio and Ollama models by ID
       const localModelsById: Record<string, boolean> = {};
       availableModels.forEach(model => {
-        if (model.provider === 'lm-studio' || model.provider === 'ollama') {
+        if (isProviderLocal(model.provider)) {
           // Use normalized IDs for checking
           localModelsById[normalizeModelId(model)] = true;
         }
@@ -621,7 +622,7 @@ export const benchmarkService = {
       });
       
       // Find LM Studio models and add them to the unique models map
-      const lmStudioModels = availableModels.filter(m => m.provider === 'lm-studio');
+      const lmStudioModels = availableModels.filter(m => isProviderId(m.provider, 'lm-studio'));
       if (lmStudioModels.length > 0) {
         logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool for benchmarking`);
         lmStudioModels.forEach(model => {
@@ -633,7 +634,7 @@ export const benchmarkService = {
       }
       
       // Find Ollama models and add them to the unique models map
-      const ollamaModels = availableModels.filter(m => m.provider === 'ollama');
+      const ollamaModels = availableModels.filter(m => isProviderId(m.provider, 'ollama'));
       if (ollamaModels.length > 0) {
         logger.info(`Including ${ollamaModels.length} Ollama models in free models pool for benchmarking`);
         ollamaModels.forEach(model => {
@@ -799,21 +800,21 @@ export const benchmarkService = {
             
             let result;
             // Call the appropriate API
-            if (model.provider === 'lm-studio') {
+            if (isProviderId(model.provider, 'lm-studio')) {
               logger.info(`Calling LM Studio API for model ${model.id}`);
               result = await callLmStudioApi(
                 model.id,
                 task.task,
-                Math.round(dynamicTimeout), // Use dynamic timeout
-                draftModel?.provider === 'lm-studio' ? draftModel.id : undefined // Only use draft model if it's also from LM Studio
+                Math.round(dynamicTimeout),
+                isProviderId(draftModel?.provider, 'lm-studio') ? draftModel?.id : undefined
               );
-            } else if (model.provider === 'ollama') {
+            } else if (isProviderId(model.provider, 'ollama')) {
               logger.info(`Calling Ollama API for model ${model.id}`);
               result = await callOllamaApi(
                 model.id,
                 task.task,
-                Math.round(dynamicTimeout), // Use dynamic timeout
-                draftModel?.provider === 'ollama' ? draftModel.id : undefined // Only use draft model if it's also from Ollama
+                Math.round(dynamicTimeout),
+                isProviderId(draftModel?.provider, 'ollama') ? draftModel?.id : undefined
               );
             } else {
               // Default to OpenRouter for other providers

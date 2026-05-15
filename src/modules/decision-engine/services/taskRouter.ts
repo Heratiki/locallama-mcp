@@ -5,6 +5,7 @@ import { modelPerformanceTracker } from './modelPerformance.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { CodeSubtask, Task } from '../types/codeTask.js';
 import TaskExecutor from './taskExecutor.js';
+import { isProviderLocal } from '../../core/provider/index.js';
 
 interface RoutingStrategy {
   name: string;
@@ -123,7 +124,7 @@ class TaskRouter {
       baseTimeMs = stats.avgResponseTime;
     } else {
       // Heuristic calculation based on model type and task size
-      if (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') {
+      if (isProviderLocal(model.provider)) {
         baseTimeMs = 2000 + (tokenCount * 10); // Local models: base + 10ms per token
       } else {
         baseTimeMs = 1000 + (tokenCount * 5); // Remote models: base + 5ms per token
@@ -485,11 +486,7 @@ class TaskRouter {
           const isEfficientModel = efficiencyReport.mostEfficientModels.some(m => m.id === model.id);
           if (isEfficientModel) {
             score += 2.5;
-          } else if (
-            model.provider === 'local' || 
-            model.provider === 'lm-studio' || 
-            model.provider === 'ollama'
-          ) {
+          } else if (isProviderLocal(model.provider)) {
             // Local models generally more efficient than remote
             score += 1.5;
           }
@@ -700,9 +697,7 @@ class TaskRouter {
     // Filter models based on strategy
     const eligibleModels = models.filter(model => {
       if (strategy.requireLocalOnly) {
-        return (model.provider === 'local' || 
-                model.provider === 'lm-studio' || 
-                model.provider === 'ollama') &&
+        return isProviderLocal(model.provider) &&
                (!model.contextWindow || model.contextWindow >= task.estimatedTokens);
       }
       return !model.contextWindow || model.contextWindow >= task.estimatedTokens;

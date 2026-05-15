@@ -15,6 +15,7 @@ import { codeModelSelector } from './services/codeModelSelector.js';
 import { modelPerformanceTracker } from './services/modelPerformance.js';
 import { lmStudioModule } from '../lm-studio/index.js';
 import { ollamaModule } from '../ollama/index.js';
+import { isProviderLocal } from '../core/provider/index.js';
 // import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
 /**
  * Represents a single factor in the routing decision.
@@ -518,7 +519,7 @@ export const decisionEngine = {
     complexity: number,
     totalTokens: number
   ): Promise<string> {
-    if (provider === 'local') {
+    if (isProviderLocal(provider)) {
       const bestModel = await modelSelector.getBestLocalModel(complexity, totalTokens);
       return bestModel?.id || config.defaultLocalModel;
     } else {
