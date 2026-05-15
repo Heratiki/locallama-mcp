@@ -260,7 +260,7 @@ export interface ModelMetadata {
 
 ## Section 3 — Provider-agnostic TaskExecutor wired into routing
 
-**Status:** ⏳ Not started. (Two stub classes exist; both will be deleted in Section 0.)
+**Status:** ✅ Completed — 2026-05-15. `npm run build` clean; `npm test` 66/66 passing (+8 new tests). `TaskExecutor` in `task-execution/index.ts` now dispatches via `ProviderRegistry`+`ModelRegistry` — no hardcoded provider prefix-switch. Both `switch(model.provider)` blocks in `codeTaskCoordinator.ts` replaced with registry calls. Legacy `executeOllamaModel`/`executeLmStudioModel`/`executeLocalModel` exports and `LegacyTaskExecutor` class removed (had no external callers).
 
 ### Design
 

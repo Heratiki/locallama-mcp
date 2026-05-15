@@ -2,10 +2,9 @@ import { logger } from '../../../utils/logger.js';
 import { codeTaskAnalyzer } from './codeTaskAnalyzer.js';
 import { dependencyMapper } from './dependencyMapper.js';
 import { codeModelSelector } from './codeModelSelector.js';
-import { openRouterModule, ModelNotFoundError } from '../../openrouter/index.js'; // Import ModelNotFoundError
-import { lmStudioModule } from '../../lm-studio/index.js'; // Import LM Studio module
-import { ollamaModule } from '../../ollama/index.js'; // Import Ollama module
+import { ModelNotFoundError } from '../../openrouter/index.js'; // Import ModelNotFoundError
 import { fallbackHandler } from '../../fallback-handler/index.js'; // Import fallback handler for service availability checks
+import { getProviderRegistry } from '../../core/provider/registry.js';
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
@@ -356,68 +355,39 @@ Output only the code required for this subtask. Do not include explanations unle
     const timeout = 180000; // 3 minutes timeout
 
     try {
-      let resultText: string | undefined;
-      let success = false;
-      let errorInstance: Error | undefined;
+      // Dispatch through provider registry — no hardcoded provider switch.
+      const registry = getProviderRegistry();
+      const bareId = model.id.startsWith(`${model.provider}:`)
+        ? model.id.slice(model.provider.length + 1)
+        : model.id;
+      const provider = registry.get(model.provider);
 
-      // Determine which module to call based on the provider
-      switch (model.provider) {
-        case 'lm-studio': {
-          // LM Studio model IDs might have a prefix like "lm-studio:", remove it
-          const lmStudioModelId = model.id.startsWith('lm-studio:') ? model.id.substring(10) : model.id;
-          logger.info(`Executing subtask ${subtask.id} with LM Studio model: ${lmStudioModelId}`);
-          const result = await lmStudioModule.callLMStudioApi(lmStudioModelId, prompt, timeout);
-          success = result.success;
-          resultText = result.text;
-          if (!success) {
-             errorInstance = new Error(`LM Studio Error: ${result.error}`);
-             logger.error(`Failed to execute subtask ${subtask.id} with LM Studio model ${lmStudioModelId}: ${result.error}`);
-          } else {
-             logger.info(`Successfully executed subtask ${subtask.id} with LM Studio model ${lmStudioModelId}`);
-             logger.debug(`Result for subtask ${subtask.id}:\n${resultText?.substring(0, 500)}${resultText && resultText.length > 500 ? '...' : ''}`);
-          }
-          break;
-        }
-        case 'ollama': {
-          // Ollama model IDs might have a prefix like "ollama:", remove it
-          const ollamaModelId = model.id.startsWith('ollama:') ? model.id.substring(7) : model.id;
-          logger.info(`Executing subtask ${subtask.id} with Ollama model: ${ollamaModelId}`);
-          const result = await ollamaModule.callOllamaApi(ollamaModelId, prompt, timeout);
-          success = result.success;
-          resultText = result.text;
-          if (!success) {
-             errorInstance = new Error(`Ollama Error: ${result.error}`);
-             logger.error(`Failed to execute subtask ${subtask.id} with Ollama model ${ollamaModelId}: ${result.error}`);
-          } else {
-             logger.info(`Successfully executed subtask ${subtask.id} with Ollama model ${ollamaModelId}`);
-             logger.debug(`Result for subtask ${subtask.id}:\n${resultText?.substring(0, 500)}${resultText && resultText.length > 500 ? '...' : ''}`);
-          }
-          break;
-        }
-        case 'openrouter':
-        default: { // Default to OpenRouter if provider is unknown or 'openrouter'
-          // OpenRouter model IDs might have a prefix like "openrouter:", remove it if present
-           const openRouterModelId = model.id.startsWith('openrouter:') ? model.id.substring(11) : model.id;
-          logger.info(`Executing subtask ${subtask.id} with OpenRouter model: ${openRouterModelId}`);
-          const result = await openRouterModule.callOpenRouterApi(openRouterModelId, prompt, timeout);
-          success = result.success;
-          resultText = result.text;
-          errorInstance = result.errorInstance; // Use the specific error instance
-          if (!success) {
-             logger.error(`Failed to execute subtask ${subtask.id} with OpenRouter model ${openRouterModelId}: ${result.error}`);
-          } else {
-             logger.info(`Successfully executed subtask ${subtask.id} with OpenRouter model ${openRouterModelId}`);
-             logger.debug(`Result for subtask ${subtask.id}:\n${resultText?.substring(0, 500)}${resultText && resultText.length > 500 ? '...' : ''}`);
-          }
-          break;
-        }
-      }
+      let resultText: string;
 
-      if (!success || !resultText) {
-         // Use the specific error instance if available, otherwise create a generic one
-         const errorToThrow = errorInstance || new Error(`Failed to execute subtask with ${model.provider}. Success flag: ${success}, Result text available: ${!!resultText}`);
-         logger.error(`Subtask ${subtask.id} failed execution with ${model.provider}. Error: ${errorToThrow.message}`); // Log specific error before throwing
-         throw errorToThrow;
+      if (provider) {
+        logger.info(`Executing subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
+        const execResult = await provider.executeTask(bareId, prompt, { timeoutMs: timeout });
+        resultText = execResult.content;
+        logger.info(`Successfully executed subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
+        logger.debug(`Result for subtask ${subtask.id}:\n${resultText.substring(0, 500)}${resultText.length > 500 ? '...' : ''}`);
+      } else {
+        // Provider not registered yet — best-effort fallback: try every registered provider.
+        logger.warn(`Provider '${model.provider}' not found in registry for subtask ${subtask.id}; probing all providers.`);
+        let found = false;
+        for (const p of registry.list()) {
+          const supports = await p.supportsModel(bareId);
+          if (supports) {
+            logger.info(`Falling back to provider '${p.id}' for model ${bareId}`);
+            const execResult = await p.executeTask(bareId, prompt, { timeoutMs: timeout });
+            resultText = execResult.content;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          throw new Error(`No registered provider supports model '${model.id}' (provider: ${model.provider})`);
+        }
+        resultText = resultText!;
       }
 
       logger.info(`------- SUBTASK EXECUTION COMPLETE -------`);
@@ -427,16 +397,13 @@ Output only the code required for this subtask. Do not include explanations unle
        // Handle specific ModelNotFoundError from OpenRouter cache check
        if (error instanceof ModelNotFoundError) {
          logger.warn(`Model ${model.id} not found in ${model.provider} cache during execution.`);
-         // Optionally: Implement retry logic here by calling codeModelSelector again
-         // For now, just return the error message
          logger.info(`------- SUBTASK EXECUTION FAILED (MODEL NOT FOUND) -------`);
          return `Error: Failed to execute subtask "${subtask.description}" - Model ${model.id} not found for provider ${model.provider}.`;
        }
       // General error handling
       if (error instanceof Error) {
-        logger.error(`Error executing subtask ${subtask.id} with model ${model.id} (Provider: ${model.provider}): ${error.message}`, error); // Log stack trace too
+        logger.error(`Error executing subtask ${subtask.id} with model ${model.id} (Provider: ${model.provider}): ${error.message}`, error);
         logger.info(`------- SUBTASK EXECUTION FAILED (ERROR) -------`);
-        // Return a more informative error message
         return `Error: Failed to execute subtask "${subtask.description}" with model "${model.id}" (Provider: ${model.provider}): ${error.message}`;
       }
       logger.error(`Unknown error executing subtask ${subtask.id} with model ${model.id} (Provider: ${model.provider})`, error);
@@ -673,25 +640,24 @@ Please provide only the integrated code, without explanations or wrappers, unles
     for (const model of modelsToTry) {
       try {
         logger.debug(`Attempting integration step with model: ${model.id}`);
-        let result;
-        switch (model.provider) {
-          case 'lm-studio':
-            const lmId = model.id.startsWith('lm-studio:') ? model.id.substring(10) : model.id;
-            result = await lmStudioModule.callLMStudioApi(lmId, integrationPrompt, 120000); // 2 min timeout
-            break;
-          case 'ollama':
-            const olId = model.id.startsWith('ollama:') ? model.id.substring(7) : model.id;
-            result = await ollamaModule.callOllamaApi(olId, integrationPrompt, 120000);
-            break;
-          default:
-            result = await openRouterModule.callOpenRouterApi(model.id, integrationPrompt, 120000);
-            break;
+        const registry = getProviderRegistry();
+        const bareId = model.id.startsWith(`${model.provider}:`)
+          ? model.id.slice(model.provider.length + 1)
+          : model.id;
+        const provider = registry.get(model.provider) ?? registry.list().find((p) => p.supportsModel(bareId));
+
+        let resultText: string | undefined;
+        if (provider) {
+          const execResult = await provider.executeTask(bareId, integrationPrompt, { timeoutMs: 120_000 });
+          resultText = execResult.content;
+        } else {
+          logger.warn(`Integration step: no registered provider for model ${model.id} (provider: ${model.provider}); skipping.`);
         }
 
-        if (result.success && result.text) {
+        if (resultText) {
           // Basic validation: check if it's not empty and contains some code-like structure
-          if (result.text.trim().length > 50 && result.text.includes('def ') || result.text.includes('class ') || result.text.includes('import ')) {
-            integratedCode = result.text;
+          if (resultText.trim().length > 50 && (resultText.includes('def ') || resultText.includes('class ') || resultText.includes('import '))) {
+            integratedCode = resultText;
             integrationModel = model;
             logger.info(`Integration step successful with model ${model.id}`);
             break; // Success
@@ -699,7 +665,7 @@ Please provide only the integrated code, without explanations or wrappers, unles
             logger.warn(`Model ${model.id} returned minimal or non-code content for integration.`);
           }
         } else {
-          logger.warn(`Integration step failed with model ${model.id}: ${result.error || 'Unknown error'}`);
+          logger.warn(`Integration step failed with model ${model.id}: no content returned`);
         }
       } catch (error) {
         logger.warn(`Error during integration step with model ${model.id}:`, error);
