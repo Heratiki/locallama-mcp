@@ -6,7 +6,7 @@ import { setupResourceHandlers } from './modules/api-integration/resources.js';
 import { toolDefinitionProvider } from './modules/api-integration/tool-definition/index.js';
 import { logger } from './utils/logger.js';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import type { RouteTaskParams } from './modules/api-integration/routing/types.js';
 import type { CostEstimationParams } from './modules/api-integration/cost-estimation/types.js';
@@ -343,10 +343,13 @@ export class LocalLamaMcpServer {
   }
 }
 
-// Initialize and run the server
-const server = new LocalLamaMcpServer();
-server.run().catch((error: unknown) => {
-  logger.error('Unhandled error during server execution:', error instanceof Error ? error.message : String(error));
-  removeLockFile();
-  process.exit(1);
-});
+const isMainModule = process.argv[1] !== undefined && resolve(process.argv[1]) === __filename;
+
+if (isMainModule) {
+  const server = new LocalLamaMcpServer();
+  server.run().catch((error: unknown) => {
+    logger.error('Unhandled error during server execution:', error instanceof Error ? error.message : String(error));
+    removeLockFile();
+    process.exit(1);
+  });
+}

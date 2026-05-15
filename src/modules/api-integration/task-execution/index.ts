@@ -6,13 +6,6 @@ import { ollamaModule } from '../../ollama/index.js'; // Added import
 import { lmStudioModule } from '../../lm-studio/index.js'; // Added import
 import { ITaskExecutor } from '../types.js';
 import { indexDocuments } from '../../cost-monitor/codeSearchEngine.js';
-import { ProviderRegistry } from '../../core/provider-registry';
-
-const providerRegistry = new ProviderRegistry();
-
-// Register providers (example)
-providerRegistry.register(new OpenRouterProvider());
-providerRegistry.register(new LocalModelProvider());
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -45,12 +38,17 @@ export class TaskExecutor implements ITaskExecutor {
 
       let result: string;
 
-      // Determine the execution path based on model provider
-      const provider = providerRegistry.getProviderForModel(model);
-      if (!provider) {
-        throw new Error(`No provider found for model: ${model}`);
+      if (model.startsWith('openrouter:')) {
+        result = await openRouterModule.executeTask(model.substring(11), task);
+      } else if (model.startsWith('lm-studio:')) {
+        result = await this.executeLmStudioModel(model.substring(10), task);
+      } else if (model.startsWith('ollama:')) {
+        result = await this.executeOllamaModel(model.substring(7), task);
+      } else if (model === 'paid' || model === 'free') {
+        result = await openRouterModule.executeTask(model, task);
+      } else {
+        result = await this.executeLocalModel(model, task);
       }
-      result = await provider.executeTask(model, task, jobId);
 
       // Update progress to 75% after successful API call
       try {

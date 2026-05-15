@@ -20,15 +20,23 @@ const TRACKING_FILE_PATH = path.join(config.rootDir, 'lm-studio-models.json');
 const STRATEGIES_FILE_PATH = path.join(config.rootDir, 'lm-studio-strategies.json');
 
 // Default prompting strategies for different model families
-import promptingStrategies from '../../config/prompting-strategies.json';
+import promptingStrategies from '../../config/prompting-strategies.json' with { type: 'json' };
 
-const DEFAULT_PROMPTING_STRATEGIES = promptingStrategies.strategies.reduce((acc, strategy) => {
-  acc[strategy.id] = strategy;
+type PromptingDefaults = Pick<PromptingStrategy, 'systemPrompt' | 'userPrompt' | 'assistantPrompt' | 'useChat'>;
+
+const DEFAULT_PROMPTING_STRATEGIES = promptingStrategies.strategies.reduce<Record<string, PromptingDefaults>>((acc, strategy) => {
+  const strategyWithTemplates = strategy as { userPrompt?: string; assistantPrompt?: string };
+  acc[strategy.id] = {
+    systemPrompt: strategy.systemPrompt,
+    userPrompt: strategyWithTemplates.userPrompt,
+    assistantPrompt: strategyWithTemplates.assistantPrompt,
+    useChat: strategy.useChat ?? true
+  };
   return acc;
 }, {});
 
 // Use DEFAULT_PROMPTING_STRATEGIES dynamically
-function getPromptingStrategy(modelId) {
+function getPromptingStrategy(modelId: string): PromptingDefaults {
   return DEFAULT_PROMPTING_STRATEGIES[modelId] || DEFAULT_PROMPTING_STRATEGIES['default'];
 }
 

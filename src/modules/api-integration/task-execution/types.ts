@@ -10,23 +10,6 @@ export interface ITaskExecutor {
   executeTask: (modelId: string, task: string, jobId: string) => Promise<string>;
 }
 
-export class TaskExecutor implements ITaskExecutor {
-  private modelRegistry: ModelRegistry;
-
-  constructor(modelRegistry: ModelRegistry) {
-    this.modelRegistry = modelRegistry;
-  }
-
-  async executeTask(modelId: string, task: string, jobId: string): Promise<string> {
-    const model = this.modelRegistry.getModel(modelId);
-    if (!model) {
-      throw new Error(`Model not found: ${modelId}`);
-    }
-    // Logic to execute task based on model capabilities
-    return `Task executed for model ${model.name}`;
-  }
-}
-
 export interface TaskExecutionOptions {
   /**
    * Whether to stream the response

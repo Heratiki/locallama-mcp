@@ -1,4 +1,4 @@
-import { ModelRegistry } from './model-registry';
+import { ModelRegistry } from './model-registry.js';
 
 export interface ModelCapabilities {
   chat: boolean;

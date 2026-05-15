@@ -15,8 +15,6 @@ describe('setupResourceHandlers', () => {
     // Reset mocks between tests
     jest.clearAllMocks();
     mockServer = {
-      setHandler: jest.fn(),
-      // Add missing mock function
       setRequestHandler: jest.fn()
     };
   });
@@ -24,8 +22,6 @@ describe('setupResourceHandlers', () => {
   it('should register resource handlers with the server', async () => {
     await setupResourceHandlers(mockServer);
 
-    // Verify the server's setHandler method was called
-    expect(mockServer.setHandler).toHaveBeenCalled();
-    expect(mockServer.setRequestHandler).toHaveBeenCalled();
+    expect(mockServer.setRequestHandler).toHaveBeenCalledTimes(3);
   });
 });
