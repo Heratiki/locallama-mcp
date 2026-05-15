@@ -325,6 +325,29 @@ export class LocalLamaMcpServer {
         }
         const ready = await registry.initAll();
         logger.info(`Provider registry initialized: [${ready.join(', ')}]`);
+
+        // Seed the ModelRegistry with models from every initialized provider.
+        // Errors from a single provider's listModels() are isolated.
+        const { getModelRegistry } = await import('./modules/core/model/index.js');
+        const modelRegistry = getModelRegistry();
+        await modelRegistry.loadFromConfigFile(); // load models.json overrides
+        for (const providerId of ready) {
+          const provider = registry.get(providerId);
+          if (!provider) continue;
+          try {
+            const models = await provider.listModels();
+            modelRegistry.seedFromProvider(provider, models);
+            logger.info(
+              `ModelRegistry seeded ${models.length} model(s) from provider '${providerId}'`,
+            );
+          } catch (err) {
+            logger.warn(
+              `ModelRegistry: listModels() failed for provider '${providerId}': ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to bootstrap provider registry:', errorMessage);

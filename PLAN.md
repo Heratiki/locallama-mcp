@@ -206,7 +206,12 @@ All 44 sites replaced using two helpers from [src/modules/core/provider/helpers.
 
 ## Section 2 — Real ModelRegistry, fed by providers and benchmarks
 
-**Status:** ⏳ Not started. (Stub at [src/modules/core/model-registry.ts](src/modules/core/model-registry.ts) does not load data; delete and replace.)
+**Status:** ✅ Completed — 2026-05-15. `npm run build` clean; `npm test` 58/58 passing (+14 new tests). `ModelRegistry` in `src/modules/core/model/`; old stub re-exports from new location; `modelsDb.ts` bridges to registry; `src/index.ts` seeds registry from all initialized providers after `registry.initAll()`; `capability-detector.ts` updated to use new `ModelMetadata`.
+
+**Acceptance criteria check:**
+- [x] `ModelRegistry` populated at startup from all registered providers via `seedFromProvider()`.
+- [x] `modelsDb` callers still work — `getDatabase()` and `updateModelData()` signatures unchanged; `updateModelData` now also calls `registry.updateBenchmarkSummary()`.
+- [x] Unit tests: provider-declared seeding (5 cases), JSON override (3 cases), benchmark feedback update (2 cases), staleness pruning (2 cases), singleton accessor (2 cases). 14 tests total.
 
 ### Design
 

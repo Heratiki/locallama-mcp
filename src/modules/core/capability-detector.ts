@@ -1,11 +1,7 @@
-import { ModelRegistry } from './model-registry.js';
+import { ModelRegistry } from './model/registry.js';
+import type { ModelCapabilities } from './model/types.js';
 
-export interface ModelCapabilities {
-  chat: boolean;
-  code: boolean;
-  vision: boolean;
-  maxContextTokens: number;
-}
+export type { ModelCapabilities };
 
 export class CapabilityDetector {
   private modelRegistry: ModelRegistry;
@@ -17,15 +13,17 @@ export class CapabilityDetector {
   detectCapabilities(modelId: string): ModelCapabilities {
     const model = this.modelRegistry.getModel(modelId);
     if (!model) {
-      throw new Error(`Model not found: ${modelId}`);
+      // Return conservative defaults rather than throwing — Section 5 will
+      // make this smarter with heuristic + empirical layers.
+      return {
+        chat: true,
+        code: false,
+        vision: false,
+        toolUse: false,
+        largeContext: false,
+        maxContextTokens: 4096,
+      };
     }
-
-    // Example logic for capability detection
-    return {
-      chat: model.capabilities.chat,
-      code: model.capabilities.code,
-      vision: model.capabilities.vision,
-      maxContextTokens: model.capabilities.maxContextTokens,
-    };
+    return model.capabilities;
   }
 }

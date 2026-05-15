@@ -3,6 +3,20 @@ import fs from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { logger } from '../../../utils/logger.js';
 import { ModelPerformanceData } from '../../../types/index.js';
+import { getModelRegistry } from '../../core/model/index.js';
+import type { BenchmarkSummary } from '../../core/model/types.js';
+
+/** Translate a ModelPerformanceData record to a BenchmarkSummary for the ModelRegistry. */
+function toBenchmarkSummary(data: ModelPerformanceData): BenchmarkSummary {
+  return {
+    lastRunAt: data.lastBenchmarked ? new Date(data.lastBenchmarked).getTime() : Date.now(),
+    taskCategories: [],
+    scores: {},
+    successRate: data.successRate,
+    qualityScore: data.qualityScore,
+    avgResponseTime: data.avgResponseTime,
+  };
+}
 
 interface ModelsDatabase {
   models: Record<string, ModelPerformanceData>;
@@ -81,7 +95,11 @@ class ModelsDbService {
       
       // Additionally, load data from benchmark results to ensure all benchmarked models are represented
       await this.loadBenchmarkData();
-      
+
+      // Seed the ModelRegistry with performance data so it can answer benchmark
+      // queries immediately, before any provider starts streaming model lists.
+      this.seedModelRegistry();
+
       this.initialized = true;
     } catch (error) {
       logger.error('Error initializing models database:', error);
@@ -164,6 +182,39 @@ class ModelsDbService {
     return this.database;
   }
 
+  /**
+   * Push all stored `ModelPerformanceData` entries into the `ModelRegistry` as
+   * benchmark summaries. Called once during `initialize()` so the registry is
+   * pre-warmed with historical benchmark data before any provider list arrives.
+   */
+  private seedModelRegistry(): void {
+    const registry = getModelRegistry();
+    for (const [modelId, perf] of Object.entries(this.database.models)) {
+      if (!registry.getModel(modelId)) {
+        // The provider hasn't listed this model yet; register a minimal stub so
+        // the benchmark summary can be stored and looked up immediately.
+        registry.registerModel({
+          id: modelId,
+          providerId: perf.provider,
+          displayName: perf.name ?? modelId,
+          contextWindow: perf.contextWindow ?? 4096,
+          capabilities: {
+            chat: true,
+            code: false,
+            vision: false,
+            toolUse: false,
+            largeContext: (perf.contextWindow ?? 4096) >= 32768,
+            maxContextTokens: perf.contextWindow ?? 4096,
+          },
+          cost: { prompt: 0, completion: 0 },
+          promptingStrategyId: 'default',
+          lastSeen: perf.lastSeen ? new Date(perf.lastSeen).getTime() : Date.now(),
+        });
+      }
+      registry.updateBenchmarkSummary(modelId, toBenchmarkSummary(perf));
+    }
+  }
+
   async updateModelData(modelId: string, data: Partial<ModelPerformanceData>): Promise<void> {
     const existing = this.database.models[modelId] || {
       avgResponseTime: 0,
@@ -176,6 +227,12 @@ class ModelsDbService {
     };
     
     this.database.lastUpdate = Date.now();
+
+    // Keep the ModelRegistry in sync whenever benchmark data changes.
+    getModelRegistry().updateBenchmarkSummary(
+      modelId,
+      toBenchmarkSummary(this.database.models[modelId]),
+    );
     
     // Save to disk whenever data is updated
     await this.saveDatabase();
