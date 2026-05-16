@@ -14,10 +14,10 @@ import {
   SpeculativeInferenceConfig,
   PromptImprovementConfig
 } from './types.js';
+import { getPromptingStrategyService } from '../core/prompting/service.js';
 
 // File path for storing LM Studio model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'lm-studio-models.json');
-const STRATEGIES_FILE_PATH = path.join(config.rootDir, 'lm-studio-strategies.json');
 
 // Default prompting strategies for different model families
 import promptingStrategies from '../../config/prompting-strategies.json' with { type: 'json' };
@@ -103,6 +103,20 @@ export const lmStudioModule = {
       else family = 'default';
     }
 
+    // Consult the central prompting strategy service first (Section 4)
+    const svc = getPromptingStrategyService();
+    const strategyId = svc.resolveStrategyId(modelId, family, 'lm-studio');
+    const centralStrategy = svc.getStrategy(strategyId);
+    if (centralStrategy) {
+      return {
+        systemPrompt: centralStrategy.systemPrompt,
+        userPrompt: centralStrategy.userPromptTemplate,
+        assistantPrompt: centralStrategy.assistantPromptTemplate,
+        useChat: centralStrategy.useChat,
+      };
+    }
+
+    // Inline fallback (used when service not yet loaded, e.g. unit tests)
     const defaultStrategy = DEFAULT_PROMPTING_STRATEGIES[family] || DEFAULT_PROMPTING_STRATEGIES.default;
 
     return {
@@ -297,10 +311,11 @@ export const lmStudioModule = {
         modelsFileExists = false;
       }
 
-      // Load prompting strategies from disk if available
+      // Load prompting strategies from the shared user-override file
       try {
-        const data = await fs.readFile(STRATEGIES_FILE_PATH, 'utf8');
-        this.promptingStrategies = JSON.parse(data) as Record<string, PromptingStrategy>;
+        const svc = getPromptingStrategyService();
+        const userOverrides = await svc.readUserOverrides();
+        this.promptingStrategies = userOverrides as Record<string, PromptingStrategy>;
         logger.debug(`Loaded LM Studio prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
       } catch (error) {
         logger.debug('No existing LM Studio prompting strategies found');
@@ -499,28 +514,16 @@ export const lmStudioModule = {
    */
   async savePromptingStrategies(): Promise<void> {
     try {
-      logger.debug(`Saving prompting strategies to: ${STRATEGIES_FILE_PATH}`);
-      logger.debug(`Prompting strategies contains data for ${Object.keys(this.promptingStrategies).length} models`);
-
-      // Ensure the directory exists
-      try {
-        await mkdir(path.dirname(STRATEGIES_FILE_PATH), { recursive: true });
-      } catch (error) {
-        if (error instanceof Error) {
-          logger.debug(`Directory check during save strategies: ${error.message}`);
-        } else {
-          logger.debug('Unknown error during directory check');
-        }
-      }
-
-      await fs.writeFile(STRATEGIES_FILE_PATH, JSON.stringify(this.promptingStrategies, null, 2));
-      logger.debug('Successfully saved LM Studio prompting strategies to disk');
+      logger.debug(`Saving LM Studio prompting strategies (${Object.keys(this.promptingStrategies).length} models) to user-override file`);
+      const svc = getPromptingStrategyService();
+      // Merge-write so ollama / openrouter strategies are not overwritten
+      await svc.mergeUserOverrides(this.promptingStrategies as Parameters<typeof svc.mergeUserOverrides>[0]);
+      logger.debug('Successfully saved LM Studio prompting strategies');
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`Error saving LM Studio prompting strategies:`, error);
-        logger.error(`Error details: ${error.message}`);
       } else {
-        logger.error('Unknown error occurred');
+        logger.error('Unknown error occurred saving LM Studio prompting strategies');
       }
     }
   },

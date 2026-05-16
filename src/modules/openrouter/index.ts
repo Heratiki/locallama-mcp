@@ -14,6 +14,7 @@ import {
   OpenRouterErrorType
 } from './types.js';
 import { speculativeDecodingService } from '../decision-engine/services/speculativeDecoding.js';
+import { getPromptingStrategyService } from '../core/prompting/service.js';
 
 
 // Add a custom error class
@@ -132,11 +133,11 @@ export const openRouterModule = {
         };
       }
       
-      // Load prompting strategies from disk if available
+      // Load prompting strategies from the shared user-override file
       try {
-        const strategiesPath = path.join(config.rootDir, 'openrouter-strategies.json');
-        const data = await fs.readFile(strategiesPath, 'utf8');
-        this.promptingStrategies = JSON.parse(data) as Record<string, PromptingStrategy>;
+        const svc = getPromptingStrategyService();
+        const userOverrides = await svc.readUserOverrides();
+        this.promptingStrategies = userOverrides as Record<string, PromptingStrategy>;
         logger.debug(`Loaded OpenRouter prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
       } catch {
         logger.debug('No existing OpenRouter prompting strategies found');
@@ -291,6 +292,20 @@ export const openRouterModule = {
     assistantPrompt?: string;
     useChat: boolean;
   } {
+    // Consult the central prompting strategy service first (Section 4)
+    const svc = getPromptingStrategyService();
+    const strategyId = svc.resolveStrategyId(modelId, undefined, 'openrouter');
+    const centralStrategy = svc.getStrategy(strategyId);
+    if (centralStrategy) {
+      return {
+        systemPrompt: centralStrategy.systemPrompt,
+        userPrompt: centralStrategy.userPromptTemplate,
+        assistantPrompt: centralStrategy.assistantPromptTemplate,
+        useChat: centralStrategy.useChat,
+      };
+    }
+
+    // Inline fallback
     const provider = this.getProviderFromModelId(modelId);
     const defaultStrategy = DEFAULT_PROMPTING_STRATEGIES[provider] || DEFAULT_PROMPTING_STRATEGIES.default;
     
@@ -334,29 +349,15 @@ export const openRouterModule = {
    */
   async savePromptingStrategies(): Promise<void> {
     try {
-      const strategiesPath = path.join(config.rootDir, 'openrouter-strategies.json');
-      logger.debug(`Saving prompting strategies to: ${strategiesPath}`);
-      logger.debug(`Prompting strategies contains data for ${Object.keys(this.promptingStrategies).length} models`);
-      
-      // Ensure the directory exists
-      try {
-        await mkdir(path.dirname(strategiesPath), { recursive: true });
-      } catch (error) {
-        if (error instanceof Error) {
-          logger.debug(`Directory check during save strategies: ${error.message}`);
-        } else {
-          logger.debug('Unknown error during directory check');
-        }
-      }
-      
-      await fs.writeFile(strategiesPath, JSON.stringify(this.promptingStrategies, null, 2));
-      logger.debug('Successfully saved OpenRouter prompting strategies to disk');
+      logger.debug(`Saving OpenRouter prompting strategies (${Object.keys(this.promptingStrategies).length} models) to user-override file`);
+      const svc = getPromptingStrategyService();
+      await svc.mergeUserOverrides(this.promptingStrategies as Parameters<typeof svc.mergeUserOverrides>[0]);
+      logger.debug('Successfully saved OpenRouter prompting strategies');
     } catch (error) {
       if (error instanceof Error) {
-        logger.error(`Error saving OpenRouter prompting strategies to ${path.join(config.rootDir, 'openrouter-strategies.json')}:`, error);
-        logger.error(`Error details: ${error.message}`);
+        logger.error(`Error saving OpenRouter prompting strategies:`, error);
       } else {
-        logger.error('Unknown error occurred');
+        logger.error('Unknown error occurred saving OpenRouter prompting strategies');
       }
     }
   },

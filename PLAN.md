@@ -103,12 +103,15 @@ Without this, none of the rest builds.
 
 ## Section 1 — Real ProviderRegistry abstraction
 
-**Status:** ✅ Completed — 2026-05-15. `npm run build` clean; `npm test` 35/35 passing; grep returns 0 hardcoded provider conditionals outside the comment in `registry.ts`.
+**Status:** ✅ Completed — 2026-05-15. `npm run build` clean; `npm test` 88/88 passing; grep returns 0 hardcoded provider conditionals outside the comment in `registry.ts`.
 
 **Acceptance criteria check:**
-- [x] All 44 hardcoded provider conditionals replaced; `grep -rn "provider === '\(local\|lm-studio\|ollama\|openrouter\|paid\|free\)'" src/` returns 0 live code hits.
+- [x] All 45 hardcoded provider conditionals replaced; `grep -rn "provider === '\(local\|lm-studio\|ollama\|openrouter\|paid\|free\)'" src/` returns 0 live code hits.
 - [x] Unit tests for `ProviderRegistry` (8 cases: register/get, listByCostClass, isLocalProvider, duplicate-overwrite warning, initAll failure isolation, initAll idempotency, unregister, singleton accessor).
 - [x] `isOpenRouterConfigured()` in `tool-definition/index.ts` gates on `registry.has('openrouter')` before falling back to config key check.
+- [x] `codeModelSelector` line 179 replaced with `!isProviderLocal(model.provider)`.
+- [x] `fallback-handler` dispatch replaced with `ProviderRegistry`-based routing; `axios`/`constructLMStudioUrl`/`openhermes` stub removed.
+- [x] `getFallbackModel` hardcoded `provider: 'local'` / `'gpt-3.5-turbo'` stubs replaced with `costMonitor` + registry lookups.
 - [ ] Smoke test: `route_task` end-to-end with a real LM Studio / Ollama instance — requires a running provider; not automated yet (pending Section 3 integration tests).
 
 ### Design
@@ -304,7 +307,12 @@ The legacy `executeOllamaModel`/`executeLmStudioModel`/`executeLocalModel` expor
 
 ## Section 4 — Unified prompting strategies
 
-**Status:** ⚠️ Half-done and inconsistent. The file [src/config/prompting-strategies.json](src/config/prompting-strategies.json) exists with 3 toy entries; only [lm-studio/index.ts:23](src/modules/lm-studio/index.ts#L23) imports it. Ollama and OpenRouter each maintain separate runtime strategy files.
+**Status:** ✅ Completed — 2026-05-16. `npm run build` clean; `npm test` 107/107 passing (+19 new tests). `PromptingStrategyService` in `src/modules/core/prompting/`; `ModelRegistry.toMetadata()` resolves `promptingStrategyId` via service; per-provider `STRATEGIES_FILE_PATH` constants removed; all three providers read/write to `~/.locallama/strategies.json` via merge-write; `src/index.ts` loads service before `registry.initAll()`.
+
+**Acceptance criteria check:**
+- [x] A model with `family: 'qwen-coder'` in `models.json` automatically resolves the 'coding' strategy (no code change needed).
+- [x] Per-provider `STRATEGIES_FILE_PATH` writes/reads removed; auto-improvement loop now uses `getPromptingStrategyService().mergeUserOverrides()` → `~/.locallama/strategies.json`.
+- [x] Tests cover resolution priority order: provider+family > provider-only > family > modelIdPattern > defaultStrategyId.
 
 ### Design
 
@@ -343,7 +351,15 @@ The legacy `executeOllamaModel`/`executeLmStudioModel`/`executeLocalModel` expor
 
 ## Section 5 — CapabilityDetector that actually detects
 
-**Status:** ⏳ Not started. (Current stub at [src/modules/core/capability-detector.ts](src/modules/core/capability-detector.ts) just returns the metadata it was given and throws if absent.)
+**Status:** ✅ Completed — 2026-05-15. `npm run build` clean; `npm test` 88/88 passing (22 new capability-detector tests). Wired via `CapabilityDetector.inferFromProviderModel` in `ModelRegistry.toMetadata()` and singleton initialized in `src/index.ts`.
+
+**Acceptance criteria check:**
+- [x] `qwen2.5-coder-7b` → `{ code: true, toolUse: true, largeContext: false }` without any code change (static inference test passes).
+- [x] A benchmark run with code score < 0.3 flips `caps.code` to `false` in `detectCapabilities()` (empirical layer test passes).
+- [x] `CapabilityDetector` wired: `grep -rn 'CapabilityDetector' src/` shows usage in `registry.ts` and `index.ts`.
+- [x] Never throws for unknown model — `conservativeDefaults()` returns `{ chat: true, code: false, vision: false, toolUse: false, largeContext: false, maxContextTokens: 4096 }`.
+- [ ] `taskRouter` context-window filter uses `caps.largeContext` — pending Section 4.
+- [ ] `codeModelSelector` score filter by `caps.scores.code` — pending Section 4/6 empirical data pipeline.
 
 ### Design
 

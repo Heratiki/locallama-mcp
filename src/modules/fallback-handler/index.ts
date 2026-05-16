@@ -1,23 +1,8 @@
 /* Required dependencies - used throughout the module */
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
-import axios from 'axios';
+import { getProviderRegistry } from '../core/provider/index.js';
 import { openRouterModule } from '../openrouter/index.js';
-
-// Define types for API responses
-interface LMStudioResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
-}
-
-interface OllamaResponse {
-  message: {
-    content: string;
-  };
-}
 
 interface FallbackResult {
   costClass: 'local' | 'paid';
@@ -105,56 +90,22 @@ export const fallbackHandler = {
               throw new Error('No free models available for fallback');
             }
           }
-        } else if (costClass === 'paid' && (fallbackOption === 'lm-studio' || fallbackOption === 'ollama')) {
-          const endpoint = fallbackOption === 'lm-studio' ? config.lmStudioEndpoint : config.ollamaEndpoint;
-          const fallbackModelId = fallbackOption === 'lm-studio' ? 'openhermes' : config.defaultLocalModel;
-          const apiEndpoint = fallbackOption === 'lm-studio'
-            ? `${this.constructLMStudioUrl(endpoint, 'chat/completions')}`
-            : `${endpoint}/chat`;
-
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-            const response = await axios.post<LMStudioResponse | OllamaResponse>(
-              apiEndpoint,
-              {
-                model: fallbackModelId,
-                messages: [
-                  { role: 'system', content: 'You are a helpful assistant.' },
-                  { role: 'user', content: task },
-                ],
-                temperature: 0.7,
-                max_tokens: 1000,
-                stream: false,
-              },
-              { signal: controller.signal, headers: { 'Content-Type': 'application/json' } },
-            );
-
-            clearTimeout(timeoutId);
-
-            let responseText = '';
-            if (fallbackOption === 'lm-studio') {
-              const lmStudioResponse = response.data as LMStudioResponse;
-              responseText = lmStudioResponse.choices[0].message.content;
-            } else {
-              const ollamaResponse = response.data as OllamaResponse;
-              responseText = ollamaResponse.message.content;
-            }
-
-            fallbackResult = {
-              costClass: 'local' as const,
-              model: fallbackModelId,
-              success: true,
-              text: responseText,
-              message: `Fallback to ${fallbackOption} successful`,
-            };
-
-            return { success: true, fallbackUsed: true, result: fallbackResult };
-          } catch (apiError) {
-            const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
-            throw new Error(`${fallbackOption} API fallback failed: ${errorMessage}`);
+        } else if (costClass === 'paid') {
+          const provider = getProviderRegistry().get(fallbackOption);
+          if (!provider) {
+            throw new Error(`No registered provider for fallback option: ${fallbackOption}`);
           }
+          const models = await provider.listModels();
+          const fallbackModelId = models.length > 0 ? models[0].id : config.defaultLocalModel;
+          const result = await provider.executeTask(fallbackModelId, task, { timeoutMs: timeout });
+          fallbackResult = {
+            costClass: 'local' as const,
+            model: fallbackModelId,
+            success: true,
+            text: result.content,
+            message: `Fallback to ${fallbackOption} successful`,
+          };
+          return { success: true, fallbackUsed: true, result: fallbackResult };
         }
       } else {
         const newCostClass: 'local' | 'paid' = costClass === 'local' ? 'paid' : 'local';
@@ -174,49 +125,33 @@ export const fallbackHandler = {
     }
   },
 
-  async checkServiceAvailability(service: 'lm-studio' | 'ollama' | 'paid-api'): Promise<boolean> {
+  async checkServiceAvailability(service: string): Promise<boolean> {
     logger.debug(`Checking availability of service: ${service}`);
 
     try {
-      let testEndpoint: string;
-
-      switch (service) {
-        case 'lm-studio':
-          testEndpoint = this.constructLMStudioUrl(config.lmStudioEndpoint, 'models');
-          break;
-        case 'ollama':
-          testEndpoint = `${config.ollamaEndpoint}/tags`;
-          break;
-        case 'paid-api':
-          if (!config.openRouterApiKey) {
-            logger.warn('OpenRouter API key not configured');
-            return false;
-          }
-          try {
-            if (Object.keys(openRouterModule.modelTracking.models).length === 0) {
-              await openRouterModule.initialize();
-            }
-            const freeModels = await openRouterModule.getFreeModels();
-            return freeModels.length > 0;
-          } catch (error) {
-            logger.error('Error checking OpenRouter availability:', error instanceof Error ? error : String(error));
-            return false;
-          }
-        default:
+      if (service === 'paid-api') {
+        if (!config.openRouterApiKey) {
+          logger.warn('OpenRouter API key not configured');
           return false;
+        }
+        try {
+          if (Object.keys(openRouterModule.modelTracking.models).length === 0) {
+            await openRouterModule.initialize();
+          }
+          const freeModels = await openRouterModule.getFreeModels();
+          return freeModels.length > 0;
+        } catch (error) {
+          logger.error('Error checking OpenRouter availability:', error instanceof Error ? error : String(error));
+          return false;
+        }
       }
 
-      const timeout = 5000;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      const response = await axios.get(testEndpoint, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
-
-      clearTimeout(timeoutId);
-      return response.status >= 200 && response.status < 300;
+      const provider = getProviderRegistry().get(service);
+      if (!provider) {
+        logger.debug(`Provider '${service}' not registered`);
+        return false;
+      }
+      return provider.isAvailable();
     } catch (error) {
       logger.debug(`Service ${service} is not available:`, error);
       return false;
@@ -230,18 +165,11 @@ export const fallbackHandler = {
       const paidApiAvailable = await this.checkServiceAvailability('paid-api');
       if (paidApiAvailable) return 'paid-api';
     } else {
-      const lmStudioAvailable = await this.checkServiceAvailability('lm-studio');
-      if (lmStudioAvailable) return 'lm-studio';
-
-      const ollamaAvailable = await this.checkServiceAvailability('ollama');
-      if (ollamaAvailable) return 'ollama';
+      for (const p of getProviderRegistry().listByCostClass('local')) {
+        if (await p.isAvailable()) return p.id;
+      }
     }
 
     return null;
-  },
-
-  constructLMStudioUrl(endpoint: string, path: string): string {
-    const baseUrl = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
-    return `${baseUrl}/${path}`;
   },
 };

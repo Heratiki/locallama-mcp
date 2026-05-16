@@ -312,6 +312,14 @@ export class LocalLamaMcpServer {
       // providers exist (decision engine, tool listing). Provider init failures
       // are isolated inside registry.initAll().
       try {
+        // Initialize the PromptingStrategyService (Section 4) BEFORE provider init
+        // so that getDefaultPromptingStrategy() calls inside provider.init() can
+        // resolve strategy ids from the central JSON.
+        const { getPromptingStrategyService } = await import('./modules/core/prompting/service.js');
+        const promptingService = getPromptingStrategyService();
+        await promptingService.loadFromFile();
+        logger.info(`PromptingStrategyService loaded ${promptingService.listStrategies().length} strategies`);
+
         const { getProviderRegistry } = await import('./modules/core/provider/index.js');
         const registry = getProviderRegistry();
         const { lmStudioProvider } = await import('./modules/lm-studio/provider.js');
@@ -330,6 +338,7 @@ export class LocalLamaMcpServer {
         // Errors from a single provider's listModels() are isolated.
         const { getModelRegistry } = await import('./modules/core/model/index.js');
         const modelRegistry = getModelRegistry();
+        modelRegistry.setPromptingService(promptingService); // Section 4: strategy resolution
         await modelRegistry.loadFromConfigFile(); // load models.json overrides
         for (const providerId of ready) {
           const provider = registry.get(providerId);
@@ -348,6 +357,12 @@ export class LocalLamaMcpServer {
             );
           }
         }
+
+        // Initialize the CapabilityDetector singleton (Section 5) now that
+        // the registry is populated with heuristic + declared capabilities.
+        const { initCapabilityDetector } = await import('./modules/core/capability-detector.js');
+        initCapabilityDetector(modelRegistry);
+        logger.info('CapabilityDetector initialized');
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error('Failed to bootstrap provider registry:', errorMessage);

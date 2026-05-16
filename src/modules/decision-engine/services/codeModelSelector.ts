@@ -7,7 +7,7 @@ import { CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { config } from '../../../config/index.js';
-import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
+import { isProviderId, isProviderLocal, getProviderRegistry } from '../../core/provider/index.js';
 
 /**
  * Interface for the model performance tracker methods
@@ -176,7 +176,7 @@ export const codeModelSelector = {
               }
               
               // For complex tasks, slightly prefer non-local models
-              if (model.provider !== 'local' && model.provider !== 'lm-studio' && model.provider !== 'ollama') {
+              if (!isProviderLocal(model.provider)) {
                   score += 0.1;
               }
           } else if (subtask.complexity < 0.4) {
@@ -243,93 +243,44 @@ export const codeModelSelector = {
 
   async getFallbackModel(subtask: CodeSubtask): Promise<Model | null> {
     logger.debug('Using fallback model selection for subtask');
-    
+
     try {
-      // Use size-based selection as a fallback
+      const localModels = await costMonitor.getAvailableModels();
+      const freeModels = await costMonitor.getFreeModels();
+
       switch (subtask.recommendedModelSize) {
         case 'small':
-          return {
-            id: config.defaultLocalModel,
-            name: 'Default Local Model',
-            provider: 'local',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0,
-              completion: 0
-            }
-          };
-        
         case 'medium': {
-          // Try to find a medium-sized local model
-          const localModels = await costMonitor.getAvailableModels();
-          const mediumModel = localModels.find(m => isProviderLocal(m.provider));
-          
-          return mediumModel || {
-            id: config.defaultLocalModel,
-            name: 'Default Local Model',
-            provider: 'local',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0,
-              completion: 0
-            }
-          };
+          const localModel = localModels.find(m => isProviderLocal(m.provider));
+          return localModel ?? null;
         }
-        
+
         case 'large':
-        case 'remote':
-          return {
-            id: 'gpt-3.5-turbo',
-            name: 'GPT-3.5 Turbo',
-            provider: 'openai',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0.000001,
-              completion: 0.000002
+        case 'remote': {
+          if (freeModels.length > 0) return freeModels[0];
+          for (const p of getProviderRegistry().listByCostClass('paid')) {
+            const models = await p.listModels();
+            if (models.length > 0) {
+              return {
+                id: models[0].id,
+                name: models[0].displayName ?? models[0].id,
+                provider: p.id,
+                capabilities: { chat: true, completion: true },
+                costPerToken: p.getCost(models[0].id),
+              };
             }
-          };
-            
-        default:
-          return {
-            id: config.defaultLocalModel,
-            name: 'Default Local Model',
-            provider: 'local',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0,
-              completion: 0
-            }
-          };
+          }
+          return null;
+        }
+
+        default: {
+          const localModel = localModels.find(m => isProviderLocal(m.provider));
+          return localModel ?? null;
+        }
       }
     } catch (error) {
       logger.error('Error getting fallback model:', error);
-      
-      // Ultimate fallback - just return whatever config says is the default
-      return {
-        id: config.defaultLocalModel,
-        name: 'Default Local Model',
-        provider: 'local',
-        capabilities: {
-          chat: true,
-          completion: true
-        },
-        costPerToken: {
-          prompt: 0,
-          completion: 0
-        }
-      };
+      return null;
     }
   },
 

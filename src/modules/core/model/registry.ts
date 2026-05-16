@@ -3,9 +3,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../../../utils/logger.js';
 import type { LLMProvider, ProviderModel } from '../provider/types.js';
+import { CapabilityDetector } from '../capability-detector.js';
+import type { PromptingStrategyService } from '../prompting/service.js';
 import type {
   ModelMetadata,
-  ModelCapabilities,
   BenchmarkSummary,
   ModelOverride,
 } from './types.js';
@@ -21,50 +22,26 @@ const DEFAULT_MODELS_JSON = path.resolve(
 );
 
 // ---------------------------------------------------------------------------
-// Heuristic capability inference (declared overrides win; see Section 5 for
-// the full CapabilityDetector. This is the bootstrap-time approximation.)
+// Heuristic capability inference delegated to CapabilityDetector (Section 5).
 // ---------------------------------------------------------------------------
 
-const CODE_FAMILIES = new Set([
-  'codellama',
-  'deepseek-coder',
-  'qwen-coder',
-  'starcoder',
-  'codestral',
-]);
-
-const VISION_PATTERNS = /vision|vl\b|llava|bakllava|qwen2[.-]?vl/i;
-const CODE_PATTERNS = /code|coder/i;
-
-function inferCapabilities(model: ProviderModel): ModelCapabilities {
-  const id = model.id.toLowerCase();
-  const family = (model.family ?? '').toLowerCase();
-  const contextWindow = model.contextWindow ?? 4096;
-
-  const code =
-    CODE_FAMILIES.has(family) || CODE_PATTERNS.test(id);
-  const vision = VISION_PATTERNS.test(id) || VISION_PATTERNS.test(family);
-
-  return {
-    chat: true,
-    code,
-    vision,
-    toolUse: false, // empirical only — set by benchmark pipeline
-    largeContext: contextWindow >= 32768,
-    maxContextTokens: contextWindow,
-  };
-}
-
-function toMetadata(model: ProviderModel, provider: LLMProvider): ModelMetadata {
+function toMetadata(
+  model: ProviderModel,
+  provider: LLMProvider,
+  promptingService?: PromptingStrategyService,
+): ModelMetadata {
+  const promptingStrategyId = promptingService
+    ? promptingService.resolveStrategyId(model.id, model.family, provider.id)
+    : 'default';
   return {
     id: model.id,
     providerId: provider.id,
     displayName: model.displayName ?? model.id,
     family: model.family,
     contextWindow: model.contextWindow ?? 4096,
-    capabilities: inferCapabilities(model),
+    capabilities: CapabilityDetector.inferFromProviderModel(model),
     cost: model.costPerToken ?? provider.getCost(model.id),
-    promptingStrategyId: 'default',
+    promptingStrategyId,
     lastSeen: Date.now(),
   };
 }
@@ -84,6 +61,16 @@ function toMetadata(model: ProviderModel, provider: LLMProvider): ModelMetadata 
 export class ModelRegistry {
   private models = new Map<string, ModelMetadata>();
   private overrides: ModelOverride[] = [];
+  private promptingService: PromptingStrategyService | undefined;
+
+  /**
+   * Inject the PromptingStrategyService so that strategy ids are resolved from
+   * the central JSON during model registration (Section 4 of PLAN.md).
+   * Must be called before `seedFromProvider()` or `registerModel()`.
+   */
+  setPromptingService(svc: PromptingStrategyService): void {
+    this.promptingService = svc;
+  }
 
   // ---------------------------------------------------------------------------
   // Seeding from providers
@@ -95,7 +82,7 @@ export class ModelRegistry {
    */
   seedFromProvider(provider: LLMProvider, providerModels: ProviderModel[]): void {
     for (const pm of providerModels) {
-      const incoming = toMetadata(pm, provider);
+      const incoming = toMetadata(pm, provider, this.promptingService);
       const existing = this.models.get(pm.id);
       if (existing) {
         this.models.set(pm.id, {

@@ -13,10 +13,10 @@ import {
   OllamaChatResponse,
   OllamaListModelsResponse
 } from './types.js';
+import { getPromptingStrategyService } from '../core/prompting/service.js';
 
 // File path for storing Ollama model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'ollama-models.json');
-const STRATEGIES_FILE_PATH = path.join(config.rootDir, 'ollama-strategies.json');
 
 // Default prompting strategies for different model families
 const DEFAULT_PROMPTING_STRATEGIES: Record<string, Partial<PromptingStrategy>> = {
@@ -117,10 +117,11 @@ export const ollamaModule = {
         };
       }
       
-      // Load prompting strategies from disk if available
+      // Load prompting strategies from the shared user-override file
       try {
-        const data = await fs.readFile(STRATEGIES_FILE_PATH, 'utf8');
-        this.promptingStrategies = JSON.parse(data) as Record<string, PromptingStrategy>;
+        const svc = getPromptingStrategyService();
+        const userOverrides = await svc.readUserOverrides();
+        this.promptingStrategies = userOverrides as Record<string, PromptingStrategy>;
         logger.debug(`Loaded Ollama prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
       } catch (error) {
         logger.debug('No existing Ollama prompting strategies found');
@@ -368,11 +369,20 @@ export const ollamaModule = {
       else family = 'default';
     }
     
-    // Special case for code models
-    if (modelId.toLowerCase().includes('code') && family !== 'codegemma' && family !== 'codellama' && family !== 'wizardcoder') {
-      family = 'codellama'; // Use code-specific prompting
+    // Consult the central prompting strategy service first (Section 4)
+    const svc = getPromptingStrategyService();
+    const strategyId = svc.resolveStrategyId(modelId, family, 'ollama');
+    const centralStrategy = svc.getStrategy(strategyId);
+    if (centralStrategy) {
+      return {
+        systemPrompt: centralStrategy.systemPrompt,
+        userPrompt: centralStrategy.userPromptTemplate,
+        assistantPrompt: centralStrategy.assistantPromptTemplate,
+        useChat: centralStrategy.useChat,
+      };
     }
-    
+
+    // Inline fallback (used when service not yet loaded, e.g. unit tests)
     const defaultStrategy = DEFAULT_PROMPTING_STRATEGIES[family] || DEFAULT_PROMPTING_STRATEGIES.default;
     
     return {
@@ -415,28 +425,15 @@ export const ollamaModule = {
    */
   async savePromptingStrategies(): Promise<void> {
     try {
-      logger.debug(`Saving prompting strategies to: ${STRATEGIES_FILE_PATH}`);
-      logger.debug(`Prompting strategies contains data for ${Object.keys(this.promptingStrategies).length} models`);
-      
-      // Ensure the directory exists
-      try {
-        await mkdir(path.dirname(STRATEGIES_FILE_PATH), { recursive: true });
-      } catch (error) {
-        if (error instanceof Error) {
-          logger.debug(`Directory check during save strategies: ${error.message}`);
-        } else {
-          logger.debug('Unknown error during directory check');
-        }
-      }
-      
-      await fs.writeFile(STRATEGIES_FILE_PATH, JSON.stringify(this.promptingStrategies, null, 2));
-      logger.debug('Successfully saved Ollama prompting strategies to disk');
+      logger.debug(`Saving Ollama prompting strategies (${Object.keys(this.promptingStrategies).length} models) to user-override file`);
+      const svc = getPromptingStrategyService();
+      await svc.mergeUserOverrides(this.promptingStrategies as Parameters<typeof svc.mergeUserOverrides>[0]);
+      logger.debug('Successfully saved Ollama prompting strategies');
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`Error saving Ollama prompting strategies:`, error);
-        logger.error(`Error details: ${error.message}`);
       } else {
-        logger.error('Unknown error occurred');
+        logger.error('Unknown error occurred saving Ollama prompting strategies');
       }
     }
   },
