@@ -7,38 +7,35 @@ import { getProviderRegistry } from '../../core/provider/index.js';
 import { execSync } from 'child_process';
 
 /**
- * Check if Python is installed and available
+ * Check if Python is installed and available (tries python3 then python)
  */
 function isPythonAvailable(): boolean {
-  try {
-    execSync('python --version', { stdio: 'pipe' });
-    return true;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Python not available: ${errorMessage}`);
+  for (const cmd of ['python3', 'python', 'py']) {
     try {
-      execSync('python3 --version', { stdio: 'pipe' });
+      execSync(`${cmd} --version`, { stdio: 'pipe' });
       return true;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Python3 not available: ${errorMessage}`);
-      return false;
+    } catch {
+      continue;
     }
   }
+  logger.error('Python not available: no python3, python, or py command found');
+  return false;
 }
 
 /**
- * Check if a Python module is installed
+ * Check if a Python module is installed (tries python3 then python)
  */
 function isPythonModuleInstalled(moduleName: string): boolean {
-  try {
-    execSync(`python -c "import ${moduleName}"`, { stdio: 'pipe' });
-    return true;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Python module ${moduleName} not installed: ${errorMessage}`);
-    return false;
+  for (const cmd of ['python3', 'python', 'py']) {
+    try {
+      execSync(`${cmd} -c "import ${moduleName}"`, { stdio: 'pipe' });
+      return true;
+    } catch {
+      continue;
+    }
   }
+  logger.warn(`Python module ${moduleName} not installed (checked python3, python, py) — related tools will be disabled`);
+  return false;
 }
 
 /**
@@ -109,37 +106,6 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             }
           },
           required: ['task', 'context_length']
-        },
-        outputSchema: {
-          type: 'object',
-          properties: {
-            costClass: {
-              type: 'string',
-              enum: ['local', 'free', 'paid'],
-              description: 'Cost class of the provider that ran the task. "local" = no API cost. "free" = free-tier remote. "paid" = paid API.'
-            },
-            providerId: {
-              type: 'string',
-              description: 'Normalised provider id (e.g. "lm-studio", "ollama", "openrouter").'
-            },
-            modelId: {
-              type: 'string',
-              description: 'Model id used for the final synthesis step.'
-            },
-            content: {
-              type: 'string',
-              description: 'The synthesised code or text result.'
-            },
-            reason: {
-              type: 'string',
-              description: 'Human-readable explanation of how the task was routed and executed.'
-            },
-            estimatedCost: {
-              type: 'number',
-              description: 'Estimated cost in USD for the task execution. 0 for local/free models.'
-            }
-          },
-          required: ['costClass', 'providerId', 'modelId', 'content', 'reason']
         }
       },
       {
@@ -231,29 +197,6 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             }
           },
           required: ['task', 'context_length']
-        },
-        outputSchema: {
-          type: 'object',
-          properties: {
-            costClass: {
-              type: 'string',
-              enum: ['local', 'free', 'paid'],
-              description: 'Cost class of the recommended provider.'
-            },
-            providerId: {
-              type: 'string',
-              description: 'Normalised id of the recommended provider.'
-            },
-            modelId: {
-              type: 'string',
-              description: 'Recommended model id.'
-            },
-            reason: {
-              type: 'string',
-              description: 'Explanation of why this model was selected.'
-            }
-          },
-          required: ['costClass', 'providerId', 'modelId', 'reason']
         }
       },
       {

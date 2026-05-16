@@ -240,7 +240,7 @@ export const config: Config = {
   
   // Python configuration
   python: {
-    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH || detectedPythonPath || path.join(process.cwd(), '.venv/bin/python'),
+    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH || detectedPythonPath || 'python3',
     virtualEnv: process.env.PYTHON_VENV_PATH || path.join(process.cwd(), '.venv'),
     detectVirtualEnv: parseBool(process.env.PYTHON_DETECT_VENV, true),
   },

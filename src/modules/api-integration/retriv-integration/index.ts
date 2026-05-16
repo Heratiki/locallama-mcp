@@ -8,32 +8,33 @@ import { IRetrivIntegration, RetrivInitParams, RetrivInitResult, RetrivDocument,
 
 export class RetrivIntegration implements IRetrivIntegration {
   /**
-   * Check if Python is available on the system
+   * Check if Python is available on the system (tries python3 then python)
    */
   isPythonAvailable(): boolean {
-    try {
-      execSync('python --version', { stdio: 'pipe' });
-      return true;
-    } catch {
+    for (const cmd of ['python3', 'python', 'py']) {
       try {
-        execSync('python3 --version', { stdio: 'pipe' });
+        execSync(`${cmd} --version`, { stdio: 'pipe' });
         return true;
       } catch {
-        return false;
+        continue;
       }
     }
+    return false;
   }
   
   /**
    * Check if a Python module is installed
    */
   isPythonModuleInstalled(moduleName: string): boolean {
-    try {
-      execSync(`python -c "import ${moduleName}"`, { stdio: 'pipe' });
-      return true;
-    } catch {
-      return false;
+    for (const cmd of ['python3', 'python', 'py']) {
+      try {
+        execSync(`${cmd} -c "import ${moduleName}"`, { stdio: 'pipe' });
+        return true;
+      } catch {
+        continue;
+      }
     }
+    return false;
   }
   
   /**

@@ -783,9 +783,15 @@ export class BM25Searcher {
     }
     
     if (config.python?.path) {
-      pythonExecutable = config.python.path.trim();
-      logger.info(`Using Python executable from config: ${pythonExecutable}`);
-      return pythonExecutable;
+      const configuredPath = config.python.path.trim();
+      // Only use the configured path if it's a short command name (e.g. 'python3')
+      // or if the full absolute path actually exists on disk.
+      const isCommand = !configuredPath.includes('/') && !configuredPath.includes('\\');
+      if (isCommand || fs.existsSync(configuredPath)) {
+        logger.info(`Using Python executable from config: ${configuredPath}`);
+        return configuredPath;
+      }
+      logger.debug(`Configured Python path does not exist, continuing search: ${configuredPath}`);
     }
     
     // Try to detect virtual environment
