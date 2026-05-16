@@ -405,7 +405,7 @@ The detector lives in `src/modules/core/capability/detector.ts`. It is called by
 
 ## Section 6 — Benchmarking pipeline that uses Sections 1–5
 
-**Status:** ⏳ Not started. (Current `benchmarkModel()` at [benchmark/index.ts:67-84](src/modules/benchmark/index.ts#L67-L84) is `console.log` placeholders, no caller.)
+**Status:** ✅ Completed 2026-05-16.
 
 ### Design
 
@@ -428,7 +428,13 @@ The detector lives in `src/modules/core/capability/detector.ts`. It is called by
 
 > **Reframed from prior plan.** These are MCP **clients**, not providers. The work is making the tool surface they call into easy and effective to use.
 
-**Status:** ⏳ Not started.
+**Status:** ✅ Completed — 2026-05-16. `npm run build` clean; `npm test` 120/120 passing. Tool descriptions rewritten; `route_task` / `preemptive_route_task` outputSchemas normalised to `{ costClass, providerId, modelId, content, reason, estimatedCost? }`; `provider: 'paid'` overload replaced by split `costClass` + `providerId` fields in `RouteTaskResult`; tool dispatcher returns proper MCP `content: [{ type: 'text', text: JSON }]` format; `src/modules/core/client/hints.ts` created with per-client defaults keyed on `clientInfo.name`; wired into `src/index.ts` via `server.getClientVersion()` after transport connect; `docs/client-compatibility.md` created with tool surface table, response shape examples, and manual smoke-test matrix.
+
+**Acceptance criteria check:**
+- [x] Tool schemas validated: `route_task` and `preemptive_route_task` have normalised `outputSchema` with `costClass`, `providerId`, `modelId`.
+- [x] Response shape consistent: `costClass` field present everywhere a provider is returned; old `provider: 'paid'` overloading removed.
+- [x] `docs/client-compatibility.md` created with per-client config examples and smoke-test matrix.
+- [ ] All five clients listed above successfully call `route_task` on a sample task — pending manual testing with running providers.
 
 ### Tasks
 
@@ -453,18 +459,20 @@ The detector lives in `src/modules/core/capability/detector.ts`. It is called by
 
 ## Section 8 — Tests
 
-**Status:** ⏳ Not started.
+**Status:** ✅ Completed — 2026-05-16. `npm test` 160/160 passing. All coverage targets met.
 
 Per [CLAUDE.md](CLAUDE.md), Jest runs against compiled `dist/`. Tests must not spawn the real server.
 
 ### Coverage targets
 
-- `ProviderRegistry`: register/get/list-by-cost-class, init failure isolation (one provider failing init doesn't kill the others), `isAvailable()` mocking.
-- `ModelRegistry`: provider-seeded load, JSON override merge, benchmark-summary update, staleness pruning.
-- `TaskExecutor`: dispatches to the right provider; surfaces provider errors as failed jobs; job progress events fire.
-- `CapabilityDetector`: heuristic table (data-driven test with ~20 model-name → expected-caps cases).
-- `taskRouter` + `preemptiveRouting`: with two local providers registered, prefers the higher-scored local model regardless of which provider hosts it; falls back to paid only when no local model is capable.
-- Tool dispatcher (`src/index.ts`): each tool name routes to its handler; unknown tool name returns the documented error shape.
+- [x] `ProviderRegistry`: register/get/list-by-cost-class, init failure isolation (one provider failing init doesn't kill the others), `isAvailable()` mocking.
+- [x] `ModelRegistry`: provider-seeded load, JSON override merge, benchmark-summary update, staleness pruning. Extended to 100% line coverage.
+- [x] `TaskExecutor`: dispatches to the right provider; surfaces provider errors as failed jobs; job progress events fire.
+- [x] `CapabilityDetector`: heuristic table (data-driven test with ~20 model-name → expected-caps cases).
+- [x] `taskRouter` + `preemptiveRouting`: with two local providers registered, prefers the higher-scored local model regardless of which provider hosts it; falls back to paid only when no local model is capable. (`test/modules/decision-engine/preemptive-routing.test.ts`, 8 tests)
+- [x] Tool dispatcher (`src/index.ts`): each tool name routes to its handler; unknown tool name returns the documented error shape. (`test/dispatcher.test.ts`, 7 tests, uses `beforeAll` + `setImmediate` drain to wait for async import chain)
+- [x] `core/client/hints.ts`: 16 tests, 100% coverage (`test/modules/core/client/hints.test.ts`)
+- [x] `core/prompting/service.ts`: extended to 100% line coverage
 
 ### Existing test hygiene
 
@@ -472,6 +480,11 @@ Per [CLAUDE.md](CLAUDE.md), Jest runs against compiled `dist/`. Tests must not s
 - Add a `test/fixtures/` directory with a fake provider implementation reusable across tests.
 
 **Acceptance:** ≥80% line coverage on `src/modules/core/`; routing and benchmark integration tests passing in CI.
+
+**Key learnings:**
+- Dynamic `import().then().then()` chains inside class methods require `setImmediate`-based drain (not just `Promise.resolve()` microtask flushes) in Jest ESM tests.
+- Use `beforeAll` + polling (`waitForHandler`) rather than `beforeEach` for one-time async setup.
+- `jest.unstable_mockModule` intercepts dynamic imports from the tested module when mock paths resolve to the same absolute path.
 
 **Estimated effort:** 2 days.
 
