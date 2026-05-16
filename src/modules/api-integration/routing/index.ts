@@ -4,6 +4,7 @@ import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
 import { IRouter, RouteTaskParams, RouteTaskResult, CancelJobResult } from './types.js';
+import { providerCostClass } from '../../core/provider/helpers.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
 import { costEstimator } from '../cost-estimation/index.js';
@@ -54,10 +55,12 @@ export class Router implements IRouter {
         logger.info(`High confidence Retriv match found (score: ${retrivResults[0].score}). Returning cached result.`);
         return {
           model: 'retriv',
-          provider: 'local-cache', // Changed provider to reflect source
+          providerId: 'retriv',
+          costClass: 'local',
+          provider: 'local-cache',
           reason: `Found existing code solution in local database with score ${retrivResults[0]?.score?.toFixed(2) ?? 'N/A'}`,
-          resultCode: resultCode, // Add missing resultCode
-          estimatedCost: 0, // Cost is 0 for cached result
+          resultCode: resultCode,
+          estimatedCost: 0,
           details: {
             retrivResults
           }
@@ -103,13 +106,15 @@ export class Router implements IRouter {
       // Return the final synthesized result
       return {
         model: finalModelInfo.id,
+        providerId: finalModelInfo.provider,
+        costClass: providerCostClass(finalModelInfo.provider),
         provider: finalModelInfo.provider,
         reason: `Task decomposed into ${decomposedTask.subtasks.length} subtasks, executed, and synthesized.`,
         resultCode: finalCode,
-        estimatedCost: processingResult.estimatedCost, // Get cost from processing result
+        estimatedCost: processingResult.estimatedCost,
         details: {
-          costEstimate: costEstimate, // Keep original estimate for reference
-          retrivResults: retrivResults.length > 0 ? retrivResults : undefined, // Include if search was done
+          costEstimate: costEstimate,
+          retrivResults: retrivResults.length > 0 ? retrivResults : undefined,
           taskAnalysis: decomposedTask
         }
       };
@@ -138,19 +143,15 @@ export class Router implements IRouter {
       // Generate a reason if it doesn't exist in the decision object
       const routingReason = generateRoutingReason(decision);
       
-      // Return a placeholder result indicating the preemptive choice
-      // The actual execution must now happen via the main routeTask
+      // Return a routing recommendation — actual execution happens via route_task
       return {
         model: decision.model,
+        providerId: decision.provider,
+        costClass: providerCostClass(decision.provider),
         provider: decision.provider,
-        reason: `Preemptive routing suggested ${decision.model}. Full execution required via route_task. Reason: ${routingReason}`,
-        resultCode: `// Preemptive routing selected ${decision.model}. Full execution needed via route_task.`, // Placeholder result
-        // estimatedCost: undefined, // Preemptive doesn't calculate cost
-        details: {
-          // TODO: Implement elsewhere - costEstimate: undefined, // No cost estimate done
-          // TODO: Implement retriv in a way that leverages it's semantic search to reduce code generation - retrivResults: undefined, // No retriv search done
-          // TODO: Implement elsewhere - taskAnalysis: undefined // No analysis done
-        }
+        reason: `Preemptive routing selected ${decision.model} (${decision.provider}). Call route_task to execute. ${routingReason}`,
+        resultCode: '',
+        details: {}
       };
     } catch (error) {
       logger.error('Error in preemptive routing:', error);

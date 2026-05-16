@@ -126,6 +126,13 @@ describe('PromptingStrategyService', () => {
       expect(svc.listStrategies()).toHaveLength(0);
     });
 
+    it('warns and skips when strategies field is not an array', async () => {
+      const filePath = path.join(tmpDir, 'wrong-type.json');
+      await fs.writeFile(filePath, JSON.stringify({ strategies: 'not-an-array', defaultStrategyId: 'default' }));
+      await svc.loadFromFile(filePath);
+      expect(svc.listStrategies()).toHaveLength(0);
+    });
+
     it('uses defaultStrategyId from config', async () => {
       const cfg = { ...MINIMAL_CONFIG, defaultStrategyId: 'coding' };
       const filePath = await writeTempStrategiesFile(tmpDir, cfg);
@@ -174,6 +181,28 @@ describe('PromptingStrategyService', () => {
       // but the modelId contains "coder" which the coding strategy's modelIdPatterns cover
       const id = svc.resolveStrategyId('some-coder-model', 'unknown', 'lm-studio');
       expect(id).toBe('coding');
+    });
+
+    it('priority 4: invalid regex in modelIdPatterns is silently skipped', async () => {
+      const configWithBadPattern = {
+        ...MINIMAL_CONFIG,
+        strategies: [
+          ...MINIMAL_CONFIG.strategies,
+          {
+            id: 'bad-pattern-strategy',
+            appliesTo: {
+              modelIdPatterns: ['[invalid-regex'],
+            },
+            systemPrompt: 'Will not match.',
+            useChat: true,
+          },
+        ],
+      };
+      const filePath = await writeTempStrategiesFile(tmpDir, configWithBadPattern);
+      await svc.loadFromFile(filePath);
+      // Should not throw; the bad pattern is silently skipped and falls back to default
+      const id = svc.resolveStrategyId('[invalid-regex', undefined, undefined);
+      expect(typeof id).toBe('string');
     });
 
     it('fallback: returns defaultStrategyId when nothing matches', () => {
@@ -258,6 +287,23 @@ describe('PromptingStrategyService', () => {
       const result = await svc.readUserOverrides(overridePath());
       expect(result['my-model']?.systemPrompt).toBe('v2');
     });
+
+    it('readUserOverrides returns {} and warns for non-ENOENT errors', async () => {
+      // Create a directory at the target path so fs.readFile fails with EISDIR
+      const dirPath = path.join(tmpDir, 'dir-not-file.json');
+      await fs.mkdir(dirPath, { recursive: true });
+      const result = await svc.readUserOverrides(dirPath);
+      expect(result).toEqual({});
+    });
+
+    it('mergeUserOverrides warns and does not throw when write fails', async () => {
+      // Create a directory at the output path so fs.writeFile fails with EISDIR
+      const dirPath = path.join(tmpDir, 'not-a-file.json');
+      await fs.mkdir(dirPath, { recursive: true });
+      await expect(
+        svc.mergeUserOverrides({ 'x': { modelId: 'x', systemPrompt: 'y' } }, dirPath),
+      ).resolves.not.toThrow();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -275,6 +321,14 @@ describe('PromptingStrategyService', () => {
       const custom = new PromptingStrategyService();
       _setPromptingStrategyServiceForTests(custom);
       expect(getPromptingStrategyService()).toBe(custom);
+    });
+
+    it('auto-creates singleton when reset to undefined', () => {
+      _setPromptingStrategyServiceForTests(undefined);
+      const auto = getPromptingStrategyService();
+      expect(auto).toBeInstanceOf(PromptingStrategyService);
+      // Restore
+      _setPromptingStrategyServiceForTests(svc);
     });
   });
 });

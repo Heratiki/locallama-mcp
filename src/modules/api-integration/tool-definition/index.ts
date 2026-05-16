@@ -71,34 +71,41 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
     const tools: ITool[] = [
       {
         name: 'route_task',
-        description: 'Processes a coding task: decomposes if necessary, executes subtasks using appropriate models (local/free/paid based on routing), synthesizes the results, and returns the final code.',
+        description:
+          'Delegate a coding task to the most cost-effective LLM available. ' +
+          'Prefers local models (LM Studio / Ollama) when they are capable enough, ' +
+          'falling back to free or paid API models only when needed. ' +
+          'Decomposes complex tasks into subtasks, executes them, synthesises the result, ' +
+          'and returns structured JSON with the code, the model used, its cost class ' +
+          '("local" | "free" | "paid"), and the estimated cost. ' +
+          'Use this tool when you want the task actually executed, not just planned.',
         inputSchema: {
           type: 'object',
           properties: {
             task: {
               type: 'string',
-              description: 'The coding task to route'
+              description: 'The coding task to execute (free-form natural language or code prompt).'
             },
             context_length: {
               type: 'number',
-              description: 'The length of the context in tokens'
+              description: 'Number of tokens in the prompt / context being sent.'
             },
             expected_output_length: {
               type: 'number',
-              description: 'The expected length of the output in tokens'
+              description: 'Estimated number of tokens in the desired output (helps cost estimation and model selection). Omit if unknown.'
             },
             complexity: {
               type: 'number',
-              description: 'The complexity of the task (0-1)'
+              description: 'Task complexity score from 0.0 (trivial) to 1.0 (very hard). Omit to let the router estimate it automatically.'
             },
             priority: {
               type: 'string',
               enum: ['speed', 'cost', 'quality'],
-              description: 'The priority for this task'
+              description: '"speed" – pick the fastest responding model. "cost" – minimise API spend (prefers local/free). "quality" – pick the highest quality model regardless of cost. Default: "quality".'
             },
             preemptive: {
               type: 'boolean',
-              description: 'Whether to use preemptive routing (faster but less accurate)'
+              description: 'If true, use a fast heuristic pre-check for routing instead of full analysis. Faster but less accurate; useful when latency matters more than optimality.'
             }
           },
           required: ['task', 'context_length']
@@ -106,37 +113,33 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         outputSchema: {
           type: 'object',
           properties: {
-            model: {
+            costClass: {
               type: 'string',
-              description: 'The final model used for the last step or synthesis.'
+              enum: ['local', 'free', 'paid'],
+              description: 'Cost class of the provider that ran the task. "local" = no API cost. "free" = free-tier remote. "paid" = paid API.'
             },
-            provider: {
+            providerId: {
               type: 'string',
-              description: 'The provider of the final model used.'
+              description: 'Normalised provider id (e.g. "lm-studio", "ollama", "openrouter").'
+            },
+            modelId: {
+              type: 'string',
+              description: 'Model id used for the final synthesis step.'
+            },
+            content: {
+              type: 'string',
+              description: 'The synthesised code or text result.'
             },
             reason: {
               type: 'string',
-              description: 'Explanation of the routing and execution process.'
-            },
-            resultCode: {
-              type: 'string',
-              description: 'The final synthesized code result.'
+              description: 'Human-readable explanation of how the task was routed and executed.'
             },
             estimatedCost: {
               type: 'number',
-              description: 'Estimated cost in USD for the task execution (optional).'
-            },
-            details: {
-              type: 'object',
-              description: 'Optional details about the execution process (e.g., cost breakdown, subtask analysis).',
-              properties: {
-                // Define specific details properties if needed, e.g.:
-                // costEstimate: { type: 'object' },
-                // taskAnalysis: { type: 'object' }
-              }
+              description: 'Estimated cost in USD for the task execution. 0 for local/free models.'
             }
           },
-          required: ['model', 'provider', 'reason', 'resultCode']
+          required: ['costClass', 'providerId', 'modelId', 'content', 'reason']
         }
       },
       {
@@ -181,7 +184,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'cancel_job',
-        description: 'Cancel a running job',
+        description: 'Cancel a running background job. Returns the job id, whether cancellation succeeded, and the final status.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -195,86 +198,84 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'preemptive_route_task',
-        description: 'Quickly route a coding task without making API calls (faster but less accurate)',
+        description:
+          'Cheap model-selection check that returns a routing recommendation WITHOUT executing the task. ' +
+          'Call this when you only need to know which model and provider would be chosen (for UI feedback, ' +
+          'cost planning, or logging) and will call route_task separately for actual execution. ' +
+          'Much faster than route_task because it uses a heuristic scoring model with no LLM API calls. ' +
+          'Returns structured JSON with costClass, providerId, modelId and reason — same shape as route_task ' +
+          'but content is always empty.',
         inputSchema: {
           type: 'object',
           properties: {
             task: {
               type: 'string',
-              description: 'The coding task to route'
+              description: 'The coding task description (used for complexity estimation).'
             },
             context_length: {
               type: 'number',
-              description: 'The length of the context in tokens'
+              description: 'Number of tokens in the prompt / context.'
             },
             expected_output_length: {
               type: 'number',
-              description: 'The expected length of the output in tokens'
+              description: 'Estimated output length in tokens. Omit if unknown.'
             },
             complexity: {
               type: 'number',
-              description: 'The complexity of the task (0-1)'
+              description: 'Task complexity from 0.0 (trivial) to 1.0 (very hard). Omit to estimate automatically.'
             },
             priority: {
               type: 'string',
               enum: ['speed', 'cost', 'quality'],
-              description: 'The priority for this task'
+              description: 'Routing priority. Default: "quality".'
             }
           },
           required: ['task', 'context_length']
-        }, // <<< Add comma here
-        outputSchema: { // <<< Add outputSchema here
+        },
+        outputSchema: {
           type: 'object',
           properties: {
-            model: {
+            costClass: {
               type: 'string',
-              description: 'The final model used for the last step or synthesis.'
+              enum: ['local', 'free', 'paid'],
+              description: 'Cost class of the recommended provider.'
             },
-            provider: {
+            providerId: {
               type: 'string',
-              description: 'The provider of the final model used.'
+              description: 'Normalised id of the recommended provider.'
+            },
+            modelId: {
+              type: 'string',
+              description: 'Recommended model id.'
             },
             reason: {
               type: 'string',
-              description: 'Explanation of the routing and execution process.'
-            },
-            resultCode: {
-              type: 'string',
-              description: 'The final synthesized code result.'
-            },
-            estimatedCost: {
-              type: 'number',
-              description: 'Estimated cost in USD for the task execution.'
-            },
-            details: {
-              type: 'object',
-              description: 'Optional details about the execution process.',
-              properties: {
-                // Add properties from RouteTaskResult['details'] if needed
-                // e.g., costEstimate, retrivResults, taskAnalysis
-              }
+              description: 'Explanation of why this model was selected.'
             }
           },
-          required: ['model', 'provider', 'reason', 'resultCode']
+          required: ['costClass', 'providerId', 'modelId', 'reason']
         }
       },
       {
         name: 'get_cost_estimate',
-        description: 'Get an estimate of the cost for a task',
+        description:
+          'Returns a structured JSON cost estimate for running a given number of tokens through the router. ' +
+          'Use this before calling route_task to decide whether to proceed or reduce the request size. ' +
+          'All cost fields are in USD; local and free-tier models report 0.',
         inputSchema: {
           type: 'object',
           properties: {
             context_length: {
               type: 'number',
-              description: 'The length of the context in tokens'
+              description: 'Number of tokens in the prompt / context.'
             },
             expected_output_length: {
               type: 'number',
-              description: 'The expected length of the output in tokens'
+              description: 'Estimated output length in tokens. Omit if unknown; defaults to 0.'
             },
             model: {
               type: 'string',
-              description: 'The model to use (optional)'
+              description: 'Specific model id to estimate cost for. Omit to estimate for all registered models.'
             }
           },
           required: ['context_length']
@@ -380,6 +381,30 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             }
           },
           required: ['tasks']
+        }
+      },
+      {
+        name: 'benchmark_model',
+        description: 'Run built-in benchmark suites against a specific model identified by its model id. ' +
+          'Uses the provider abstraction so it works with any registered provider (LM Studio, Ollama, OpenRouter, etc.). ' +
+          'Results are persisted to the benchmark database and immediately update the ModelRegistry capability scores.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            model_id: {
+              type: 'string',
+              description: 'The model id to benchmark (e.g. "qwen2.5-coder-7b")'
+            },
+            task_categories: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ['code', 'chat', 'tool-use', 'long-context']
+              },
+              description: 'Which task categories to run. Defaults to ["code", "chat"] when omitted.'
+            }
+          },
+          required: ['model_id']
         }
       }
     ];

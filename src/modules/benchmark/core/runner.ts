@@ -3,13 +3,11 @@ import { costMonitor } from '../../cost-monitor/index.js';
 import { openRouterModule } from '../../openrouter/index.js';
 import { logger } from '../../../utils/logger.js';
 import { BenchmarkConfig, BenchmarkResult, BenchmarkRunResult, Model, BenchmarkTaskParams } from '../../../types/index.js';
-import { callLmStudioApi } from '../api/lm-studio.js';
-import { callOllamaApi } from '../api/ollama.js';
-import { simulateOpenAiApi, simulateGenericApi } from '../api/simulation.js';
+import { simulateGenericApi } from '../api/simulation.js';
 import { evaluateQuality } from '../evaluation/quality.js';
 import { codeEvaluationService } from '../../decision-engine/services/codeEvaluationService.js';
 import { saveBenchmarkResult, getRecentModelResults } from '../storage/benchmarkDb.js';
-import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
+import { isProviderLocal, getProviderRegistry } from '../../core/provider/index.js';
 
 // Track model failure counts in memory
 const modelFailures = new Map<string, number>();
@@ -71,57 +69,35 @@ export async function runModelBenchmark(
       // Measure response time
       const startTime = Date.now();
       
-      // Call the appropriate API based on model provider
-      let response;
+      // Call the appropriate API based on model provider (registry-based, Section 6)
       let success = false;
       let qualityScore = 0;
       let promptTokens = 0;
       let completionTokens = 0;
       let runOutput = '';
-      
-      if (isProviderId(model.provider, 'lm-studio')) {
-        logger.info(`Calling LM Studio API for model ${model.id}`);
-        response = await callLmStudioApi(model.id, task, dynamicTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
-        promptTokens = response.usage?.prompt_tokens || contextLength;
-        completionTokens = response.usage?.completion_tokens || expectedOutputLength;
-        if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
+
+      const registryProvider = getProviderRegistry().get(model.provider);
+      if (registryProvider) {
+        try {
+          const execResult = await registryProvider.executeTask(model.id, task, { timeoutMs: dynamicTimeout });
+          success = true;
+          qualityScore = evaluateQuality(task, execResult.content);
+          promptTokens = execResult.promptTokens ?? contextLength;
+          completionTokens = execResult.completionTokens ?? expectedOutputLength;
+          runOutput = execResult.content;
           output = runOutput;
-        }
-      } else if (isProviderId(model.provider, 'ollama')) {
-        response = await callOllamaApi(model.id, task, config.taskTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
-        promptTokens = response.usage?.prompt_tokens || contextLength;
-        completionTokens = response.usage?.completion_tokens || expectedOutputLength;
-        if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
-          output = runOutput;
-        }
-      } else if (model.provider === 'openai') {
-        response = await simulateOpenAiApi(task, config.taskTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
-        promptTokens = response.usage?.prompt_tokens || contextLength;
-        completionTokens = response.usage?.completion_tokens || expectedOutputLength;
-        if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
-          output = runOutput;
+        } catch (err) {
+          logger.warn(`Provider ${model.provider} executeTask failed for ${model.id}: ${err instanceof Error ? err.message : String(err)}`);
         }
       } else {
-        response = await simulateGenericApi(task, config.taskTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
+        // Unknown provider — fall back to generic simulation
+        const simResponse = await simulateGenericApi(task, config.taskTimeout);
+        success = simResponse.success;
+        qualityScore = simResponse.text ? evaluateQuality(task, simResponse.text) : 0;
         promptTokens = contextLength;
         completionTokens = expectedOutputLength;
         if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
+          runOutput = simResponse.text || '';
           output = runOutput;
         }
       }
@@ -135,7 +111,7 @@ export async function runModelBenchmark(
           try {
             const evaluationResult = await codeEvaluationService.evaluateCodeQuality(
               task,
-              response.text || '',
+              runOutput,
               'general',
               { useModel: true, detailedAnalysis: true }
             );
@@ -146,8 +122,8 @@ export async function runModelBenchmark(
               qualityScore = evaluationResult.modelEvaluation.qualityScore;
               logger.info(`Code evaluation service evaluation: Valid=${success}, Quality=${qualityScore}`);
               if (success) {
-                runOutput = response.text || '';
-                // Store the latest successful output
+                // Keep existing runOutput (the provider's response) since the
+                // evaluation service validates it but doesn't produce new content
                 output = runOutput;
               }
             }
@@ -262,13 +238,12 @@ export async function benchmarkTask(
       const freeModels = await costMonitor.getFreeModels();
       
       // Find LM Studio models and add them to the free models pool
-      const lmStudioModels = availableModels.filter(m => isProviderId(m.provider, 'lm-studio'));
-      if (lmStudioModels.length > 0) {
-        logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool`);
-        
-        // Combine OpenRouter free models with LM Studio models 
-        // Prioritize LM Studio models by putting them first in the list
-        const combinedFreeModels = [...lmStudioModels, ...freeModels];
+      const localModels = availableModels.filter(m => isProviderLocal(m.provider));
+      if (localModels.length > 0) {
+        logger.info(`Including ${localModels.length} local model(s) in free models pool`);
+
+        // Prioritize local models by putting them first in the list
+        const combinedFreeModels = [...localModels, ...freeModels];
         
         // Find a model that can handle the context + output length
         const bestFreeModel = combinedFreeModels.find(m => 

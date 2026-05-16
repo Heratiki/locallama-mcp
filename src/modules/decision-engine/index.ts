@@ -148,18 +148,44 @@ export const decisionEngine = {
         }
       }
 
-      // Check for new free models that haven't been benchmarked
-      if (config.openRouterApiKey) {
-        try {
-          // Schedule benchmarking to run in the background
-          void setTimeout(() => {
-            benchmarkService.benchmarkFreeModels().catch(err => {
-              logger.error('Error benchmarking free models:', err);
-            });
-          }, 5000); // Wait 5 seconds before starting benchmarks
-        } catch (error) {
-          logger.error('Error checking for unbenchmarked free models:', error);
-        }
+      // Schedule background benchmarks based on STARTUP_BENCHMARK_TARGETS.
+      // Uses costClass from the ProviderRegistry instead of hardcoded provider names,
+      // so adding a new local provider Just Works (Section 6 of PLAN.md).
+      const targets = config.startupBenchmarkTargets;
+      if (targets.length > 0) {
+        void setTimeout(async () => {
+          try {
+            const { getProviderRegistry } = await import('../core/provider/index.js');
+            const { getModelRegistry } = await import('../core/model/index.js');
+            const { benchmarkModel } = await import('../benchmark/core/model-benchmarker.js');
+            const registry = getProviderRegistry();
+            const modelRegistry = getModelRegistry();
+
+            // Benchmark local models when 'local' or 'all' is in targets
+            if (targets.includes('local') || targets.includes('all')) {
+              const localProviders = registry.listByCostClass('local');
+              for (const provider of localProviders) {
+                const models = modelRegistry.listByProvider(provider.id);
+                for (const model of models) {
+                  try {
+                    await benchmarkModel({ modelId: model.id, taskCategories: ['code', 'chat'] });
+                  } catch (err) {
+                    logger.warn(`Startup benchmark failed for local model '${model.id}': ${err instanceof Error ? err.message : String(err)}`);
+                  }
+                }
+              }
+            }
+
+            // Benchmark free OpenRouter models when 'free' or 'all' is in targets
+            if ((targets.includes('free') || targets.includes('all')) && config.openRouterApiKey) {
+              benchmarkService.benchmarkFreeModels().catch(err => {
+                logger.error('Error benchmarking free models:', err);
+              });
+            }
+          } catch (err) {
+            logger.error('Error during startup benchmark scheduling:', err);
+          }
+        }, 5000); // Wait 5 seconds before starting benchmarks
       }
       
       logger.info('Decision engine initialized successfully');

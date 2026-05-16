@@ -13,6 +13,7 @@ import type { CostEstimationParams } from './modules/api-integration/cost-estima
 import type { OpenRouterBenchmarkConfig } from './modules/api-integration/openrouter-integration/types.js';
 import { createLockFile, isLockFilePresent, removeLockFile, getLockFileInfo } from './utils/lock-file.js';
 import type { LockFileInfo } from './utils/lock-file.js';
+import { setClientHints } from './modules/core/client/hints.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -212,16 +213,24 @@ export class LocalLamaMcpServer {
 
               switch (name) {
                 case 'route_task': {
-                  // routeTask is now synchronous and returns RouteTaskResult
                   const routeResult = await routingModule.routeTask(ensureRouteTaskParams(args));
-                  // The primary result content is the synthesized code
-                  return routeResult.resultCode;
+                  return {
+                    costClass: routeResult.costClass,
+                    providerId: routeResult.providerId,
+                    modelId: routeResult.model,
+                    content: routeResult.resultCode,
+                    reason: routeResult.reason,
+                    estimatedCost: routeResult.estimatedCost,
+                  };
                 }
                 case 'preemptive_route_task': {
-                  // preemptiveRouteTask also returns RouteTaskResult now
                   const preemptiveResult = await routingModule.preemptiveRouteTask(ensureRouteTaskParams(args));
-                  // Return the placeholder/info string
-                  return preemptiveResult.resultCode;
+                  return {
+                    costClass: preemptiveResult.costClass,
+                    providerId: preemptiveResult.providerId,
+                    modelId: preemptiveResult.model,
+                    reason: preemptiveResult.reason,
+                  };
                 }
                 case 'get_cost_estimate':
                   return await costModule.estimateCost(ensureCostEstimationParams(args));
@@ -238,17 +247,34 @@ export class LocalLamaMcpServer {
                 case 'benchmark_free_models':
                   return await import('./modules/api-integration/openrouter-integration/index.js')
                     .then(module => module.benchmarkFreeModels(ensureBenchmarkConfig(args)));
+                case 'benchmark_model': {
+                  const modelId = args?.model_id;
+                  if (typeof modelId !== 'string' || !modelId) {
+                    throw new Error('Invalid model_id for benchmark_model');
+                  }
+                  const rawCategories = args?.task_categories;
+                  const taskCategories = Array.isArray(rawCategories)
+                    ? rawCategories.filter((c): c is string => typeof c === 'string')
+                    : undefined;
+                  const { benchmarkModel } = await import('./modules/benchmark/core/model-benchmarker.js');
+                  return await benchmarkModel({ modelId, taskCategories: taskCategories as import('./modules/benchmark/core/model-benchmarker.js').TaskCategory[] | undefined });
+                }
                 default:
                   logger.error(`Unknown tool: ${name}`);
                   throw new Error(`Unknown tool: ${name}`);
               }
             })();
 
-            // Convert the result to the format expected by MCP SDK
+            // Return the result in MCP CallToolResult format.
+            // content[0].text carries the JSON-serialized payload so schema-aware
+            // clients (Claude Code, Codex, Copilot) can parse structured fields
+            // (costClass, providerId, modelId, …) while plain-text clients still
+            // get a readable string.
+            const textContent = typeof result === 'string'
+              ? result
+              : JSON.stringify(result, null, 2);
             return {
-              result: {
-                content: result
-              }
+              content: [{ type: 'text' as const, text: textContent }]
             };
           } catch (error) {
             logger.error(`Error executing tool ${name}:`, error);
@@ -393,6 +419,15 @@ export class LocalLamaMcpServer {
       logger.info('Starting LocalLama MCP Server...');
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
+
+      // Capture the connected client's name for per-client behavioral hints.
+      // getClientVersion() is populated after the initialize handshake completes.
+      const clientImpl = this.server.getClientVersion();
+      setClientHints(clientImpl?.name);
+      if (clientImpl?.name) {
+        logger.info(`MCP client identified: ${clientImpl.name} ${clientImpl.version ?? ''}`.trim());
+      }
+
       logger.info(`${connectionInfo} (PID: ${process.pid})`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

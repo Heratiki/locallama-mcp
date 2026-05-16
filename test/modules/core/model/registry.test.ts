@@ -151,6 +151,16 @@ describe('ModelRegistry', () => {
       expect(registry.getModel('model-a')).toBeDefined();
     });
 
+    it('warns and does not throw when the file contains invalid JSON', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'locallama-test-'));
+      const configPath = path.join(tmpDir, 'models.json');
+      await fs.writeFile(configPath, 'not valid json {{{');
+
+      await expect(registry.loadFromConfigFile(configPath)).resolves.not.toThrow();
+
+      await fs.rm(tmpDir, { recursive: true });
+    });
+
     it('applies overrides retroactively to models seeded after loadFromConfigFile', async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'locallama-test-'));
       const configPath = path.join(tmpDir, 'models.json');
@@ -246,6 +256,33 @@ describe('ModelRegistry', () => {
       const fresh = new ModelRegistry();
       _setModelRegistryForTests(fresh);
       expect(getModelRegistry()).toBe(fresh);
+    });
+
+    it('creates a new singleton when reset to undefined', () => {
+      _setModelRegistryForTests(undefined);
+      const auto = getModelRegistry();
+      expect(auto).toBeInstanceOf(ModelRegistry);
+      // Restore so subsequent tests get their own via beforeEach
+      _setModelRegistryForTests(registry);
+    });
+  });
+
+  describe('setPromptingService', () => {
+    it('does not throw when called with a truthy service object', () => {
+      const fakeSvc = { resolveStrategyId: jest.fn(() => 'default') } as unknown as Parameters<typeof registry.setPromptingService>[0];
+      expect(() => registry.setPromptingService(fakeSvc)).not.toThrow();
+    });
+  });
+
+  describe('clear', () => {
+    it('removes all models and overrides', () => {
+      const provider = fakeProvider('lm-studio');
+      registry.seedFromProvider(provider, [fakeProviderModel('m1'), fakeProviderModel('m2')]);
+      expect(registry.listAll()).toHaveLength(2);
+
+      registry.clear();
+
+      expect(registry.listAll()).toHaveLength(0);
     });
   });
 });

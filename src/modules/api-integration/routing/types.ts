@@ -15,7 +15,20 @@ export interface RouteTaskParams {
 export interface RouteTaskResult {
   /** The final model used for the last step or synthesis */
   model: string;
-  /** The provider of the final model used */
+  /**
+   * Normalized provider id (e.g. 'lm-studio', 'ollama', 'openrouter', 'retriv').
+   * Prefer this over `provider` for routing decisions; `provider` is kept
+   * for backward compatibility but may carry legacy values like 'local-cache'.
+   */
+  providerId: string;
+  /**
+   * Cost class of the provider that produced this result.
+   * 'local' = ran on a local runtime (zero API cost).
+   * 'free'  = free-tier remote model (zero cost, but external).
+   * 'paid'  = paid remote model.
+   */
+  costClass: 'local' | 'free' | 'paid';
+  /** @deprecated Use `providerId` and `costClass` instead. Kept for backward compatibility. */
   provider: string;
   /** Explanation of the routing and execution process */
   reason: string;
