@@ -492,7 +492,14 @@ Per [CLAUDE.md](CLAUDE.md), Jest runs against compiled `dist/`. Tests must not s
 
 ## Section 9 — Lightweight-hardware path
 
-**Status:** ⏳ Not started.
+**Status:** ✅ Completed — 2026-05-16. `npm run build` clean; `npm test` 334/334 passing (+14 new tests in `test/modules/decision-engine/lightweight-profile.test.ts`). `LOCALLAMA_PROFILE=lightweight` env var adjusts `COMPLEXITY_THRESHOLDS` and `TOKEN_THRESHOLDS` at module load time; `config.profile` field added to `Config`; `docs/lightweight-models.md` created.
+
+**Acceptance criteria check:**
+- [x] `LOCALLAMA_PROFILE=lightweight npm start` — profile field read; adjusted thresholds active from first module load.
+- [x] `docs/lightweight-models.md` checked in with model table, RAM footprints, tok/s estimates, setup instructions, and routing behaviour explanation.
+- [x] Routing thresholds adjusted: `COMPLEXITY_THRESHOLDS.COMPLEX` raised to 0.9 (was 0.8); `TOKEN_THRESHOLDS.LARGE` lowered to 4 096 (was 8 000) to match small-model context windows.
+- [x] Decomposition path assessed and documented in `docs/lightweight-models.md` ("Decomposition path assessment" section) — works well for multi-step code tasks; known limitation for single tasks > 4 096 tokens that can't be split, which fall back to paid routing.
+- [ ] End-to-end smoke test on a physical 16 GB machine with `qwen2.5-coder-1.5b` — pending a runner with a local Ollama/LM Studio install.
 
 ### Tasks
 

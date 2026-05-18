@@ -53,16 +53,24 @@ export interface ModelCodeEvaluationResult {
   alternativeSolutions?: string[];
 }
 
-// Complexity thresholds based on benchmark results
+// Complexity thresholds based on benchmark results.
+// When LOCALLAMA_PROFILE=lightweight these are raised so the router keeps more
+// tasks local and only escalates to paid APIs for genuinely very complex work.
+const _isLightweight = process.env.LOCALLAMA_PROFILE === 'lightweight';
+
 export const COMPLEXITY_THRESHOLDS = {
-  SIMPLE: 0.3,  // Tasks below this are simple
-  MEDIUM: 0.6,  // Tasks below this are medium complexity
-  COMPLEX: 0.8  // Tasks below this are moderately complex, above are very complex
+  SIMPLE: _isLightweight ? 0.4 : 0.3,  // Tasks below this are simple
+  MEDIUM: _isLightweight ? 0.7 : 0.6,  // Tasks below this are medium complexity
+  COMPLEX: _isLightweight ? 0.9 : 0.8, // Tasks below this are moderately complex, above are very complex
 };
 
-// Token thresholds based on benchmark results
+// Token thresholds based on benchmark results.
+// In lightweight mode, LARGE is capped at 4 096 tokens to match the practical
+// context window of small quantized models (e.g. qwen2.5-coder-1.5b at q4_K_M).
+// Tasks exceeding this limit should be decomposed via codeTaskCoordinator or
+// routed to a paid API — the local small model cannot fit them in context.
 export const TOKEN_THRESHOLDS = {
-  SMALL: 500,   // Small context
-  MEDIUM: 2000, // Medium context
-  LARGE: 8000   // Large context
+  SMALL: 500,                         // Small context
+  MEDIUM: 2000,                       // Medium context
+  LARGE: _isLightweight ? 4096 : 8000, // Large context
 };

@@ -166,6 +166,12 @@ export interface Config {
 
   // Startup benchmark targets
   startupBenchmarkTargets: string[];
+
+  // Hardware profile — controls routing aggressiveness toward local models
+  // 'lightweight': raises complexity/token thresholds so small local models are
+  //   preferred and paid APIs are only used for genuinely complex work.
+  // 'default': standard thresholds from benchmark results.
+  profile: 'default' | 'lightweight';
 }
 
 /**
@@ -263,6 +269,9 @@ export const config: Config = {
     return [...new Set(targets)];
   })(),
   
+  // Hardware profile
+  profile: (process.env.LOCALLAMA_PROFILE === 'lightweight' ? 'lightweight' : 'default') as 'default' | 'lightweight',
+
   // Paths
   rootDir,
 };
