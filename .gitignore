@@ -109,3 +109,5 @@ chats.db
 CLAUDE.md
 package-lock.json
 job-results.txt
+locallama-test.log.1.gz
+locallama-test.log.3.gz
