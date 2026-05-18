@@ -37,9 +37,30 @@ jest.unstable_mockModule('../dist/utils/logger.js', () => ({
   }
 }));
 
+// Mock the modules that setupToolCallHandler() dynamically imports so those
+// async import chains resolve immediately and don't outlive the Jest environment.
+jest.unstable_mockModule('../dist/modules/api-integration/routing/index.js', () => ({
+  routeTask: jest.fn(),
+  preemptiveRouteTask: jest.fn(),
+  cancelJob: jest.fn(),
+}));
+
+jest.unstable_mockModule('../dist/modules/api-integration/cost-estimation/index.js', () => ({
+  estimateCost: jest.fn(),
+}));
+
 const { LocalLamaMcpServer } = await import('../dist/index.js');
 
 describe('LocalLamaMcpServer', () => {
+  afterAll(async () => {
+    // Flush pending microtasks and macrotasks so the async import() chain inside
+    // setupToolCallHandler() has a chance to resolve before Jest tears down the
+    // environment. Without this, the dynamic imports fire after cleanup and
+    // produce "import after environment torn down" ReferenceErrors.
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await new Promise<void>(resolve => setImmediate(resolve));
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });

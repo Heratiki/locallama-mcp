@@ -1,0 +1,68 @@
+{
+  "models": {
+    "gpt-oss:20b": {
+      "id": "gpt-oss:20b",
+      "name": "GPT Oss:20b",
+      "provider": "ollama",
+      "contextWindow": 4096,
+      "family": "default",
+      "size": "7B",
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "embedding": false
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2026-05-18T18:40:56.562Z",
+      "version": "1.0",
+      "fileSize": 13793441244,
+      "isLocal": true
+    },
+    "gemma3n:e2b": {
+      "id": "gemma3n:e2b",
+      "name": "Gemma3n:e2b",
+      "provider": "ollama",
+      "contextWindow": 8192,
+      "family": "gemma",
+      "size": "7B",
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "embedding": false
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2026-05-18T18:40:56.562Z",
+      "version": "1.0",
+      "fileSize": 5621616562,
+      "isLocal": true
+    },
+    "gemma3n:latest": {
+      "id": "gemma3n:latest",
+      "name": "Gemma3n",
+      "provider": "ollama",
+      "contextWindow": 8192,
+      "family": "gemma",
+      "size": "7B",
+      "capabilities": {
+        "chat": true,
+        "completion": true,
+        "embedding": false
+      },
+      "promptingStrategy": {
+        "systemPrompt": "You are a helpful assistant.",
+        "useChat": true
+      },
+      "lastUpdated": "2026-05-18T18:40:56.562Z",
+      "version": "1.0",
+      "fileSize": 7547589116,
+      "isLocal": true
+    }
+  },
+  "lastUpdated": "2026-05-18T18:40:56.562Z"
+}

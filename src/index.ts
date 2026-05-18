@@ -247,6 +247,28 @@ export class LocalLamaMcpServer {
                 case 'benchmark_free_models':
                   return await import('./modules/api-integration/openrouter-integration/index.js')
                     .then(module => module.benchmarkFreeModels(ensureBenchmarkConfig(args)));
+                case 'set_model_prompting_strategy': {
+                  const modelId = args?.model_id;
+                  if (typeof modelId !== 'string' || !modelId) {
+                    throw new Error('Invalid model_id for set_model_prompting_strategy');
+                  }
+                  const systemPrompt = args?.system_prompt;
+                  const userPrompt = args?.user_prompt;
+                  if (typeof systemPrompt !== 'string' || typeof userPrompt !== 'string') {
+                    throw new Error('system_prompt and user_prompt must be strings');
+                  }
+                  const assistantPrompt = typeof args?.assistant_prompt === 'string' ? args.assistant_prompt : '';
+                  const useChat = typeof args?.use_chat === 'boolean' ? args.use_chat : true;
+                  const successRate = typeof args?.success_rate === 'number' ? args.success_rate : 0.7;
+                  const qualityScore = typeof args?.quality_score === 'number' ? args.quality_score : 0.7;
+                  return await import('./modules/api-integration/openrouter-integration/index.js')
+                    .then(module => module.updatePromptingStrategy(
+                      modelId,
+                      { systemPrompt, userPrompt, assistantPrompt, useChat },
+                      successRate,
+                      qualityScore
+                    ));
+                }
                 case 'benchmark_model': {
                   const modelId = args?.model_id;
                   if (typeof modelId !== 'string' || !modelId) {

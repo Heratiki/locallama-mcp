@@ -120,6 +120,8 @@ REMOVE_STALE_LOCK_FILES=true
 | Date | Suite | Passed | Failed | Skipped | Notes |
 |---|---|---|---|---|---|
 | 2026-05-16 | all | 24 | 0 | 5 | Skips: 5 optional tools absent (no OpenRouter key, no Python/retriv) |
+| 2026-05-18 | smoke | 13 | 0 | 5 | After Issues #4, #5, #6 fixes. Models: `gpt-oss:20b`, `gemma3n:e2b` (no llama3 fallback) |
+| 2026-05-18 | routing | 5 | 0 | 0 | Simple task → `gemma3n:e2b`; complex task → `gpt-4o` (paid). Issue #5 verified fixed |
 
 **Full suite command used:**
 ```bash
@@ -128,12 +130,18 @@ node test-operational.mjs --suite all
 
 **Ollama model used for LLM inference:** `gpt-oss:20b` (router's choice given no small-model preference)
 
-**Notable observations:**
+**Notable observations (2026-05-16):**
 - LM Studio is not running — connection-refused errors logged on startup (expected, non-fatal)
 - Python venv at `.venv/bin/python` not found — retriv code-search init fails on startup (expected, non-fatal)
 - `python` command not found (only `python3` available) — server uses `python` by default
 - Router correctly chose `gpt-oss:20b` for the simple task via `preemptive_route_task`, then used it for `route_task`
 - `route_task` produced valid JavaScript code from Ollama with correct `costClass: local`
+
+**Notable observations (2026-05-18, after fixes):**
+- `locallama://models` now correctly lists `gpt-oss:20b` and `gemma3n:e2b` (Issue #4 fixed)
+- `preemptive_route_task` simple task now routes to `gemma3n:e2b` instead of `gpt-oss:20b` (Issue #5 fixed)
+- `set_model_prompting_strategy` tool schema and dispatcher case were corrected (wrong fields → correct fields matching `updatePromptingStrategy` API)
+- Unit tests: 174/174 pass; Jest teardown ReferenceErrors eliminated by adding missing mocks in `test/index.test.ts`
 
 ---
 
@@ -147,9 +155,9 @@ Track issues found during operational testing here. This is separate from PLAN.m
 | 1 | P1 (fixed) | `ollama/index.ts` | Ollama models not discovered on fresh start | `lastUpdated` set to `now` when no tracking file found; `hoursSinceLastUpdate = 0 < 24` → `updateModels()` never called | **Fixed 2026-05-16**: init with `new Date(0)` to force first update |
 | 2 | P1 (fixed) | `ollama/index.ts` | Wrong URL: `${endpoint}/api/tags` instead of `${endpoint}/tags` | Endpoint is expected to already include `/api`; double-appending `/api` caused 404 | **Fixed 2026-05-16**: changed to `${endpoint}/tags` and `${endpoint}/chat` |
 | 3 | P1 (fixed) | `tool-definition/index.ts` | `v3Schema.safeParse is not a function` crash on server when `route_task` runs | `outputSchema` fields were plain JSON schema objects; MCP SDK calls `.safeParse()` on them expecting Zod schemas | **Fixed 2026-05-16**: removed `outputSchema` from `route_task` and `preemptive_route_task` |
-| 4 | P2 (open) | `cost-monitor/api.ts` | Models resource shows "llama3" fallback even when Ollama responds | `getAvailableModels()` in cost-monitor uses `${endpoint}/tags` (correct), but Ollama tracking cache is not used — it re-queries directly | Investigate: is the fallback still triggered if Ollama responds? |
-| 5 | P2 (open) | `preemptive_route_task` | Routes simple tasks to `gpt-oss:20b` (13GB) instead of `gemma3n:e2b` (5.6GB) | Model selection ignores model size / resource cost; `DEFAULT_LOCAL_MODEL` env var may not influence the router | Investigate: does `DEFAULT_LOCAL_MODEL=gemma3n:e2b` affect routing? |
-| 6 | P3 (open) | `cost-monitor` | Startup log spam: Python venv not found (`ENOENT .venv/bin/python`) | Hard-coded `.venv` path; no fallback to `python3` | Investigate: add `python3` fallback; check `PYTHON_PATH` env var |
+| 4 | P2 (fixed) | `cost-monitor/api.ts` | Models resource shows "llama3" fallback even when Ollama responds | `getAvailableModels()` concat'd LM Studio models into `confirmedModels` then pushed that back — duplicating LM Studio entries — and the `batchError` catch block never pushed basic Ollama models, triggering the fallback | **Fixed 2026-05-18**: replaced `models.concat(detailedModels)` with direct `models.push(...detailedModels)`; added basic Ollama fallback in `batchError` handler. Verified: `locallama://models` now returns `gpt-oss:20b` and `gemma3n:e2b` |
+| 5 | P2 (fixed) | `decision-engine/services/modelSelector.ts` | Routes simple tasks to `gpt-oss:20b` (13GB) instead of `gemma3n:e2b` (5.6GB) | Gemma's `e2b`/`e4b` naming convention not recognized; `e2b` scored same as unknown (0.1) for all task complexities | **Fixed 2026-05-18**: added `normalizedId` regex that converts `e2b`→`2b` and `e4b`→`4b`; extended size scoring to include 2b/4b/20b/27b/32b. Verified: `preemptive_route_task` on simple task now returns `gemma3n:e2b` |
+| 6 | P3 (fixed) | `cost-monitor` | Startup log spam: Python venv not found (`ENOENT .venv/bin/python`) | Hard-coded `.venv` path | **Already fixed** in existing code: `isCommand` check before using `python`/`python3`; no more ENOENT spam observed |
 
 ### Severity legend
 - **P0** — Server crashes or hangs; all tests blocked
@@ -182,7 +190,7 @@ When you add a new MCP tool to the server, add a test case here:
 | `retriv_search` | Requires retriv index | After retriv_init passes |
 | `get_free_models` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
 | `clear_openrouter_tracking` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
-| `set_model_prompting_strategy` | Low risk; no LLM call | Add to routing suite next iteration |
+| `set_model_prompting_strategy` | Requires `OPENROUTER_API_KEY` (tool only registers with key) | Schema and dispatcher fixed 2026-05-18; add live test when OpenRouter key is available |
 
 ---
 

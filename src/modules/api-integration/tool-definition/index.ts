@@ -547,37 +547,40 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         },
         {
           name: 'set_model_prompting_strategy',
-          description: 'Update the prompting strategy for an OpenRouter model',
+          description: 'Update the prompting strategy used for a specific OpenRouter model. Allows callers to supply a custom system prompt, user prompt template, and assistant prompt template that will be used on subsequent task executions for that model.',
           inputSchema: {
             type: 'object',
             properties: {
-              task: {
+              model_id: {
                 type: 'string',
-                description: 'The ID of the model to update'
+                description: 'The OpenRouter model ID to update (e.g. "mistralai/mistral-7b-instruct")'
               },
-              context_length: {
-                type: 'number',
-                description: 'Unused but required for type compatibility'
-              },
-              expected_output_length: {
-                type: 'number',
-                description: 'The system prompt to use'
-              },
-              priority: {
+              system_prompt: {
                 type: 'string',
-                enum: ['speed', 'cost', 'quality'],
-                description: 'The user prompt template to use'
+                description: 'System prompt to inject before every request to this model'
               },
-              complexity: {
-                type: 'number',
-                description: 'The assistant prompt template to use'
+              user_prompt: {
+                type: 'string',
+                description: 'User prompt template (use {{task}} as the placeholder for the task text)'
               },
-              preemptive: {
+              assistant_prompt: {
+                type: 'string',
+                description: 'Optional assistant prompt template to prime the model response'
+              },
+              use_chat: {
                 type: 'boolean',
-                description: 'Whether to use chat format'
+                description: 'Whether to use the chat completion API format (true) or the completion API format (false)'
+              },
+              success_rate: {
+                type: 'number',
+                description: 'Observed success rate for this strategy (0–1). Used to score the strategy in future routing decisions. Defaults to 0.7 if omitted.'
+              },
+              quality_score: {
+                type: 'number',
+                description: 'Observed quality score for this strategy (0–1). Used to score the strategy in future routing decisions. Defaults to 0.7 if omitted.'
               }
             },
-            required: ['task', 'context_length', 'expected_output_length', 'priority', 'complexity', 'preemptive']
+            required: ['model_id', 'system_prompt', 'user_prompt', 'use_chat']
           }
         }
       );

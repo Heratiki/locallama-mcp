@@ -255,13 +255,16 @@ export async function getAvailableModels(): Promise<Model[]> {
           })
         );
 
-        // Process the results
-        const confirmedModels = models.concat(detailedModels);
-        models.push(...confirmedModels);
+        // Process the results — only push the (possibly-enriched) Ollama models,
+        // not a concat with the current `models` array (which would duplicate any
+        // LM Studio models that were added earlier).
+        models.push(...detailedModels);
         logger.debug(`Found ${detailedModels.length} models from Ollama`);
       } catch (batchError) {
-        // If batch processing fails, just use the basic models
+        // If batch processing fails, fall back to the basic (unenriched) models
+        // so Ollama models are still surfaced rather than triggering the llama3 fallback.
         logger.warn('Failed to get detailed info for Ollama models:', batchError);
+        models.push(...ollamaModels);
       }
     }
   } catch (error) {
