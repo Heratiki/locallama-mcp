@@ -3,6 +3,7 @@
 .clinerules-ask
 .clinerules-code
 memory-bank/
+.claude/worktrees/
 
 # Dependency directories
 node_modules/
