@@ -236,6 +236,67 @@ async function runSuite(client) {
     });
   }
 
+  // ── 1b. Smoke: retriv_init + retriv_search (native BM25, no LLM) ─────────
+  if (runSmoke) {
+    hdr('Smoke: retriv_init + retriv_search (native BM25)');
+
+    // Index the small src/config/ directory so we don't scan the whole repo.
+    const configDir = join(__dirname, 'src', 'config');
+
+    await runTest('retriv_init — index src/config/', async () => {
+      const result = await client.callTool({
+        name: 'retriv_init',
+        arguments: {
+          directories: [configDir],
+          exclude_patterns: ['node_modules/**', 'dist/**'],
+          force_reindex: true,
+        },
+      });
+      const text = extractText(result);
+      dim(`retriv_init response: ${text?.substring(0, 400)}`);
+      assert(!!text, 'retriv_init returns content');
+
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { /* plain text ok */ }
+      if (parsed) {
+        assert(
+          parsed.success === true || !!parsed.summary || !!parsed.searchReady,
+          'retriv_init reports successful indexing'
+        );
+        if (parsed.summary) {
+          info(`Indexed ${parsed.summary.totalFiles ?? '?'} files, ${parsed.summary.documentCount ?? '?'} documents`);
+        }
+      }
+    });
+
+    await runTest('retriv_search — query after init', async () => {
+      const result = await client.callTool({
+        name: 'retriv_search',
+        arguments: {
+          query: 'model endpoint config',
+          limit: 3,
+        },
+      });
+      const text = extractText(result);
+      dim(`retriv_search response: ${text?.substring(0, 400)}`);
+      assert(!!text, 'retriv_search returns content');
+
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { /* plain text ok */ }
+      if (parsed) {
+        const isArray = Array.isArray(parsed);
+        const hasResults = isArray || (parsed.results && Array.isArray(parsed.results));
+        assert(hasResults, 'retriv_search returns an array of results');
+        const items = isArray ? parsed : parsed.results ?? [];
+        if (items.length > 0) {
+          info(`retriv_search found ${items.length} result(s); top score: ${items[0]?.score?.toFixed(3) ?? 'n/a'}`);
+        } else {
+          info('retriv_search returned 0 results (index may be empty for this query)');
+        }
+      }
+    });
+  }
+
   // ── 2. Routing: Lightweight tool calls (no LLM) ───────────────────────────
   if (runRouting) {
     hdr('Routing: Lightweight tool calls (no LLM)');

@@ -4,39 +4,6 @@ import { IToolDefinitionProvider, ITool } from './types.js';
 import { logger } from '../../../utils/logger.js';
 import { config } from '../../../config/index.js';
 import { getProviderRegistry } from '../../core/provider/index.js';
-import { execSync } from 'child_process';
-
-/**
- * Check if Python is installed and available (tries python3 then python)
- */
-function isPythonAvailable(): boolean {
-  for (const cmd of ['python3', 'python', 'py']) {
-    try {
-      execSync(`${cmd} --version`, { stdio: 'pipe' });
-      return true;
-    } catch {
-      continue;
-    }
-  }
-  logger.error('Python not available: no python3, python, or py command found');
-  return false;
-}
-
-/**
- * Check if a Python module is installed (tries python3 then python)
- */
-function isPythonModuleInstalled(moduleName: string): boolean {
-  for (const cmd of ['python3', 'python', 'py']) {
-    try {
-      execSync(`${cmd} -c "import ${moduleName}"`, { stdio: 'pipe' });
-      return true;
-    } catch {
-      continue;
-    }
-  }
-  logger.warn(`Python module ${moduleName} not installed (checked python3, python, py) — related tools will be disabled`);
-  return false;
-}
 
 /**
  * Whether OpenRouter is available as a provider. Prefers the runtime
@@ -61,10 +28,6 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
   }
 
   getAvailableTools(): ITool[] {
-    // Check if retriv-related tools should be included based on Python availability
-    const pythonAvailable = isPythonAvailable();
-    const retrivAvailable = pythonAvailable && isPythonModuleInstalled('retriv');
-    
     const tools: ITool[] = [
       {
         name: 'route_task',
@@ -351,13 +314,12 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         }
       }
     ];
-    
-    // Add retriv-specific tools if Python and retriv module are available
-    if (retrivAvailable) {
-      tools.push(
-        {
-          name: 'retriv_init',
-          description: 'Initialize and configure Retriv for code search and indexing',
+
+    // retriv_init and retriv_search use the native TypeScript BM25 engine — always available
+    tools.push(
+      {
+        name: 'retriv_init',
+        description: 'Initialize and configure code search indexing (native BM25, no Python required)',
           inputSchema: {
             type: 'object',
             properties: {
@@ -397,7 +359,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         },
         {
           name: 'retriv_search',
-          description: 'Search code using Retriv search engine',
+          description: 'Search code using native BM25 engine',
           inputSchema: {
             type: 'object',
             properties: {
@@ -414,8 +376,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
           }
         }
       );
-    }
-    
+
     // Add OpenRouter-specific tools if API key is configured
     if (isOpenRouterConfigured()) {
       tools.push(

@@ -8,6 +8,7 @@ import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { config } from '../../../config/index.js';
 import { isProviderId, isProviderLocal, getProviderRegistry } from '../../core/provider/index.js';
+import { getModelRegistry } from '../../core/model/index.js';
 
 /**
  * Interface for the model performance tracker methods
@@ -168,10 +169,15 @@ export const codeModelSelector = {
           // Apply language boost here as well
           score += languageBoost;
           
+          // Normalise the model id for size-pattern matching (e2b → 2b, e4b → 4b).
+          const normalizedIdFallback = model.id.toLowerCase()
+            .replace(/:e(\d+)b\b/, ':$1b')
+            .replace(/\be(\d+)b\b/, '$1b');
+
           // Consider complexity - larger/remote models for complex tasks
           if (subtask.complexity > 0.7) {
               // For complex tasks, prefer larger models
-              if (model.id.toLowerCase().match(/70b|40b|34b|13b|14b|claude|gpt/)) {
+              if (normalizedIdFallback.match(/70b|65b|40b|34b|32b|27b|20b|13b|14b|claude|gpt/)) {
                   score += 0.15;
               }
               
@@ -181,7 +187,7 @@ export const codeModelSelector = {
               }
           } else if (subtask.complexity < 0.4) {
               // For simple tasks, smaller models are fine
-              if (model.id.toLowerCase().match(/1\\.5b|1b|3b|6b|7b|mini|tiny/)) {
+              if (normalizedIdFallback.match(/1\.5b|1b|2b|3b|4b|6b|7b|mini|tiny/)) {
                   score += 0.1;
               }
               
@@ -381,18 +387,31 @@ export const codeModelSelector = {
       score += 1 - Math.abs(modelStats.complexityScore - subtask.complexity);
     }
 
+    // Normalise the model id for size-pattern matching.
+    // Gemma 3n uses "e2b" / "e4b" (Efficient N-Billion) — treat them as
+    // equivalent to plain "2b" / "4b" for scoring purposes.
+    const normalizedId = model.id.toLowerCase()
+      .replace(/:e(\d+)b\b/, ':$1b')   // gemma3n:e2b → gemma3n:2b
+      .replace(/\be(\d+)b\b/, '$1b');  // standalone e2b → 2b
+
     // Model size appropriateness
     if (subtask.recommendedModelSize === 'small') {
-      if (model.id.toLowerCase().match(/1\.5b|1b|3b|mini|tiny/)) {
+      if (normalizedId.match(/1\.5b|1b|2b|3b|4b|mini|tiny/)) {
         score += 0.3;
+      } else if (normalizedId.match(/7b|8b|9b|12b|13b|14b/)) {
+        score += 0.1; // medium models acceptable but not ideal for small tasks
       }
     } else if (subtask.recommendedModelSize === 'medium') {
-      if (model.id.toLowerCase().match(/7b|8b|13b/)) {
+      if (normalizedId.match(/7b|8b|9b|12b|13b|14b/)) {
         score += 0.3;
+      } else if (normalizedId.match(/2b|3b|4b/)) {
+        score += 0.1; // small models can handle medium tasks
       }
     } else if (subtask.recommendedModelSize === 'large') {
-      if (model.id.toLowerCase().match(/70b|40b|34b/)) {
+      if (normalizedId.match(/70b|65b|40b|34b|32b|27b|20b/)) {
         score += 0.3;
+      } else if (normalizedId.match(/13b|14b/)) {
+        score += 0.1; // medium models can try large tasks
       }
     }
 
@@ -505,9 +524,17 @@ export const codeModelSelector = {
   },
 
   applyCapabilityBoosts(score: number, model: Model, subtask: CodeSubtask): number {
-    // Boost for specialized code models
-    if (model.id.toLowerCase().match(/code|coder|starcoder|deepseek/)) {
-      score += 0.1;
+    const caps = getModelRegistry().getModel(model.id)?.capabilities;
+
+    // Code capability boost — prefer empirical scores from benchmarks, then
+    // registry-declared caps, then fall back to heuristic model-name regex.
+    if (caps?.scores?.code !== undefined) {
+      // Scale measured score (0..1) to a boost of up to +0.15.
+      score += caps.scores.code * 0.15;
+    } else if (caps?.code) {
+      score += 0.1; // registry declares code-capable
+    } else if (model.id.toLowerCase().match(/code|coder|starcoder|deepseek/)) {
+      score += 0.05; // heuristic fallback
     }
 
     // Task-specific boosts

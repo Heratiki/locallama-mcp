@@ -565,3 +565,16 @@ Section 8 (tests) is listed once but written **alongside** each section. The ded
 - Don't reintroduce `provider === 'lm-studio'` checks. If you need to special-case a provider's behavior, add a capability flag on the provider interface or a method on the provider itself.
 - Don't put model metadata in code. It goes in `models.json` or comes from `provider.listModels()`.
 - The benchmark DB is the long-term memory for capability inference. Don't reset it casually.
+
+### Architectural decision — Native TypeScript BM25 (2026-05-18)
+
+The `retriv_init` / `retriv_search` tools originally used the Python [retriv](https://github.com/AmenRa/retriv) library (v0.2.3) as a subprocess. This approach was abandoned because:
+
+1. `retriv` is unmaintained (~last release 2023).
+2. Its hard dependency `numba` has no binary wheels for Python 3.11+ and cannot build from source on modern macOS/Linux toolchains.
+3. The only functionality used was standard Okapi BM25 text ranking — a well-understood algorithm that can be implemented in ~200 lines of TypeScript.
+
+**Resolution:** `src/modules/cost-monitor/bm25.ts` is now a self-contained native TypeScript BM25 implementation with no Python dependency. The public `BM25Searcher` class API is identical to the old one so `codeSearch.ts`, `codeSearchEngine.ts`, and `retriv-integration/index.ts` required no changes beyond removing Python existence checks. `retriv_bridge.py` is kept in the repository as historical reference but is never invoked at runtime.
+
+Do not reintroduce Python subprocess bridges for text-search features. If more advanced NLP is needed in future (dense retrieval, embeddings, etc.), prefer a native Node.js library or a dedicated sidecar service with a stable REST API.
+

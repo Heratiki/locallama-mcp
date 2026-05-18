@@ -4,23 +4,7 @@
 
 export interface IRetrivIntegration {
   /**
-   * Check if Python is available on the system
-   */
-  isPythonAvailable: () => boolean;
-  
-  /**
-   * Check if a Python module is installed
-   * @param moduleName Name of the Python module to check
-   */
-  isPythonModuleInstalled: (moduleName: string) => boolean;
-  
-  /**
-   * Generate a requirements.txt file for Retriv dependencies
-   */
-  generateRequirementsTxt: () => string;
-  
-  /**
-   * Initialize Retriv with the specified configuration
+   * Initialize the native BM25 code search engine with the specified configuration.
    */
   initializeRetriv: (params: RetrivInitParams) => Promise<RetrivInitResult>;
   

@@ -5,6 +5,7 @@ import { ApiUsage, Model } from '../../types/index.js';
 import { openRouterModule } from '../openrouter/index.js';
 import { calculateTokenEstimates, modelContextWindows } from './utils.js';
 import { RetrieverType } from './codeSearch.js';
+import { getModelRegistry } from '../core/model/registry.js';
 
 // Define response types
 interface OpenRouterCreditsResponse {
@@ -292,7 +293,34 @@ export async function getAvailableModels(): Promise<Model[]> {
     logger.warn('Failed to get models from OpenRouter:', error);
   }
 
-  // If no models were found, return some default models
+  // If no models were found from live HTTP calls, fall back to the ModelRegistry
+  // (which is seeded from provider modules during startup, using cached data on disk).
+  if (models.length === 0) {
+    try {
+      const registry = getModelRegistry();
+      const registryModels = registry.listAll();
+      if (registryModels.length > 0) {
+        for (const meta of registryModels) {
+          models.push({
+            id: meta.id,
+            name: meta.displayName ?? meta.id,
+            provider: meta.providerId,
+            capabilities: {
+              chat: meta.capabilities.chat,
+              completion: true,
+            },
+            costPerToken: meta.cost ?? { prompt: 0, completion: 0 },
+            contextWindow: meta.contextWindow,
+          });
+        }
+        logger.info(`No live provider responses — fell back to ${models.length} model(s) from ModelRegistry`);
+      }
+    } catch {
+      logger.debug('ModelRegistry not yet populated, skipping registry fallback');
+    }
+  }
+
+  // Last-resort hardcoded sentinel — only if registry is also empty
   if (models.length === 0) {
     models.push({
       id: 'llama3',
@@ -306,9 +334,9 @@ export async function getAvailableModels(): Promise<Model[]> {
         prompt: 0,
         completion: 0,
       },
-      contextWindow: 8192, // Default context window for Llama 3
+      contextWindow: 8192,
     });
-    logger.warn('No models found from any provider, using default model');
+    logger.warn('No models found from any provider or registry, using last-resort default model');
   } else {
     // Only log model count at debug level to reduce log spam
     logger.debug(`Found a total of ${models.length} models from all providers`);

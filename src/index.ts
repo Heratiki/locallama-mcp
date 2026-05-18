@@ -281,6 +281,33 @@ export class LocalLamaMcpServer {
                   const { benchmarkModel } = await import('./modules/benchmark/core/model-benchmarker.js');
                   return await benchmarkModel({ modelId, taskCategories: taskCategories as import('./modules/benchmark/core/model-benchmarker.js').TaskCategory[] | undefined });
                 }
+                case 'retriv_init': {
+                  const directories = args?.directories;
+                  if (!Array.isArray(directories) || directories.length === 0) {
+                    throw new Error('retriv_init requires a non-empty directories array');
+                  }
+                  const { RetrivIntegration } = await import('./modules/api-integration/retriv-integration/index.js');
+                  const integration = new RetrivIntegration();
+                  return await integration.initializeRetriv({
+                    directories: directories.filter((d): d is string => typeof d === 'string'),
+                    excludePatterns: Array.isArray(args?.exclude_patterns)
+                      ? (args.exclude_patterns as unknown[]).filter((p): p is string => typeof p === 'string')
+                      : undefined,
+                    chunkSize: typeof args?.chunk_size === 'number' ? args.chunk_size : undefined,
+                    forceReindex: typeof args?.force_reindex === 'boolean' ? args.force_reindex : undefined,
+                    bm25Options: args?.bm25_options as Record<string, unknown> | undefined,
+                  });
+                }
+                case 'retriv_search': {
+                  const query = args?.query;
+                  if (typeof query !== 'string' || !query) {
+                    throw new Error('retriv_search requires a query string');
+                  }
+                  const limit = typeof args?.limit === 'number' ? args.limit : 5;
+                  const { RetrivIntegration } = await import('./modules/api-integration/retriv-integration/index.js');
+                  const integration = new RetrivIntegration();
+                  return await integration.search(query, limit);
+                }
                 default:
                   logger.error(`Unknown tool: ${name}`);
                   throw new Error(`Unknown tool: ${name}`);

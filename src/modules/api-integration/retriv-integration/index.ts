@@ -1,6 +1,3 @@
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
 import { logger } from '../../../utils/logger.js';
 import { BM25Options } from '../../cost-monitor/bm25.js';
 import { codeSearchEngineManager, getCodeSearchEngine } from '../../cost-monitor/codeSearchEngine.js';
@@ -8,116 +5,51 @@ import { IRetrivIntegration, RetrivInitParams, RetrivInitResult, RetrivDocument,
 
 export class RetrivIntegration implements IRetrivIntegration {
   /**
-   * Check if Python is available on the system (tries python3 then python)
-   */
-  isPythonAvailable(): boolean {
-    for (const cmd of ['python3', 'python', 'py']) {
-      try {
-        execSync(`${cmd} --version`, { stdio: 'pipe' });
-        return true;
-      } catch {
-        continue;
-      }
-    }
-    return false;
-  }
-  
-  /**
-   * Check if a Python module is installed
-   */
-  isPythonModuleInstalled(moduleName: string): boolean {
-    for (const cmd of ['python3', 'python', 'py']) {
-      try {
-        execSync(`${cmd} -c "import ${moduleName}"`, { stdio: 'pipe' });
-        return true;
-      } catch {
-        continue;
-      }
-    }
-    return false;
-  }
-  
-  /**
-   * Generate a requirements.txt file for Retriv dependencies
-   */
-  generateRequirementsTxt(): string {
-    const requirementsPath = path.join(process.cwd(), 'retriv-requirements.txt');
-    const dependencies = [
-      'retriv>=0.3.1',
-      'numpy>=1.22.0',
-      'scikit-learn>=1.0.2',
-      'scipy>=1.8.0'
-    ];
-    fs.writeFileSync(requirementsPath, dependencies.join('\n'));
-    return requirementsPath;
-  }
-  
-  /**
-   * Initialize Retriv with the specified configuration
+   * Initialize the native BM25 code search engine with the specified configuration.
+   * No Python or external dependencies required.
    */
   async initializeRetriv(params: RetrivInitParams): Promise<RetrivInitResult> {
     const startTime = Date.now();
     const indexResults = [];
     let totalFiles = 0;
-    
-    if (!this.isPythonAvailable()) {
-      throw new Error('Python is not installed or not available in PATH. Python is required for Retriv functionality.');
-    }
-    
-    const retrivInstalled = this.isPythonModuleInstalled('retriv');
-    if (!retrivInstalled) {
-      if (params.installDependencies) {
-        logger.info('Installing Retriv Python package...');
-        try {
-          const requirementsPath = this.generateRequirementsTxt();
-          execSync(`pip install -r ${requirementsPath}`, { stdio: 'inherit' });
-          logger.info('Successfully installed Retriv and dependencies');
-          fs.unlinkSync(requirementsPath);
-        } catch (error) {
-          throw new Error(`Failed to install Retriv Python package: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      } else {
-        throw new Error('The Retriv Python package is required but not installed. Set installDependencies to true or install manually.');
-      }
-    }
-    
+
     // Initialize the code search engine with BM25 options
     await codeSearchEngineManager.initialize({
       excludePatterns: params.excludePatterns,
       chunkSize: params.chunkSize,
-      bm25Options: (params.bm25Options || {
+      bm25Options: (params.bm25Options ?? {
         k1: 1.5,
-        b: 0.75
+        b: 0.75,
       }) as BM25Options,
     });
-    
+
     // Index the specified directories
     for (const directory of params.directories) {
       logger.info(`Indexing directory: ${directory}`);
       try {
-        const result = await codeSearchEngineManager.indexDirectory(directory, params.forceReindex || false);
+        const result = await codeSearchEngineManager.indexDirectory(directory, params.forceReindex ?? false);
         if (result && typeof result === 'object') {
-          const fileCount = result.totalFiles || 0;
+          const fileCount = result.totalFiles ?? 0;
           totalFiles += fileCount;
           indexResults.push({
             directory,
             filesIndexed: fileCount,
-            status: 'success' as const, // Fix status to use literal type
-            timeTaken: result.timeTaken || 'N/A'
+            status: 'success' as const,
+            timeTaken: result.timeTaken ?? 'N/A',
           });
           logger.info(`Successfully indexed ${fileCount} files in ${directory}`);
         } else {
           indexResults.push({
             directory,
-            status: 'warning' as const, // Fix status to use literal type
-            message: 'Directory indexed but no result details available'
+            status: 'warning' as const,
+            message: 'Directory indexed but no result details available',
           });
           logger.warn(`Directory indexed but no result details available for ${directory}`);
         }
       } catch (error) {
         indexResults.push({
           directory,
-          status: 'error' as const, // Fix status to use literal type
+          status: 'error' as const,
           message: (error as Error).message
         });
         logger.error(`Error indexing directory ${directory}:`, error);
@@ -202,9 +134,6 @@ const retrivIntegration = new RetrivIntegration();
 export { retrivIntegration };
 
 // Export individual methods for backward compatibility
-export const isPythonAvailable = retrivIntegration.isPythonAvailable.bind(retrivIntegration);
-export const isPythonModuleInstalled = retrivIntegration.isPythonModuleInstalled.bind(retrivIntegration);
-export const generateRequirementsTxt = retrivIntegration.generateRequirementsTxt.bind(retrivIntegration);
 export const initializeRetriv = retrivIntegration.initializeRetriv.bind(retrivIntegration);
 export const search = retrivIntegration.search.bind(retrivIntegration);
 export const indexDocuments = retrivIntegration.indexDocuments.bind(retrivIntegration);

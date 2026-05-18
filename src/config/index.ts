@@ -141,6 +141,10 @@ export interface Config {
   
   // API Keys
   openRouterApiKey?: string;
+  // When true, only free-tier OpenRouter models (cost === 0) are eligible — no paid calls
+  openRouterFreeOnly: boolean;
+  // Max OpenRouter API calls per minute across all free models (0 = no limit)
+  openRouterRateLimitPerMinute: number;
   
   // Benchmark configuration
   benchmark: BenchmarkConfig;
@@ -224,6 +228,8 @@ export const config: Config = {
   
   // API Keys
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
+  openRouterFreeOnly: parseBool(process.env.OPENROUTER_FREE_ONLY, true),
+  openRouterRateLimitPerMinute: parseNumber(process.env.OPENROUTER_RATE_LIMIT_PER_MINUTE, 10, 0, 600),
   
   // Benchmark configuration
   benchmark: {
