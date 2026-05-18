@@ -111,9 +111,10 @@ export const ollamaModule = {
         logger.debug(`Loaded Ollama tracking data with ${Object.keys(this.modelTracking.models).length} models`);
       } catch (error) {
         logger.debug('No existing Ollama tracking data found, will create new tracking data');
+        // epoch-0 forces the 24-hour threshold to trigger on first run
         this.modelTracking = {
           models: {},
-          lastUpdated: new Date().toISOString()
+          lastUpdated: new Date(0).toISOString()
         };
       }
       
@@ -164,7 +165,7 @@ export const ollamaModule = {
       
       // Query Ollama for available models
       logger.debug('Making request to Ollama API...');
-      const url = `${config.ollamaEndpoint}/api/tags`;
+      const url = `${config.ollamaEndpoint}/tags`;
       logger.debug(`Attempting to connect to Ollama at: ${url}`);
       
       const response = await axios.get<OllamaListModelsResponse>(url, {
@@ -679,7 +680,7 @@ export const ollamaModule = {
       
       // Make the request
       const response = await axios.post<OllamaChatResponse>(
-        `${config.ollamaEndpoint}/api/chat`,
+        `${config.ollamaEndpoint}/chat`,
         requestBody,
         {
           signal: controller.signal,
