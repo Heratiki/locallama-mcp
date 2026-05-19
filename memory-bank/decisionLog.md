@@ -324,6 +324,20 @@ This document tracks key architectural and technical decisions made throughout t
 
 **Implementation:** Added `docs/ROADMAP.md`, rewrote `AGENTS.md`, made `CLAUDE.md` defer to shared guidance, added `memory-bank/README.md`, added `memory-bank/sessionLog.md`, and refreshed active/product/progress memory files for the 2026 direction.
 
+## 2026-05-18 — Self-Update Strategy
+
+**Decision:** Use git SHA comparison (local `git rev-parse HEAD` vs GitHub API `/commits/future-testing`) rather than semver/npm-registry check.
+
+**Rationale:** Project tracks a branch (`future-testing`), not published releases. SHA comparison detects any commit, not just tagged versions.
+
+**Trade-off:** Requires `git` on PATH in the runtime environment. Silent skip if git unavailable.
+
+## 2026-05-18 — MCP Registration Location
+
+**Decision:** Register MCP via `claude mcp add --scope user`, not by editing settings.json directly.
+
+**Rationale:** Claude Code's settings.json schema validator rejects `mcpServers` field. The correct user-level MCP config location is `~/.claude.json`, which `claude mcp add` writes automatically.
+
 ```
 ## [Date] - [Decision Topic]
 
