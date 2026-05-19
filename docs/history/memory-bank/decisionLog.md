@@ -338,6 +338,16 @@ This document tracks key architectural and technical decisions made throughout t
 
 **Rationale:** Claude Code's settings.json schema validator rejects `mcpServers` field. The correct user-level MCP config location is `~/.claude.json`, which `claude mcp add` writes automatically.
 
+## 2026-05-18 — Benchmark Runner Restoration
+
+**Context:** The package scripts still pointed at a missing root `run-benchmarks.js`, even though the repo already contained a benchmark flow under `temp/run-benchmarks.js` and the benchmark modules in `src/modules/benchmark/`.
+
+**Decision:** Restore a checked-in root benchmark CLI and have the npm benchmark scripts build first, then invoke that CLI.
+
+**Rationale:** The benchmark commands should be truthful and runnable from package scripts. Reusing the existing benchmark flow avoids inventing a new benchmark system and keeps the fix scoped to the missing entrypoint.
+
+**Implementation:** Added `run-benchmarks.js` at the repository root, updated `package.json` benchmark scripts to run `npm run build && node run-benchmarks.js`, and updated roadmap/memory docs to reflect the restored entrypoint.
+
 ```
 ## [Date] - [Decision Topic]
 

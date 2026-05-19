@@ -2,7 +2,7 @@
 .clinerules-architect
 .clinerules-ask
 .clinerules-code
-memory-bank/*.code-workspace
+docs/history/memory-bank/*.code-workspace
 
 # Dependency directories
 node_modules/

@@ -1,6 +1,6 @@
 # Provider Registry — Architecture Notes
 
-> Section 1 of [PLAN.md](../../PLAN.md). Completed 2026-05-15.
+> Section 1 of [PLAN.md](../PLAN.md). Completed 2026-05-15.
 
 ## Problem solved
 

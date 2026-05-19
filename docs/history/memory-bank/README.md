@@ -1,6 +1,8 @@
 # Memory Bank
 
-This directory is shared project memory for humans and coding agents. It exists so every contributor can quickly recover the current project direction, decisions, and unfinished work without relying on one chat transcript.
+This directory is append-only historical memory for humans and coding agents. It exists so every contributor can quickly recover past decisions and unfinished work without relying on one chat transcript.
+
+For the current branch snapshot, read `docs/PROJECT_STATE.md`. For implementation intent and live verification, read `docs/PLAN.md` and `docs/OPERATIONAL_TEST_PLAN.md`.
 
 ## Files
 
@@ -12,7 +14,7 @@ This directory is shared project memory for humans and coding agents. It exists 
 
 ## Multi-Author Rules
 
-- Read `AGENTS.md`, `docs/ROADMAP.md`, and this README before non-trivial work.
+- Read `docs/AGENTS.md`, `docs/PROJECT_STATE.md`, `docs/PLAN.md`, `docs/OPERATIONAL_TEST_PLAN.md`, and this README before non-trivial work.
 - Prefer appending dated entries over rewriting history.
 - Keep entries factual: what changed, why, verification, and next steps.
 - Use absolute dates such as `2026-04-24`, not "today" or "yesterday".

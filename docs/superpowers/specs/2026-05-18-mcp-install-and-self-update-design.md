@@ -173,8 +173,8 @@ Two tools registered via existing `toolDefinitionProvider`:
 
 ## Notes for Other Agents
 
-- Read `AGENTS.md` and `memory-bank/activeContext.md` before touching code
+- Read `docs/AGENTS.md` and `docs/PROJECT_STATE.md` before touching code
 - Known broken: `npm run build` on Windows (fix is in scope above), `npm run lint` (missing `eslint-plugin-import`), benchmark scripts
 - Use existing `logger` utility from `src/utils/logger.ts` — do not introduce a new logging dependency
 - Keep provider-specific and tool-specific logic in their respective modules; updater is a standalone module
-- After implementation, append to `memory-bank/progress.md` and `memory-bank/decisionLog.md`
+- After implementation, append historical entries to `docs/history/memory-bank/progress.md` and `docs/history/memory-bank/decisionLog.md`

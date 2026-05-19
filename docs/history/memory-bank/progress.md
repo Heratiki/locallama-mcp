@@ -15,12 +15,17 @@ Last updated: 2026-04-24
 - Updated `memory-bank/productContext.md` with the revived product framing.
 - Updated README opening and MCP client setup sections for modern agent clients.
 - Updated `.gitignore` so `memory-bank/` and `CLAUDE.md` can be tracked as shared project docs.
+- Verified the Windows build path now succeeds with the Node-based copy step.
+- Restored the root benchmark CLI and wired `npm run benchmark` / `npm run benchmark:comprehensive` to it.
+- Marked `PLAN.md` and `OPERATIONAL_TEST_PLAN.md` as the current future-testing authority in memory-bank notes.
+- Added `docs/PROJECT_STATE.md` as the tracked current snapshot and shifted memory-bank to historical-only status.
 
 ### Verified
 
 - `npx tsc --project tsconfig.json --noEmit` succeeds.
-- `npm run build` currently fails on native Windows because the package script uses Unix `cp`.
+- `npm run build` succeeds on native Windows with the Node-based copy step.
 - `npm run lint` currently fails because `eslint-plugin-import` is missing.
+- `node --check run-benchmarks.js` succeeds.
 
 ## Roadmap Status
 
@@ -31,6 +36,17 @@ Last updated: 2026-04-24
 - Phase 4: Benchmarking Rebuild - pending
 - Phase 5: Task Understanding and Routing - pending
 - Phase 6: Documentation, Examples, and Release Prep - pending
+
+## Branch State
+
+- `docs/PROJECT_STATE.md` is the active current-state snapshot.
+- `PLAN.md` and `OPERATIONAL_TEST_PLAN.md` remain the branch-specific implementation and verification docs.
+- `memory-bank/` remains available for historical append-only notes, not authoritative planning.
+
+## Branch-Specific Notes
+
+- `PLAN.md` is the current implementation plan for `future-testing`.
+- `OPERATIONAL_TEST_PLAN.md` is the current live-test record and should override older benchmark assumptions when there is a mismatch.
 
 ## Next Steps
 

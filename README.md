@@ -4,7 +4,7 @@ LocalLama MCP is a local-first, provider-neutral Model Context Protocol server f
 
 The project routes coding work across local models, free or low-cost remote models, and paid frontier models using cost, latency, context capacity, benchmark history, and task fit. It is no longer designed around Cline or Roo Code as primary clients.
 
-> Revival status: this repository has useful architecture, but several development commands and benchmark paths are stale. See `docs/ROADMAP.md` for the active modernization plan.
+> Revival status: this repository has useful architecture, but several development commands still need cleanup. See `docs/ROADMAP.md` for the active modernization plan.
 
 ## Overview
 
@@ -13,16 +13,19 @@ LocalLama MCP Server is designed to reduce token usage and costs without giving 
 ## Current Baseline
 
 - `npx tsc --project tsconfig.json --noEmit` succeeds.
-- `npm run build` currently fails on native Windows because the package script uses Unix `cp`.
+- `npm run build` now succeeds on native Windows because the package script uses a Node copy step.
 - `npm run lint` currently fails because `eslint-plugin-import` is referenced but not installed.
-- `npm run benchmark` and `npm run benchmark:comprehensive` currently reference a missing `run-benchmarks.js`.
+- `npm run benchmark` and `npm run benchmark:comprehensive` build the project and run the checked-in benchmark CLI.
 
 ## Project Memory and Roadmap
 
-- `AGENTS.md` is the shared operating guide for coding agents.
-- `CLAUDE.md` points Claude Code at the same shared guidance.
-- `memory-bank/` contains multi-author project memory.
-- `docs/ROADMAP.md` is the modernization roadmap and implementation plan.
+- `docs/AGENTS.md` is the shared operating guide for coding agents.
+- `docs/CLAUDE.md` points Claude Code at the same shared guidance.
+- `docs/PROJECT_STATE.md` is the current snapshot of what is done, in progress, and being tracked.
+- `docs/PLAN.md` is the branch implementation plan.
+- `docs/OPERATIONAL_TEST_PLAN.md` is the live test record.
+- `docs/history/memory-bank/` contains historical append-only project memory.
+- `docs/ROADMAP.md` is the long-form modernization backdrop.
 
 ## Key Components
 
@@ -492,10 +495,10 @@ The project includes a comprehensive benchmarking system to compare local LLM mo
 
 ```bash
 # Run a simple benchmark
-node run-benchmarks.js
+npm run benchmark
 
 # Run a comprehensive benchmark across multiple models
-node run-benchmarks.js comprehensive
+npm run benchmark:comprehensive
 ```
 
 Benchmark results are stored in the `benchmark-results` directory and include:

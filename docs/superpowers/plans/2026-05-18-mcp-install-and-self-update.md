@@ -518,8 +518,8 @@ If `upToDate` is `false`, the GitHub branch has commits ahead of the clone — c
 ## Task 6: Update Memory Bank
 
 **Files:**
-- Modify: `memory-bank/progress.md`
-- Modify: `memory-bank/decisionLog.md`
+- Modify: `docs/history/memory-bank/progress.md`
+- Modify: `docs/history/memory-bank/decisionLog.md`
 
 - [ ] **Step 1: Append to progress.md**
 
@@ -551,7 +551,7 @@ Trade-off: Requires `git` on PATH in the runtime environment. Silent skip if git
 - [ ] **Step 3: Commit**
 
 ```
-git add memory-bank/progress.md memory-bank/decisionLog.md
+git add docs/history/memory-bank/progress.md docs/history/memory-bank/decisionLog.md
 git commit -m "docs: update memory bank after self-update implementation"
 ```
 

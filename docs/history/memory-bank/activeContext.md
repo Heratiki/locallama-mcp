@@ -4,16 +4,19 @@ Last updated: 2026-04-24
 
 ## Current Focus
 
+This file is historical context, not the active source of truth. The current branch snapshot lives in `docs/PROJECT_STATE.md`, with `PLAN.md` and `OPERATIONAL_TEST_PLAN.md` carrying implementation and verification authority for `future-testing`.
+
 The project is being revived and repositioned away from Cline/Roo-specific usage. The new direction is a local-first, provider-neutral MCP server for modern coding agents such as Codex, Claude Code, Claw Code, Cursor, GitHub Copilot Agent mode, and generic MCP clients.
 
-The current workstream is documentation and shared project memory. `docs/ROADMAP.md` is now the modernization source of truth.
+The current workstream is documentation and shared project memory.
 
 ## Baseline Findings
 
 - `npx tsc --project tsconfig.json --noEmit` succeeds.
-- `npm run build` fails on native Windows after TypeScript compilation because the script uses Unix `cp`.
+- `npm run build` now succeeds on native Windows after TypeScript compilation because the script uses a Node copy step.
 - `npm run lint` fails because `eslint-plugin-import` is referenced by `eslint.config.js` but is not installed.
-- `npm run benchmark` and `npm run benchmark:comprehensive` reference missing `run-benchmarks.js`.
+- `npm run benchmark` and `npm run benchmark:comprehensive` now use the root benchmark CLI after build.
+- Benchmarks are configured by model discovery in the server path, with optional CLI filtering via `benchmark-models.json` in the root runner.
 - Benchmarking still includes simulated paid-model paths.
 - Routing still includes stale hardcoded model fallbacks and model-name heuristics.
 - README opening and MCP client setup sections now use current agent-neutral positioning.
