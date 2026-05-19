@@ -26,15 +26,15 @@ export interface UpdateResult {
   restartRequired: boolean;
 }
 
-export async function getLocalSha(): Promise<string | null> {
+export function getLocalSha(): Promise<string | null> {
   try {
     const output = execSync('git rev-parse HEAD', {
       cwd: INSTALL_ROOT,
       stdio: 'pipe',
     });
-    return output.toString().trim();
+    return Promise.resolve(output.toString().trim());
   } catch {
-    return null;
+    return Promise.resolve(null);
   }
 }
 
@@ -44,6 +44,12 @@ export async function getRemoteSha(): Promise<string | null> {
       GITHUB_API_URL,
       { headers: { 'User-Agent': 'locallama-mcp-updater' } },
       (res) => {
+        if (res.statusCode !== 200) {
+          logger.debug(`GitHub API returned status ${res.statusCode}`);
+          res.resume(); // consume response body
+          resolve(null);
+          return;
+        }
         let data = '';
         res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
         res.on('end', () => {
@@ -86,7 +92,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
 export async function runUpdate(): Promise<UpdateResult> {
   const completedSteps: string[] = [];
   const steps: Array<{ name: string; cmd: string }> = [
-    { name: 'git pull', cmd: 'git pull' },
+    { name: 'git pull', cmd: 'git pull origin future-testing' },
     { name: 'npm install', cmd: 'npm install' },
     { name: 'npm run build', cmd: 'npm run build' },
   ];
@@ -96,11 +102,14 @@ export async function runUpdate(): Promise<UpdateResult> {
       execSync(step.cmd, { cwd: INSTALL_ROOT, stdio: 'pipe' });
       completedSteps.push(step.name);
     } catch (err) {
+      const errMessage = err instanceof Error
+        ? ((err as NodeJS.ErrnoException & { stderr?: Buffer }).stderr?.toString().trim() ?? err.message)
+        : String(err);
       return {
         success: false,
         completedSteps,
         failedStep: step.name,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMessage,
         restartRequired: false,
       };
     }
