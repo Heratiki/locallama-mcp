@@ -89,6 +89,18 @@ jest.unstable_mockModule('../dist/modules/api-integration/routing/index.js', () 
   router: {},
 }));
 
+const mockGetMonitoringInfo = jest.fn(() => ({
+  websocketUrl: 'ws://127.0.0.1:8081',
+  activeJobsUri: 'locallama://jobs/active',
+  jobProgressUriTemplate: 'locallama://jobs/progress/{jobId}',
+}));
+
+jest.unstable_mockModule('../dist/modules/decision-engine/services/jobTracker.js', () => ({
+  getJobTrackerSync: jest.fn(() => ({
+    getMonitoringInfo: mockGetMonitoringInfo,
+  })),
+}));
+
 // ---------------------------------------------------------------------------
 // Cost-estimation module
 // ---------------------------------------------------------------------------
@@ -230,6 +242,7 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     mockEstimateCost.mockClear();
     mockBenchmarkTask.mockClear();
     mockBenchmarkTasks.mockClear();
+    mockGetMonitoringInfo.mockClear();
   });
 
   it('registers a tool call handler with the MCP Server', () => {
@@ -256,6 +269,12 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     const parsed = JSON.parse(typed.content[0].text);
     expect(parsed.costClass).toBe('local');
     expect(parsed.modelId).toBe('llama-3.2-3b');
+    expect(parsed.monitoring).toMatchObject({
+      websocketUrl: 'ws://127.0.0.1:8081',
+      activeJobsUri: 'locallama://jobs/active',
+      jobProgressUriTemplate: 'locallama://jobs/progress/{jobId}',
+    });
+    expect(parsed.monitoring.note).toContain('live job updates');
   });
 
   it('routes preemptive_route_task to the routing module', async () => {
@@ -294,6 +313,8 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     expect(mockEstimateCost).toHaveBeenCalledTimes(1);
     const typed = result as { content: { type: string; text: string }[] };
     expect(typed.content[0].type).toBe('text');
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed.monitoring).toBeUndefined();
   });
 
   it('routes cancel_job to the routing module', async () => {
@@ -361,6 +382,7 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     const typed = result as { content: { type: string; text: string }[] };
     const parsed = JSON.parse(typed.content[0].text);
     expect(parsed.local.model).toBe('qwen2.5-coder:7b');
+    expect(parsed.monitoring.websocketUrl).toBe('ws://127.0.0.1:8081');
   });
 
   it('routes benchmark_tasks to the benchmark module with varied real-world task shapes', async () => {

@@ -39,6 +39,12 @@ export interface Job {
   results?: string[]; // Array to store generated code blocks
 }
 
+export interface JobTrackerMonitoringInfo {
+  websocketUrl: string;
+  activeJobsUri: string;
+  jobProgressUriTemplate: string;
+}
+
 /**
  * JobTracker - Manages and tracks the status of all tasks in the system
  */
@@ -47,6 +53,7 @@ export class JobTracker extends EventEmitter {
   private static instance: JobTracker | null = null;
   private initialized = false;
   private wss: WebSocketServer | null = null;
+  private websocketPort: number | null = null;
   private readonly BASE_PORT = 8080;
   private readonly MAX_PORT = 8180;
   // Store broadcast function dynamically to avoid circular dependency
@@ -109,11 +116,13 @@ export class JobTracker extends EventEmitter {
       const port = await this.findAvailablePort();
       try {
         this.wss = new WebSocketServer({ port, noServer: false });
+        this.websocketPort = port;
         logger.info(`Job tracker WebSocket server started on port ${port}`);
       } catch (wsError) {
         logger.error('Failed to create WebSocket server:', wsError);
         // Continue without WebSocket server
         this.wss = null;
+        this.websocketPort = null;
       }
       
       // Mark as initialized even if WebSocket creation fails
@@ -370,9 +379,33 @@ export class JobTracker extends EventEmitter {
     return this.initialized;
   }
 
+  getWebSocketUrl(host: string = '127.0.0.1'): string | null {
+    if (!this.initialized || !this.wss) return null;
+
+    const address = this.wss.address();
+    const port = typeof address === 'object' && address !== null
+      ? address.port
+      : this.websocketPort;
+
+    if (!port) return null;
+    return `ws://${host}:${port}`;
+  }
+
+  getMonitoringInfo(): JobTrackerMonitoringInfo | null {
+    const websocketUrl = this.getWebSocketUrl();
+    if (!websocketUrl) return null;
+
+    return {
+      websocketUrl,
+      activeJobsUri: 'locallama://jobs/active',
+      jobProgressUriTemplate: 'locallama://jobs/progress/{jobId}',
+    };
+  }
+
   async shutdown(): Promise<void> {
     const server = this.wss;
     this.wss = null;
+    this.websocketPort = null;
     this.initialized = false;
     this.activeJobs.clear();
     this.removeAllListeners();

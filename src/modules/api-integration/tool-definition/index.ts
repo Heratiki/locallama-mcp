@@ -38,6 +38,8 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
           'Decomposes complex tasks into subtasks, executes them, synthesises the result, ' +
           'and returns structured JSON with the code, the model used, its cost class ' +
           '("local" | "free" | "paid"), and the estimated cost. ' +
+          'When live job monitoring is available, the response includes a monitoring.websocketUrl link ' +
+          'plus MCP job resource URIs for active jobs and per-job progress. ' +
           'Use this tool when you want the task actually executed, not just planned.',
         inputSchema: {
           type: 'object',
@@ -189,7 +191,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'benchmark_task',
-        description: 'Benchmark the performance of local LLMs vs paid APIs for a specific task',
+        description: 'Benchmark the performance of local LLMs vs paid APIs for a specific task. When live job monitoring is available, the response includes monitoring.websocketUrl and MCP job resource URIs.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -231,7 +233,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'benchmark_tasks',
-        description: 'Benchmark the performance of local LLMs vs paid APIs for multiple tasks',
+        description: 'Benchmark the performance of local LLMs vs paid APIs for multiple tasks. When live job monitoring is available, the response includes monitoring.websocketUrl and MCP job resource URIs.',
         inputSchema: {
           type: 'object',
           properties: {

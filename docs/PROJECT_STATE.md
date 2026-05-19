@@ -29,6 +29,7 @@ and this file for the current snapshot.
 - The benchmark runner uses discovered models from the server path, with optional CLI filtering via `benchmark-models.json`.
 - The repo still has open work around lint dependency drift, benchmark realism, and remaining routing modernization.
 - `benchmark_task` and `benchmark_tasks` dispatcher gaps are fixed as of 2026-05-19. Targeted live MCP checks against Ollama `qwen2.5-coder:3b` passed.
+- Task-executing MCP tools now attach live monitoring metadata when the JobTracker WebSocket server is running: `monitoring.websocketUrl`, `monitoring.activeJobsUri`, and `monitoring.jobProgressUriTemplate`.
 - OpenRouter credit usage now uses the current `/api/v1/credits` endpoint. Targeted paid-routing preflight with `$1.644186` remaining selected paid `gpt-4o`, but full `route_task` fell back to local after an OpenRouter model error; no credits were consumed.
 - The MCP install/self-update feature is implemented in source (`src/modules/updater/index.ts`, `check_for_updates`, `update_server`, startup check). Older superpowers spec/plan files are historical implementation notes unless their status block says otherwise.
 - `docs/PLAN.md` and `docs/OPERATIONAL_TEST_PLAN.md` are the authoritative future-testing docs when they differ from older notes.

@@ -66,6 +66,18 @@ Verification:
 - Full `--runInBand --detectOpenHandles` run passes: 22 suites / 185 tests, no open-handle report.
 - Full `npm test` passes: 22 suites / 185 tests, no forced-worker-exit warning and no Generic API simulation warning.
 
+## 2026-05-19 — Task Monitoring Links in MCP Responses
+
+Summary:
+- Added JobTracker monitoring metadata helpers that expose the active WebSocket URL and MCP job resource URIs without starting a new tracker.
+- Task-executing tools now attach a `monitoring` object to their JSON response when the JobTracker WebSocket server is running.
+- Updated route/benchmark tool descriptions so LLM clients know to surface `monitoring.websocketUrl`.
+
+Verification:
+- `npm run build` passes.
+- Focused dispatcher test passes and verifies `route_task` / `benchmark_task` include monitoring metadata while `get_cost_estimate` does not.
+- Full `npm test` passes: 22 suites / 185 tests.
+
 ## 2026-04-24 Revival Work
 
 ### Completed

@@ -16,6 +16,7 @@ import { createLockFile, isLockFilePresent, removeLockFile, getLockFileInfo } fr
 import type { LockFileInfo } from './utils/lock-file.js';
 import { setClientHints } from './modules/core/client/hints.js';
 import { checkForUpdates, runUpdate, runStartupCheck } from './modules/updater/index.js';
+import { getJobTrackerSync } from './modules/decision-engine/services/jobTracker.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +31,38 @@ interface PackageJson {
 const packageJsonContent = readFileSync(join(__dirname, '../package.json'), 'utf8');
 const packageJson = JSON.parse(packageJsonContent) as PackageJson;
 const version = packageJson.version;
+
+const MONITORED_TOOL_NAMES = new Set([
+  'route_task',
+  'benchmark_task',
+  'benchmark_tasks',
+  'benchmark_model',
+  'benchmark_free_models',
+]);
+
+function attachMonitoringInfo(toolName: string, result: unknown): unknown {
+  if (!MONITORED_TOOL_NAMES.has(toolName)) return result;
+
+  const monitoring = getJobTrackerSync()?.getMonitoringInfo();
+  if (!monitoring) return result;
+
+  const monitoringPayload = {
+    ...monitoring,
+    note: 'Connect to websocketUrl for live job updates, or read activeJobsUri / jobProgressUriTemplate through MCP resources.',
+  };
+
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return {
+      ...result,
+      monitoring: monitoringPayload,
+    };
+  }
+
+  return {
+    result,
+    monitoring: monitoringPayload,
+  };
+}
 
 /**
  * LocalLama MCP Server
@@ -396,9 +429,10 @@ export class LocalLamaMcpServer {
             // clients (Claude Code, Codex, Copilot) can parse structured fields
             // (costClass, providerId, modelId, …) while plain-text clients still
             // get a readable string.
-            const textContent = typeof result === 'string'
-              ? result
-              : JSON.stringify(result, null, 2);
+            const resultWithMonitoring = attachMonitoringInfo(name, result);
+            const textContent = typeof resultWithMonitoring === 'string'
+              ? resultWithMonitoring
+              : JSON.stringify(resultWithMonitoring, null, 2);
             return {
               content: [{ type: 'text' as const, text: textContent }]
             };
