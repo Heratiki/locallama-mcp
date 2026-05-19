@@ -283,4 +283,46 @@ describe('ProviderRegistry — health probe (Issue 26)', () => {
     // Only one probe tick should have fired (not two).
     expect((p.isAvailable as ReturnType<typeof jest.fn>).mock.calls.length).toBe(1);
   });
+
+  it('opens the circuit after threshold failures observed by health probe', async () => {
+    const p = makeProvider('p-threshold', false);
+    registry.register(p);
+
+    registry.startHealthProbe(100);
+
+    // Default threshold is 3 failures.
+    for (let i = 0; i < 3; i++) {
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    expect(registry.isAvailable('p-threshold')).toBe(false);
+  });
+
+  it('resets an open circuit after a successful health probe', async () => {
+    const p = makeProvider('p-recover', false);
+    registry.register(p);
+
+    registry.startHealthProbe(100);
+
+    // Open circuit first.
+    for (let i = 0; i < 3; i++) {
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+    expect(registry.isAvailable('p-recover')).toBe(false);
+
+    // Health probe starts reporting success.
+    p.isAvailable.mockResolvedValue(true);
+    jest.advanceTimersByTime(100);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(registry.isAvailable('p-recover')).toBe(true);
+  });
 });

@@ -96,20 +96,39 @@ const mockOpenRouterProvider = {
   supportsModel: jest.fn().mockResolvedValue(true),
 };
 
+const mockRegistry = {
+  list: jest.fn(() => [mockOpenRouterProvider]),
+  has: jest.fn((providerId: string) => providerId === 'openrouter' || providerId === 'ollama' || providerId === 'lm-studio'),
+  isAvailable: jest.fn((providerId: string) => providerId !== 'ollama' && providerId !== 'lm-studio'),
+  listByCostClass: jest.fn((costClass: string) => {
+    if (costClass === 'local') {
+      return [{ id: 'ollama' }, { id: 'lm-studio' }];
+    }
+    return [mockOpenRouterProvider];
+  }),
+};
+
 jest.unstable_mockModule('../../../../dist/modules/core/provider/index.js', () => ({
-  getProviderRegistry: jest.fn(() => ({
-    list: jest.fn(() => [mockOpenRouterProvider]),
-  })),
+  getProviderRegistry: jest.fn(() => mockRegistry),
   isProviderLocal: jest.fn((providerId: string) => providerId === 'ollama' || providerId === 'lm-studio' || providerId === 'local'),
-  providerCostClass: jest.fn((providerId: string) => (providerId === 'openrouter' ? 'paid' : 'local')),
+  providerCostClass: jest.fn((providerId: string) => (providerId === 'openrouter' || providerId === 'paid' ? 'paid' : 'local')),
 }));
 
-const { routeTask } = await import('../../../../dist/modules/api-integration/routing/index.js');
+const { routeTask, preemptiveRouteTask } = await import('../../../../dist/modules/api-integration/routing/index.js');
 
 describe('api-integration routing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetAvailableModels.mockResolvedValue([]);
+    mockRegistry.list.mockReturnValue([mockOpenRouterProvider]);
+    mockRegistry.has.mockImplementation((providerId: string) => providerId === 'openrouter' || providerId === 'ollama' || providerId === 'lm-studio');
+    mockRegistry.isAvailable.mockImplementation((providerId: string) => providerId !== 'ollama' && providerId !== 'lm-studio');
+    mockRegistry.listByCostClass.mockImplementation((costClass: string) => {
+      if (costClass === 'local') {
+        return [{ id: 'ollama' }, { id: 'lm-studio' }];
+      }
+      return [mockOpenRouterProvider];
+    });
   });
 
   it('preserves a paid routing decision and executes the selected OpenRouter model directly', async () => {
@@ -328,5 +347,46 @@ describe('api-integration routing', () => {
       model: 'qwen2.5-coder:7b',
       resultCode: 'multi-subtask-final-output',
     });
+  });
+
+  it('preemptive_route_task does not suggest a local model when local providers are unavailable', async () => {
+    const { decisionEngine } = await import('../../../../dist/modules/decision-engine/index.js');
+    (decisionEngine.preemptiveRouting as jest.Mock).mockResolvedValueOnce({
+      provider: 'local',
+      model: 'qwen2.5-coder:7b',
+      explanation: 'Initial local recommendation.',
+      confidence: 0.8,
+      factors: {
+        cost: { local: 0, paid: 0.001, wasFactor: true },
+        complexity: { score: 0.4, wasFactor: true },
+        tokenUsage: { contextLength: 40, outputLength: 60, wasFactor: true },
+        priority: { value: 'cost', wasFactor: true },
+      },
+      scores: { local: 0.8, paid: 0.2 },
+      preemptive: true,
+    });
+
+    mockGetAvailableModels.mockResolvedValueOnce([
+      {
+        id: 'openai/gpt-4o-mini',
+        name: 'GPT-4o mini',
+        provider: 'openrouter',
+        capabilities: { chat: true, completion: true },
+        costPerToken: { prompt: 0.0001, completion: 0.0002 },
+        contextWindow: 128000,
+      },
+    ]);
+
+    const result = await preemptiveRouteTask({
+      task: 'Summarize this request.',
+      contextLength: 40,
+      expectedOutputLength: 60,
+      complexity: 0.4,
+      priority: 'cost',
+    });
+
+    expect(result.providerId).toBe('paid');
+    expect(result.costClass).toBe('paid');
+    expect(result.model).toBe('openai/gpt-4o-mini');
   });
 });

@@ -17,7 +17,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve, relative } from 'path';
 import { readFileSync, existsSync } from 'fs';
 import process from 'process';
 
@@ -132,7 +132,7 @@ async function main() {
   }
 
   try {
-    await runSuite(client);
+    await runSuite(client, serverEnv);
   } finally {
     await client.close().catch(() => {});
   }
@@ -150,7 +150,12 @@ async function main() {
   process.exit(results.failed > 0 ? 1 : 0);
 }
 
-async function runSuite(client) {
+function isPathUnderRoot(targetPath, rootPath) {
+  const rel = relative(rootPath, targetPath);
+  return rel !== '' && !rel.startsWith('..') && !rel.includes(':');
+}
+
+async function runSuite(client, serverEnv) {
   const runSmoke   = ['all', 'smoke'].includes(SUITE);
   const runRouting = ['all', 'routing'].includes(SUITE);
   const runLLM     = ['all', 'llm'].includes(SUITE);
@@ -233,6 +238,32 @@ async function runSuite(client) {
         const hasModels = Array.isArray(parsed) || (parsed.models && Array.isArray(parsed.models));
         assert(hasModels, 'Models resource returns an array or {models:[]}');
       }
+    });
+
+    await runTest('smoke — rootDir and artifact path placement', async () => {
+      const expectedRoot = resolve(serverEnv.LOCALLAMA_ROOT_DIR || __dirname);
+      const { config } = await import('./dist/config/index.js');
+      const resolvedRoot = resolve(config.rootDir);
+
+      if (process.platform === 'win32') {
+        assert(resolvedRoot === expectedRoot, 'Windows rootDir resolves to project root (or LOCALLAMA_ROOT_DIR override)', `expected=${expectedRoot}, actual=${resolvedRoot}`);
+      } else {
+        info('Skipping Windows-only rootDir equality assertion on non-Windows platform');
+        results.skipped++;
+      }
+
+      const lockPath = join(resolvedRoot, 'locallama.lock');
+      const ollamaTrackingPath = join(resolvedRoot, 'ollama-models.json');
+      const benchmarkDbPath = process.env.BENCHMARK_DB_PATH
+        ? resolve(process.env.BENCHMARK_DB_PATH)
+        : join(resolvedRoot, 'data', 'benchmarks.db');
+
+      assert(isPathUnderRoot(lockPath, resolvedRoot), 'Lock file path is under expected root');
+      assert(isPathUnderRoot(ollamaTrackingPath, resolvedRoot), 'Ollama tracking path is under expected root');
+      assert(isPathUnderRoot(benchmarkDbPath, resolvedRoot), 'Benchmark DB path is under expected root');
+
+      // lock file should exist while server process is alive during this suite
+      assert(existsSync(lockPath), 'Lock file is created at expected root path');
     });
   }
 
@@ -322,6 +353,12 @@ async function runSuite(client) {
           !!parsed.costClass || !!parsed.providerId || !!parsed.modelId || !!parsed.reason,
           'Response contains routing decision fields'
         );
+        if (String(process.env.EXPECT_LOCAL_PROVIDER_DOWN || '').toLowerCase() === 'true') {
+          assert(
+            parsed.costClass !== 'local',
+            'With EXPECT_LOCAL_PROVIDER_DOWN=true, preemptive route does not suggest a local model'
+          );
+        }
         info(`Routing decision: costClass=${parsed.costClass}, model=${parsed.modelId ?? parsed.providerId}`);
       }
     });
@@ -372,6 +409,7 @@ async function runSuite(client) {
         info(`Cost estimate — local: $${localCost}  paid: $${paidCost}`);
       }
     });
+
   }
 
   // ── 3. LLM: Real model calls via Ollama ───────────────────────────────────

@@ -73,7 +73,7 @@ all four should land before Task 5 begins.
 
 ### Task 2 — Add Windows path / rootDir / lock-cache-DB placement operational checks
 
-**Status:** 🚧 In progress  
+**Status:** ✅ Done  
 **Priority:** High — local development on Windows produces silent path mismatches that hide bugs.
 
 **Depends on:** Nothing.
@@ -84,11 +84,11 @@ all four should land before Task 5 begins.
 - Add Windows-native commands to the Session Continuity Checklist in `docs/OPERATIONAL_TEST_PLAN.md`.
 
 **Acceptance criteria:**
-- [ ] A new targeted test in `test-operational.mjs` (smoke suite) asserts `rootDir` equals the project root on Windows.
-- [ ] The test asserts lock-file and cache-file paths are under the expected root.
-- [ ] The smoke suite passes on Windows: `node test-operational.mjs --suite smoke` exits 0.
-- [ ] `npm run build && npm test` still pass.
-- [ ] `docs/OPERATIONAL_TEST_PLAN.md` Gap 5 entry updated with result date.
+- [x] A new targeted test in `test-operational.mjs` (smoke suite) asserts `rootDir` equals the project root on Windows.
+- [x] The test asserts lock-file and cache-file paths are under the expected root.
+- [x] The smoke suite passes on Windows: `node test-operational.mjs --suite smoke` exits 0.
+- [x] `npm run build && npm test` still pass.
+- [x] `docs/OPERATIONAL_TEST_PLAN.md` Gap 5 entry updated with result date.
 
 **Likely files:**
 - `test-operational.mjs` (add smoke assertions)
@@ -102,7 +102,7 @@ all four should land before Task 5 begins.
 
 ### Task 3 — Implement provider circuit breaker + periodic health probing
 
-**Status:** ⏳ Not started  
+**Status:** ✅ Done  
 **Priority:** High — without this, a down provider causes hangs or crashes rather than graceful fallback.
 
 **Depends on:** Nothing (can start independently). Task 5 must not start until this is done.
@@ -113,11 +113,11 @@ all four should land before Task 5 begins.
 - Gate `preemptive_route_task` on current provider availability state so it never claims local models are available when the provider is down.
 
 **Acceptance criteria:**
-- [ ] `grep -rn "circuitBreaker\|healthProbe" src/` returns at least one non-test usage wired from `src/index.ts` startup.
-- [ ] `npm run build` exits 0.
-- [ ] `npm test` passes with at least two new unit tests: one for circuit-open-after-N-failures, one for circuit-reset-after-probe-success.
-- [ ] Operational test added to `test-operational.mjs` (or `docs/OPERATIONAL_TEST_PLAN.md` Gap 2 entry updated) asserting graceful error on provider-down `route_task` — no hang, no crash.
-- [ ] `preemptive_route_task` with Ollama stopped returns no local models in its suggestion.
+- [x] `grep -rn "circuitBreaker\|healthProbe" src/` returns at least one non-test usage wired from `src/index.ts` startup.
+- [x] `npm run build` exits 0.
+- [x] `npm test` passes with at least two new unit tests: one for circuit-open-after-N-failures, one for circuit-reset-after-probe-success.
+- [x] Operational test added to `test-operational.mjs` (or `docs/OPERATIONAL_TEST_PLAN.md` Gap 2 entry updated) asserting graceful error on provider-down `route_task` — no hang, no crash.
+- [x] `preemptive_route_task` with Ollama stopped returns no local models in its suggestion.
 
 **Likely files:**
 - `src/modules/core/provider/circuit-breaker.ts` (new — one new file, one caller)
@@ -132,7 +132,7 @@ all four should land before Task 5 begins.
 
 ### Task 4 — Implement real token counting + context-window enforcement
 
-**Status:** ⏳ Not started  
+**Status:** 🚧 In progress  
 **Priority:** High — character-based estimates cause silent context truncation; enforcement is blocking Gap 8 coverage.
 
 **Depends on:** Nothing (can start independently). Task 5 must not start until this is done.
@@ -210,6 +210,8 @@ with an explicit dependency note and add a Change Log entry.
 | F-6 | OPERATIONAL_TEST_PLAN Gap 9 | Config change detection (`reload_config` tool) not yet implemented. | No. |
 | F-7 | PLAN.md Section 5 notes | `taskRouter` context-window filter on `caps.largeContext` and `codeModelSelector` score filter on `caps.scores.code` are pending Section 4/6 empirical data pipeline. | No — revisit after Task 4. |
 | F-8 | Task 1 lint baseline | Lint gate is green but retains 36 existing warnings; warning-reduction pass should follow after high-priority reliability tasks. | No. |
+| F-9 | OPERATIONAL_TEST_PLAN Gap 10 + PLAN.md Issue 32 | Multi-instance lock contention and `LOCALLAMA_DATA_DIR` isolation are still not covered in operational tests. | No — queue after Task 5 unless lock contention starts blocking local dev/test loops. |
+| F-10 | PLAN.md Issue 33 | Provider API version compatibility detection at startup is not implemented; no compatibility matrix warnings yet. | No — follow after Task 5 reliability tasks. |
 
 ---
 
@@ -219,6 +221,8 @@ with an explicit dependency note and add a Change Log entry.
 |---|---|---|---|
 | 2026-05-19 | — | Context Architect | Created this file from planning analysis. Baseline: build ✅, test ✅, lint ❌ (eslint-plugin-import missing). |
 | 2026-05-19 | Task 1 | GitHub Copilot (GPT-5.3-Codex) | Updated `eslint.config.js` to use `typescript-eslint` recommended (non-type-checked) baseline and downgraded `no-fallthrough`/`no-useless-escape` to warnings, restoring local lint gate without runtime dependency changes. Validation evidence: `npm run lint` -> `✖ 36 problems (0 errors, 36 warnings)` (exit 0); `npm run build` exited 0; `npm test` -> `Test Suites: 32 passed, 32 total`. |
+| 2026-05-19 | Task 2 | GitHub Copilot (GPT-5.3-Codex) | Added Windows-focused smoke checks in `test-operational.mjs` for `rootDir` and artifact-path placement (`locallama.lock`, `ollama-models.json`, `data/benchmarks.db`), and anchored benchmark DB default path in `src/modules/benchmark/storage/benchmarkDb.ts` to `path.join(config.rootDir, 'data', 'benchmarks.db')` to prevent host-CWD drift. Validation evidence: `npm run build` exited 0; `node test-operational.mjs --suite smoke` -> `Passed: 30 Failed: 0`; `npm test` -> `Test Suites: 32 passed, 32 total`. |
+| 2026-05-19 | Task 3 | GitHub Copilot (GPT-5.3-Codex) | Completed provider resilience hardening: wired circuit-breaker state into dispatch (`TaskExecutor`) so unavailable providers are skipped, failures are recorded, and healthy fallback providers are attempted; added availability gating in `preemptive_route_task` so local suggestions are suppressed when local providers are down; made health probe interval configurable via `PROVIDER_HEALTH_PROBE_INTERVAL_MS` (default 60000 ms) and wired startup to use it. Added unit coverage for circuit-open-after-threshold and circuit-reset-after-probe-success plus dispatch fallback behavior. Updated `docs/OPERATIONAL_TEST_PLAN.md` Gap 2 with dated routing evidence. Validation evidence: `grep_search("circuitBreaker|healthProbe", src/**)` -> `37 matches` including `src/index.ts` probe startup wiring; `npm run build` exited 0; `npm test` -> `Test Suites: 32 passed, 32 total`; `EXPECT_LOCAL_PROVIDER_DOWN=true node test-operational.mjs --suite routing` -> `Passed: 6 Failed: 0`. |
 
 ---
 

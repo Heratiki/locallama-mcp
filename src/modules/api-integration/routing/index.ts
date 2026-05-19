@@ -17,6 +17,30 @@ import { Model } from '../../../types/index.js'; // Import Model type
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
 export class Router implements IRouter {
+  private providerLooksUnavailable(providerId: string): boolean {
+    const registry = getProviderRegistry();
+    return !registry.has(providerId) || !registry.isAvailable(providerId);
+  }
+
+  private async pickPreemptiveNonLocalFallback(
+    params: RouteTaskParams,
+  ): Promise<{ provider: 'paid'; model: string } | null> {
+    const availableModels = await costMonitor.getAvailableModels();
+    const totalTokens = params.contextLength + (params.expectedOutputLength || 0);
+    const paidCandidate = availableModels.find(
+      (model) =>
+        !isProviderLocal(model.provider) &&
+        (model.contextWindow === undefined || model.contextWindow >= totalTokens),
+    );
+
+    if (!paidCandidate) return null;
+
+    return {
+      provider: 'paid',
+      model: paidCandidate.id,
+    };
+  }
+
   private modelIdMatches(target: string, candidate: string): boolean {
     if (target === candidate) return true;
     if (candidate.endsWith(`:${target}`)) return true;
@@ -348,6 +372,27 @@ export class Router implements IRouter {
         priority: params.priority || 'quality',
       });
       
+      // If local providers are currently unavailable, do not suggest local models.
+      if (decision.provider === 'local') {
+        const localProviderIds = getProviderRegistry().listByCostClass('local').map((provider) => provider.id);
+        const hasLiveLocalProvider = localProviderIds.some((providerId) => !this.providerLooksUnavailable(providerId));
+
+        if (!hasLiveLocalProvider) {
+          const fallback = await this.pickPreemptiveNonLocalFallback(params);
+          if (fallback) {
+            decision.provider = fallback.provider;
+            decision.model = fallback.model;
+            decision.explanation =
+              `${decision.explanation ?? ''} Local providers are unavailable; falling back to non-local preemptive suggestion.`.trim();
+          } else {
+            decision.provider = 'paid';
+            decision.model = 'no_available_provider';
+            decision.explanation =
+              `${decision.explanation ?? ''} Local providers are unavailable and no non-local model is currently eligible.`.trim();
+          }
+        }
+      }
+
       // Generate a reason if it doesn't exist in the decision object
       const routingReason = generateRoutingReason(decision);
       

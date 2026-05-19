@@ -112,12 +112,12 @@ export class ProviderRegistry {
 
   /**
    * Start a background loop that calls `provider.isAvailable()` on every
-   * registered provider every `intervalMs` milliseconds (default 30 000).
+    * registered provider every `intervalMs` milliseconds (default 60 000).
    * Availability changes are logged and fed into the circuit breaker.
    *
    * Calling this when the probe is already running is a no-op.
    */
-  startHealthProbe(intervalMs = 30_000): void {
+  startHealthProbe(intervalMs = 60_000): void {
     if (this.healthProbeTimer) return;
     this.healthProbeTimer = setInterval(() => {
       void this.runHealthProbe();

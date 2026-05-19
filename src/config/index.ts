@@ -59,6 +59,7 @@ export interface Config {
   openRouterFreeOnly: boolean;
   // Max OpenRouter API calls per minute across all free models (0 = no limit)
   openRouterRateLimitPerMinute: number;
+  providerHealthProbeIntervalMs: number;
   
   // Benchmark configuration
   benchmark: BenchmarkConfig;
@@ -142,6 +143,7 @@ export const config: Config = {
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
   openRouterFreeOnly: parseBool(process.env.OPENROUTER_FREE_ONLY, true),
   openRouterRateLimitPerMinute: parseNumber(process.env.OPENROUTER_RATE_LIMIT_PER_MINUTE, 10, 0, 600),
+  providerHealthProbeIntervalMs: parseNumber(process.env.PROVIDER_HEALTH_PROBE_INTERVAL_MS, 60_000, 1_000),
   
   // Benchmark configuration
   benchmark: {
@@ -235,6 +237,9 @@ export function validateConfig(): void {
   }
   if (config.benchmark.taskTimeout <= 0) {
     errors.push(`Invalid taskTimeout: ${config.benchmark.taskTimeout}`);
+  }
+  if (config.providerHealthProbeIntervalMs <= 0) {
+    errors.push(`Invalid providerHealthProbeIntervalMs: ${config.providerHealthProbeIntervalMs}`);
   }
   // Validate cache config
   if (config.maxCacheSize <= 0) {

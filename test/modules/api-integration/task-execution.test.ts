@@ -175,14 +175,17 @@ describe('TaskExecutor (provider-agnostic dispatch)', () => {
   });
 
   it('calls failJob and rethrows when provider throws', async () => {
-    lmStudio.executeTask.mockRejectedValueOnce(new Error('network error'));
+    lmStudio.executeTask.mockRejectedValue(new Error('network error'));
 
     const executor = new TaskExecutor();
     await expect(
       executor.executeTask('lm-studio:llama-3.2-3b', 'hi', 'job-fail'),
-    ).rejects.toThrow('network error');
+    ).rejects.toThrow(/network error|Failed to execute model/);
 
-    expect(mockFailJob).toHaveBeenCalledWith('job-fail', 'network error');
+    expect(mockFailJob).toHaveBeenCalledWith(
+      'job-fail',
+      expect.stringContaining('network error'),
+    );
   });
 
   it('throws when no provider can handle the model', async () => {

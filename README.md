@@ -202,6 +202,7 @@ DEFAULT_LOCAL_MODEL=qwen2.5-coder-3b-instruct
 TOKEN_THRESHOLD=1500
 COST_THRESHOLD=0.02
 QUALITY_THRESHOLD=0.7
+PROVIDER_HEALTH_PROBE_INTERVAL_MS=60000
 
 # Code Search Configuration
 CODE_SEARCH_ENABLED=true
@@ -250,6 +251,7 @@ PYTHON_DETECT_VENV=true
   - `TOKEN_THRESHOLD`: Maximum token count before considering offloading to local LLM
   - `COST_THRESHOLD`: Cost threshold (in USD) that triggers local LLM usage
   - `QUALITY_THRESHOLD`: Quality score below which to use paid APIs regardless of cost
+  - `PROVIDER_HEALTH_PROBE_INTERVAL_MS`: Interval in milliseconds for provider health probing (default `60000`)
 
 - **Code Search Configuration**
   - `CODE_SEARCH_ENABLED`: Enable or disable semantic code search functionality
@@ -283,6 +285,9 @@ PYTHON_DETECT_VENV=true
 - **Server Lock Configuration** (New)
   - `LOCK_FILE_CHECK_ACTIVE_PROCESS`: Verify if processes in lock files are still running
   - `REMOVE_STALE_LOCK_FILES`: Automatically clean up stale lock files from crashed processes
+
+- **Operational Testing Flags**
+  - `EXPECT_LOCAL_PROVIDER_DOWN`: Optional flag for `test-operational.mjs` routing suite. When `true`, the preemptive routing test asserts that no local model is suggested.
 
 ### Environment Variables for MCP Clients
 

@@ -93,12 +93,41 @@ export class TaskExecutor implements ITaskExecutor {
     return result;
   }
 
+  private async executeWithProvider(
+    providerId: string,
+    bareId: string,
+    task: string,
+    options: TaskExecutionOptions,
+    source: string,
+  ): Promise<string> {
+    const registry = getProviderRegistry();
+    const provider = registry.get(providerId);
+    if (!provider) {
+      throw new Error(`Provider '${providerId}' is not registered (${source})`);
+    }
+
+    if (!registry.isAvailable(provider.id)) {
+      throw new Error(`Provider '${provider.id}' is temporarily unavailable (circuit open)`);
+    }
+
+    try {
+      const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
+      const result = await provider.executeTask(bareId, task, executionOptions);
+      registry.recordProviderSuccess(provider.id);
+      return result.content;
+    } catch (error) {
+      registry.recordProviderFailure(provider.id);
+      throw error;
+    }
+  }
+
   /** Dispatch to the right provider without job tracking (pure routing). */
   private async _dispatch(modelId: string, task: string): Promise<string> {
     const { providerId: prefixProviderId, bareId } = resolveModelId(modelId);
     const registry = getProviderRegistry();
     const modelRegistry = getModelRegistry();
     const options: TaskExecutionOptions = {};
+    let lastError: Error | undefined;
 
     // Context-window enforcement: reject early if the task is too large.
     const estimatedTokens = estimateTokens(task);
@@ -110,48 +139,74 @@ export class TaskExecutor implements ITaskExecutor {
     // 1. Registry lookup: model metadata tells us which provider to use.
     const meta = modelRegistry.getModel(bareId) ?? modelRegistry.getModel(modelId);
     if (meta) {
-      const provider = registry.get(meta.providerId);
-      if (provider) {
+      if (registry.get(meta.providerId)) {
         logger.debug(`Dispatching ${bareId} via registry (provider: ${meta.providerId})`);
-        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
-        const r = await provider.executeTask(bareId, task, executionOptions);
-        return r.content;
+        try {
+          return await this.executeWithProvider(meta.providerId, bareId, task, options, 'registry lookup');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Primary provider dispatch failed for ${bareId} via ${meta.providerId}: ${lastError.message}`);
+        }
       }
     }
 
     // 2. Prefix convention: `lm-studio:<id>`, `ollama:<id>`, `openrouter:<id>`.
     if (prefixProviderId) {
-      const provider = registry.get(prefixProviderId);
-      if (provider) {
+      if (registry.get(prefixProviderId)) {
         logger.debug(`Dispatching ${bareId} via prefix (provider: ${prefixProviderId})`);
-        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
-        const r = await provider.executeTask(bareId, task, executionOptions);
-        return r.content;
+        try {
+          return await this.executeWithProvider(prefixProviderId, bareId, task, options, 'prefixed model id');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Prefix provider dispatch failed for ${bareId} via ${prefixProviderId}: ${lastError.message}`);
+        }
       }
     }
 
     // 3. Bare id — try all local providers in registration order, then any others.
     const localProviders = registry.listByCostClass('local');
     for (const provider of localProviders) {
+      if (!registry.isAvailable(provider.id)) {
+        logger.debug(`Skipping unavailable local provider ${provider.id} (circuit open)`);
+        continue;
+      }
+
       const supports = await provider.supportsModel(bareId);
       if (supports) {
         logger.debug(`Dispatching ${bareId} to local provider ${provider.id} (fallback probe)`);
-        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
-        const r = await provider.executeTask(bareId, task, executionOptions);
-        return r.content;
+        try {
+          return await this.executeWithProvider(provider.id, bareId, task, options, 'local fallback probe');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Local fallback provider ${provider.id} failed for ${bareId}: ${lastError.message}`);
+        }
       }
     }
 
     // 4. Try non-local providers (openrouter / free-tier).
     const otherProviders = registry.list().filter((p) => !p.isLocal);
     for (const provider of otherProviders) {
+      if (!registry.isAvailable(provider.id)) {
+        logger.debug(`Skipping unavailable provider ${provider.id} (circuit open)`);
+        continue;
+      }
+
       const supports = await provider.supportsModel(bareId);
       if (supports) {
         logger.debug(`Dispatching ${bareId} to provider ${provider.id} (fallback probe)`);
-        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
-        const r = await provider.executeTask(bareId, task, executionOptions);
-        return r.content;
+        try {
+          return await this.executeWithProvider(provider.id, bareId, task, options, 'remote fallback probe');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Fallback provider ${provider.id} failed for ${bareId}: ${lastError.message}`);
+        }
       }
+    }
+
+    if (lastError) {
+      throw new Error(
+        `Failed to execute model '${modelId}' after trying available providers: ${lastError.message}`,
+      );
     }
 
     throw new Error(

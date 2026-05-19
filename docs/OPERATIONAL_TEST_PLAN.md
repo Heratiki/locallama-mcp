@@ -131,6 +131,8 @@ REMOVE_STALE_LOCK_FILES=true
 | 2026-05-19 | focused lm-studio/openrouter-free validation | 3 | 0 | 0 | `benchmark_model` for LM Studio `google/gemma-4-e4b` no longer fails provider resolution; now returns structured result with `providerId: lm-studio` and `categoryResults.code`. Runtime execution still fails (`successRate: 0`). In same pass, `route_task` selected OpenRouter free models that failed with `invalid_request` (`baidu/cobuddy:free`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`). |
 | 2026-05-19 | issue-15 focused lm-studio MCP probe | 1 | 0 | 0 | After diagnostics changes, live `benchmark_model` call now returns per-task `failures[]` with `errorType`, `timeoutMs`, and transport fields. Current failure classifies as `model_not_found` in LM Studio tracking data (`endpoint=http://localhost:1234/v1`) rather than opaque `successRate: 0` with no detail. |
 | 2026-05-19 | issue-15 startup-discovery fix validation | 2 | 0 | 0 | LM Studio provider now forces model refresh on startup (`initialize(true)`), and tracking file updates immediately with live LM Studio inventory (`qwen/qwen3.5-9b`, `google/gemma-4-e4b`, embeddings). Focused MCP `benchmark_model` on `google/gemma-4-e4b` (`tool-use`) succeeded with `successRate: 1`, confirming non-embedding LM Studio execution path works. |
+| 2026-05-19 | smoke (Issue 34 / Gap 5) | 30 | 0 | 0 | Added Windows-native smoke assertions for `rootDir` equality and artifact-path placement under expected root (`locallama.lock`, `ollama-models.json`, `data/benchmarks.db`). Also aligned benchmark DB default path to root-scoped `data/benchmarks.db` to avoid host-CWD drift. |
+| 2026-05-19 | routing (Issues 24+26 / Gap 2) | 6 | 0 | 0 | Added provider-availability assertion in routing suite. With `EXPECT_LOCAL_PROVIDER_DOWN=true`, `preemptive_route_task` returned non-local recommendation (`costClass=paid`) and suite passed: `Passed: 6 Failed: 0`. |
 
 **Full suite command used:**
 ```bash
@@ -312,9 +314,11 @@ No test verifies server behavior when a provider becomes unavailable after start
 
 - Start the server with Ollama running, then stop Ollama, then call `route_task`. Assert that the response either falls back gracefully to another provider or returns a clear "no local provider available" error — not a hang or a crash.
 - Start the server with Ollama unavailable. Assert that `preemptive_route_task` does not claim local models are available.
-- Verify that the periodic health probe (Issue 26, when implemented) updates provider availability state and that subsequent `preemptive_route_task` calls reflect the updated state.
+- Verify that the periodic health probe (Issue 26, now implemented) updates provider availability state and that subsequent `preemptive_route_task` calls reflect the updated state.
 
-**Blocker:** Issue 26 (periodic health probe) must be implemented before the last bullet. The first two bullets can be added now.
+2026-05-19 update: Added routing-suite assertion path for provider-down preemptive behavior (`EXPECT_LOCAL_PROVIDER_DOWN=true`). Current evidence shows non-local preemptive suggestions under provider-down expectations (`costClass=paid`).
+
+**Blocker:** Full live failure-injection sequence (start with provider up, stop provider mid-session, then assert `route_task` graceful fallback/error response) is still pending as a dedicated deterministic harness.
 
 ---
 
@@ -342,12 +346,14 @@ No test verifies that benchmark results written in one server session are correc
 
 ### Gap 5 — Windows path correctness (Issue 34 / Bug 4)
 
-No test verifies path resolution on Windows end to end. The Session Continuity Checklist now has Windows-native Node/PowerShell commands, but the remaining coverage gaps are:
+2026-05-19 update: baseline Windows path assertions were added to the smoke suite and passed (`node test-operational.mjs --suite smoke` -> `Passed: 30, Failed: 0`).
+
+Completed checks:
 
 - Add a check that `rootDir` (from `src/config/index.ts`) resolves to the project root, not `C:\Program Files\nodejs` or any other host-process CWD.
 - Add a smoke test assertion that `locallama.lock`, `ollama-models.json`, and `data/benchmarks.db` are created in the expected directory (project root or `LOCALLAMA_ROOT_DIR` if set), not in the host CWD.
 
-**Blocker:** None. These can be added immediately.
+**Status:** Completed for smoke baseline on 2026-05-19.
 
 ---
 

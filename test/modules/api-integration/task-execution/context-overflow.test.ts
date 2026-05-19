@@ -175,4 +175,97 @@ describe('TaskExecutor — context-window enforcement', () => {
       executor.executeTask('unknown-model', bigTask, 'job-no-meta'),
     ).rejects.toThrow(/No provider found/);
   });
+
+  it('opens provider circuit after repeated execution failures', async () => {
+    const failingProvider = makeMinimalProvider('ollama');
+    failingProvider.executeTask.mockRejectedValue(new Error('provider down'));
+
+    const reg = new ProviderRegistry();
+    reg.register(failingProvider);
+    _setProviderRegistryForTests(reg);
+
+    const modelReg = new ModelRegistry();
+    modelReg.registerModel({
+      id: 'unstable-model',
+      providerId: 'ollama',
+      displayName: 'Unstable Model',
+      contextWindow: 4000,
+      capabilities: {
+        chat: true,
+        code: true,
+        vision: false,
+        toolUse: false,
+        largeContext: false,
+        maxContextTokens: 4000,
+      },
+      cost: { prompt: 0, completion: 0 },
+      promptingStrategyId: 'default',
+    });
+    _setModelRegistryForTests(modelReg);
+
+    const executor = new TaskExecutor();
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        executor.executeTask('unstable-model', 'small task', `job-fail-${i}`),
+      ).rejects.toThrow(/provider down|Failed to execute model/);
+    }
+
+    expect(reg.isAvailable('ollama')).toBe(false);
+  });
+
+  it('skips circuit-open local provider and falls back to an available provider', async () => {
+    const failingLocal = makeMinimalProvider('ollama');
+    failingLocal.supportsModel.mockReturnValue(true);
+    failingLocal.executeTask.mockRejectedValue(new Error('ollama unavailable'));
+
+    const healthyRemote = {
+      ...makeMinimalProvider('openrouter'),
+      costClass: 'paid' as const,
+      isLocal: false,
+      supportsModel: jest.fn<(m: unknown) => boolean>().mockReturnValue(false),
+      executeTask: jest
+        .fn<() => Promise<{ content: string; model: string }>>()
+        .mockResolvedValue({ content: 'fallback-success', model: 'openrouter' }),
+    };
+
+    const reg = new ProviderRegistry();
+    reg.register(failingLocal);
+    reg.register(healthyRemote);
+    _setProviderRegistryForTests(reg);
+
+    const modelReg = new ModelRegistry();
+    modelReg.registerModel({
+      id: 'hybrid-model',
+      providerId: 'ollama',
+      displayName: 'Hybrid Model',
+      contextWindow: 4000,
+      capabilities: {
+        chat: true,
+        code: true,
+        vision: false,
+        toolUse: false,
+        largeContext: false,
+        maxContextTokens: 4000,
+      },
+      cost: { prompt: 0, completion: 0 },
+      promptingStrategyId: 'default',
+    });
+    _setModelRegistryForTests(modelReg);
+
+    const executor = new TaskExecutor();
+
+    // Open the local provider circuit first.
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        executor.executeTask('hybrid-model', 'small task', `job-open-${i}`),
+      ).rejects.toThrow(/ollama unavailable|Failed to execute model/);
+    }
+    expect(reg.isAvailable('ollama')).toBe(false);
+
+    healthyRemote.supportsModel.mockReturnValue(true);
+
+    const result = await executor.executeTask('hybrid-model', 'small task', 'job-fallback-success');
+    expect(result).toBe('fallback-success');
+    expect(healthyRemote.executeTask).toHaveBeenCalled();
+  });
 });

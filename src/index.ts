@@ -543,9 +543,9 @@ export class LocalLamaMcpServer {
         const ready = await registry.initAll();
         logger.info(`Provider registry initialized: [${ready.join(', ')}]`);
 
-        // Start periodic health probing (Issue 26 — 30 s interval).
-        registry.startHealthProbe();
-        logger.info('Provider health probe started (30 s interval)');
+        // Start periodic health probing (Issue 26).
+        registry.startHealthProbe(cfg.providerHealthProbeIntervalMs);
+        logger.info(`Provider health probe started (${cfg.providerHealthProbeIntervalMs} ms interval)`);
         // Seed the ModelRegistry with models from every initialized provider.
         // Errors from a single provider's listModels() are isolated.
         const { getModelRegistry } = await import('./modules/core/model/index.js');
