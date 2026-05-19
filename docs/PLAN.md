@@ -940,7 +940,7 @@ Issues below are in the same severity and scope class as Issues #15–17. None a
 
 **Required research:** Whether the MCP SDK's transport layer supports backpressure, or whether queuing must be implemented at the application layer. Concurrency limits should be per-provider, not global. This interacts with Issue 18 (streaming/async job model). **Moderate engineering effort; design required.**
 
-**Status:** ⏳ Not started.
+**Status:** 🚧 In progress.
 
 ---
 
@@ -1163,19 +1163,19 @@ Issues below are in the same severity and scope class as Issues #15–17. None a
 
 ### Issue 34 — Implicit POSIX assumptions remain in shell-dependent code paths
 
-**Concern:** Bug 4 fixed `process.cwd()` to use `import.meta.url`. However, other POSIX-style assumptions may remain:
+**Concern:** Bug 4 fixed the main `rootDir` resolution bug, and the operational checklist now has Windows-native Node/PowerShell commands. However, other POSIX-style assumptions may remain:
 - Path separator usage: any `path.join` call that produces a path used in a shell command (e.g., spawning the BM25 engine or future sidecar processes) may use `\` on Windows where `/` is expected.
-- `test-operational.mjs` invokes shell commands (e.g., `curl`, `python3`) in the Session Continuity Checklist that do not exist on Windows without WSL.
+- Some workflow/docs commands still need Windows-native equivalents or explicit Windows notes.
 - Log rotation or file management using Unix signals (`SIGHUP`) does not apply on Windows.
 - Future sidecar processes or provider health-check scripts should be written to work on Windows natively or explicitly document Windows alternatives.
 
 **Risks:**
-- A developer following the Checklist on Windows (System A) hits `curl: command not found` or `python3: command not found` mid-diagnosis.
 - A future subprocess spawn fails on Windows with a path error that is non-obvious.
+- State written by auxiliary services still follows the caller's `cwd` instead of the resolved install root.
 
-**Mitigation approach:** Audit all shell invocations in `test-operational.mjs`, `docs/`, and any npm scripts for POSIX-only commands. Replace `curl` with `node`-based HTTP checks; replace `python3` with `node` or PowerShell equivalents in the Checklist. Document Windows-specific alternatives explicitly in `OPERATIONAL_TEST_PLAN.md`. **Low effort for documentation; moderate for tooling changes.**
+**Mitigation approach:** Continue auditing shell invocations in `test-operational.mjs`, `docs/`, and npm scripts for POSIX-only commands, and move all persisted local state (`lock`, caches, benchmark artifacts, logs) to the resolved install root or an explicit override such as `LOCALLAMA_ROOT_DIR` / future `LOCALLAMA_DATA_DIR`. **Low effort for documentation; moderate for tooling changes.**
 
-**Status:** ⏳ Not started.
+**Status:** 🚧 In progress.
 
 ---
 

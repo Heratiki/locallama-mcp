@@ -9,11 +9,12 @@ import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-moni
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
 import { getJobTracker, JobStatus } from './jobTracker.js'; // Import job tracker
+import { config } from '../../../config/index.js';
 import fs from 'fs';
 import path from 'path';
 
 // Path for the subtask results log
-const SUBTASK_LOG_PATH = path.join(process.cwd(), 'subtask_results.log');
+const SUBTASK_LOG_PATH = path.join(config.rootDir, 'subtask_results.log');
 
 /**
  * Coordinates the entire code task analysis flow

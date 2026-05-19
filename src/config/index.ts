@@ -38,37 +38,16 @@ function detectPythonWithRetriv(): string | undefined {
     }
   }
 
-  // Determine if we're running from dist directory
-  const currentDir = process.cwd();
-  const isRunningFromDist = currentDir.endsWith('/dist') || currentDir.endsWith('\\dist');
-  const projectRoot = isRunningFromDist ? path.resolve(currentDir, '..') : currentDir;
-
   // Look for virtual environments
   const possibleVenvPaths = [
-    // Absolute paths relative to project root
-    path.resolve(projectRoot, '.venv/bin/python'),
-    path.resolve(projectRoot, 'venv/bin/python'),
-    path.resolve(projectRoot, 'env/bin/python'),
+    // Absolute paths relative to the resolved app root
+    path.resolve(rootDir, '.venv/bin/python'),
+    path.resolve(rootDir, 'venv/bin/python'),
+    path.resolve(rootDir, 'env/bin/python'),
     // For Windows
-    path.resolve(projectRoot, '.venv/Scripts/python.exe'),
-    path.resolve(projectRoot, 'venv/Scripts/python.exe'),
-    path.resolve(projectRoot, 'env/Scripts/python.exe'),
-    // Current directory paths
-    path.resolve(currentDir, '.venv/bin/python'),
-    path.resolve(currentDir, 'venv/bin/python'),
-    path.resolve(currentDir, 'env/bin/python'),
-    // For Windows in current directory
-    path.resolve(currentDir, '.venv/Scripts/python.exe'),
-    path.resolve(currentDir, 'venv/Scripts/python.exe'),
-    path.resolve(currentDir, 'env/Scripts/python.exe'),
-    // Check parent directories too (in case running from dist)
-    path.resolve(currentDir, '../.venv/bin/python'),
-    path.resolve(currentDir, '../venv/bin/python'),
-    path.resolve(currentDir, '../env/bin/python'),
-    // For Windows in parent directory
-    path.resolve(currentDir, '../.venv/Scripts/python.exe'),
-    path.resolve(currentDir, '../venv/Scripts/python.exe'),
-    path.resolve(currentDir, '../env/Scripts/python.exe'),
+    path.resolve(rootDir, '.venv/Scripts/python.exe'),
+    path.resolve(rootDir, 'venv/Scripts/python.exe'),
+    path.resolve(rootDir, 'env/Scripts/python.exe'),
   ];
 
   for (const venvPath of possibleVenvPaths) {
@@ -260,7 +239,7 @@ export const config: Config = {
   // Python configuration
   python: {
     path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH || detectedPythonPath || 'python3',
-    virtualEnv: process.env.PYTHON_VENV_PATH || path.join(process.cwd(), '.venv'),
+    virtualEnv: process.env.PYTHON_VENV_PATH || path.join(rootDir, '.venv'),
     detectVirtualEnv: parseBool(process.env.PYTHON_DETECT_VENV, true),
   },
 

@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { logger } from '../../../utils/logger.js';
+import { config } from '../../../config/index.js';
 import { ModelPerformanceData } from '../../../types/index.js';
 import { getModelRegistry } from '../../core/model/index.js';
 import type { BenchmarkSummary } from '../../core/model/types.js';
@@ -52,7 +53,7 @@ class ModelsDbService {
   private initialized = false;
 
   private constructor() {
-    const dbDir = process.env.DB_DIR || path.join(process.cwd(), '.cache');
+    const dbDir = process.env.DB_DIR || config.cacheDir;
     this.dbFilePath = path.join(dbDir, 'models-db.json');
   }
 
@@ -113,7 +114,7 @@ class ModelsDbService {
 
   async loadBenchmarkData(): Promise<void> {
     try {
-      const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
+      const benchmarkDir = config.benchmark.resultsPath;
       
       // Check if directory exists
       try {

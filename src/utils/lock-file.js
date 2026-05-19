@@ -6,7 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const LOCK_FILE_NAME = 'locallama.lock';
-const LOCK_FILE_PATH = path.join(__dirname, '..', '..', LOCK_FILE_NAME);
+const rootDir = process.env.LOCALLAMA_ROOT_DIR || path.resolve(__dirname, '..', '..');
+const LOCK_FILE_PATH = path.join(rootDir, LOCK_FILE_NAME);
 
 /**
  * Creates a lock file to prevent multiple instances of the server from running

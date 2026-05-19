@@ -244,7 +244,9 @@ The smoke suite should run in under 10 seconds. Run it after every build.
 If a previous test run didn't clean up:
 
 ```bash
-rm -f locallama.lock
+node -e "const fs=require('fs'); if (fs.existsSync('locallama.lock')) fs.unlinkSync('locallama.lock');"
+# Windows PowerShell:
+# if (Test-Path locallama.lock) { Remove-Item locallama.lock }
 ```
 
 The `.env` sets `REMOVE_STALE_LOCK_FILES=true` which auto-removes stale locks on
@@ -255,7 +257,9 @@ startup.
 Logs go to `./locallama-test.log` (set in `.env`). To tail while testing:
 
 ```bash
-tail -f locallama-test.log
+Get-Content locallama-test.log -Wait
+# Unix alternative:
+# tail -f locallama-test.log
 ```
 
 ---
@@ -338,10 +342,9 @@ No test verifies that benchmark results written in one server session are correc
 
 ### Gap 5 — Windows path correctness (Issue 34 / Bug 4)
 
-No test verifies path resolution on Windows. The Session Continuity Checklist uses `curl` and `python3`, which are not guaranteed on Windows. Additionally:
+No test verifies path resolution on Windows end to end. The Session Continuity Checklist now has Windows-native Node/PowerShell commands, but the remaining coverage gaps are:
 
 - Add a check that `rootDir` (from `src/config/index.ts`) resolves to the project root, not `C:\Program Files\nodejs` or any other host-process CWD.
-- Replace the `curl` and `python3` commands in the Checklist below with PowerShell/Node equivalents that work on Windows natively.
 - Add a smoke test assertion that `locallama.lock`, `ollama-models.json`, and `data/benchmarks.db` are created in the expected directory (project root or `LOCALLAMA_ROOT_DIR` if set), not in the host CWD.
 
 **Blocker:** None. These can be added immediately.
@@ -424,25 +427,25 @@ See the **Interactive Testing Webapp — Planning Section** added to `PLAN.md` (
 
 If you are an AI agent picking this up in a new session, run these checks first:
 
-> **Windows note (Issue 34):** The commands below use `curl` and `python3`, which may not be available on Windows without WSL. Use the PowerShell equivalents listed in parentheses where noted. See Gap 5 in the Testing Gaps section above for the tracking item.
+> **Windows note (Issue 34):** Prefer the Node or PowerShell commands below. They work on native Windows and avoid the old `curl`/`python3`/`tail` assumptions.
 
 ```bash
 # 1. Verify Ollama is running
-# Unix:
-curl -s http://localhost:11434/api/tags | python3 -c "import sys,json; [print(m['name']) for m in json.load(sys.stdin)['models']]"
-# Windows PowerShell equivalent:
+# Cross-platform Node:
+node -e "fetch('http://localhost:11434/api/tags').then(r=>r.json()).then(d=>{for (const m of (d.models||[])) console.log(m.name);}).catch(err=>{console.error(err); process.exit(1);})"
+# Windows PowerShell:
 # (Invoke-RestMethod http://localhost:11434/api/tags).models | ForEach-Object { $_.name }
 
 # 2. Verify the build is current
-npm run build 2>&1 | tail -5
-# Windows PowerShell: npm run build | Select-Object -Last 5
+npm run build
 
 # 3. Quick smoke test
 node test-operational.mjs --suite smoke --verbose
 
 # 4. Check for lock file remnants
-ls locallama.lock 2>/dev/null && echo "LOCK EXISTS — delete if no server running"
-# Windows PowerShell: if (Test-Path locallama.lock) { Write-Host "LOCK EXISTS — delete if no server running" }
+node -e "const fs=require('fs'); if (fs.existsSync('locallama.lock')) console.log('LOCK EXISTS — delete if no server running');"
+# Windows PowerShell:
+# if (Test-Path locallama.lock) { Write-Host "LOCK EXISTS — delete if no server running" }
 ```
 
 If smoke passes, continue from the "Known Issues" section above or extend the suite

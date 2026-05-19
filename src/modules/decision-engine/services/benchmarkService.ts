@@ -12,6 +12,7 @@ import path from 'path';
 import { speculativeDecodingService } from '../services/speculativeDecoding.js';
 import { Model } from '../../../types/index.js';
 import { getProviderRegistry, isProviderId, isProviderLocal } from '../../core/provider/index.js';
+import { config } from '../../../config/index.js';
 
 // Add this interface at the top of the file with other types
 /**
@@ -695,7 +696,7 @@ export const benchmarkService = {
       
       // Check which models have already been benchmarked
       const modelsDb = modelsDbService.getDatabase();
-      const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
+      const benchmarkDir = config.benchmark.resultsPath;
       const modelBenchmarkStatus = new Map<string, Set<string>>();
       
       // First check if models have been benchmarked based on persistence data
@@ -894,7 +895,7 @@ export const benchmarkService = {
 
               // Save the benchmark result
               try {
-                await saveResult(taskResult, path.join(process.cwd(), 'benchmark-results'));
+                await saveResult(taskResult, config.benchmark.resultsPath);
                 logger.info(`Saved benchmark result for ${model.id} with task ${task.name} to benchmark-results folder`);
               } catch (saveError) {
                 logger.error(`Error saving benchmark result for ${model.id}: ${String(saveError)}`);
@@ -1016,7 +1017,7 @@ export const benchmarkService = {
               
               // Save the failed benchmark result
               try {
-                await saveResult(failedResult, path.join(process.cwd(), 'benchmark-results'));
+                await saveResult(failedResult, config.benchmark.resultsPath);
                 logger.info(`Saved failed benchmark result for ${model.id} with task ${task.name} to benchmark-results folder`);
               } catch (saveError) {
                 logger.error(`Error saving failed benchmark result for ${model.id}: ${String(saveError)}`);
@@ -1255,7 +1256,7 @@ export const benchmarkService = {
   async updateModelPerformanceProfiles(): Promise<void> {
     try {
       // Find the most recent comprehensive benchmark results
-      const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
+      const benchmarkDir = config.benchmark.resultsPath;
       
       try {
         const files = await fs.readdir(benchmarkDir);
@@ -1403,7 +1404,7 @@ export const benchmarkService = {
    */
   async generateComprehensiveSummary(): Promise<void> {
     try {
-      const benchmarkDir = path.join(process.cwd(), 'benchmark-results');
+      const benchmarkDir = config.benchmark.resultsPath;
       
       // Load all benchmark results
       const results = await benchmarkUtils.loadResults(benchmarkDir);
