@@ -78,6 +78,19 @@ Verification:
 - Focused dispatcher test passes and verifies `route_task` / `benchmark_task` include monitoring metadata while `get_cost_estimate` does not.
 - Full `npm test` passes: 22 suites / 185 tests.
 
+## 2026-05-19 — Paid OpenRouter Route Task Fix
+
+Summary:
+- Fixed `route_task` so an initial paid routing decision is preserved instead of being silently reselected by `codeTaskCoordinator`.
+- Updated paid model selection to use registered provider model ids such as `openai/gpt-4o` instead of OpenAI aliases like `gpt-4o`.
+- Added selected-model cost estimation before direct paid execution so `COST_THRESHOLD` applies to the actual model being called.
+
+Verification:
+- Focused routing test passes and proves a paid decision executes through `taskExecutor` without entering `codeTaskCoordinator`.
+- Live MCP route with `OPENROUTER_FREE_ONLY=false` returned `providerId: openrouter`, `costClass: paid`, `modelId: openai/gpt-4o`, estimated cost `$0.0036`, valid JSON content, and monitoring metadata.
+- OpenRouter remaining credits changed from `$1.635033553` to `$1.634338553`, about `$0.000695` consumed.
+- Full `npm test` passes: 23 suites / 186 tests.
+
 ## 2026-04-24 Revival Work
 
 ### Completed

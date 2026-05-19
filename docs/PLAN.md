@@ -2,7 +2,7 @@
 
 > **Current reader guide (updated 2026-05-19).** This file is both roadmap and historical record. For the fastest orientation, read this guide, then `docs/PROJECT_STATE.md`, then the **Known Bugs / Operational Fixes** and **End-to-End Functional Test Status** sections near the bottom of this file. Sections 0-9 document completed modernization work unless a later operational bug explicitly overrides them. The currently actionable work is: keep `npm run build` and `npm test` green on native Windows/macOS/Linux, run bounded local benchmarks so routing can distinguish `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b`, then re-test model selection.
 >
-> **Verification baseline (2026-05-19).** `npm run build` succeeds. `npm test` is now shell-agnostic because the script invokes `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of Unix-style `NODE_OPTIONS=...`; latest local result: 22 suites / 185 tests passing on Windows, with no Jest forced-worker-exit/open-handle warning. `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but is not installed.
+> **Verification baseline (2026-05-19).** `npm run build` succeeds. `npm test` is now shell-agnostic because the script invokes `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of Unix-style `NODE_OPTIONS=...`; latest local result: 23 suites / 186 tests passing on Windows, with no Jest forced-worker-exit/open-handle warning. `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but is not installed.
 >
 > **Self-update status (2026-05-19).** The install/self-update design is implemented in source: `src/modules/updater/index.ts`, `check_for_updates`, `update_server`, and startup update checks are wired. Older superpowers design/plan files are retained as implementation history, not as the current task list.
 
@@ -789,21 +789,23 @@ To enable OpenRouter: set `OPENROUTER_API_KEY` in the environment before startin
 
 ---
 
-### Bug 9 — Full `route_task` high-complexity paid routing falls back to local after OpenRouter attempt (confirmed 2026-05-19)
+### Bug 9 — Full `route_task` high-complexity paid routing fell back to local after OpenRouter attempt (fixed 2026-05-19)
 
 **Symptom:** With `OPENROUTER_API_KEY` configured and `complexity: 0.9`, `preemptive_route_task` correctly selects `gpt-4o` with `costClass: "paid"`. A full `route_task` with a tiny high-complexity prompt does not return a paid/OpenRouter final result. It logs an OpenRouter execution error for `openrouter/pareto-code`, then returns a local `qwen2.5-coder:7b` final result.
 
 **Cost guard used during test:** OpenRouter credits were checked through `GET https://openrouter.ai/api/v1/credits` before and after the run. Remaining balance stayed at `$1.644186`; no credits were consumed by the failed OpenRouter attempt. The project cost estimator reported `$0.0084` for the 120-token input / 80-token output preflight, below `COST_THRESHOLD=0.02`.
 
-**Likely root cause:** `route_task` computes an initial decision, but then the full execution path delegates to `codeTaskCoordinator`, which decomposes the task and performs its own per-subtask model selection. That second selector can choose OpenRouter free/remote models or local models independently of the initial paid decision. The observed OpenRouter model failure is also opaque (`Error executing task with OpenRouter model openrouter/pareto-code: [{}]`), so the actual provider/API rejection needs clearer surfacing.
+**Root cause:** `route_task` computed an initial paid decision, but then delegated execution to `codeTaskCoordinator`, which decomposed the task and performed its own per-subtask model selection. That second selector could choose OpenRouter free/remote models or local models independently of the initial paid decision. The selected paid model was also an alias (`gpt-4o`) instead of an OpenRouter catalog id (`openai/gpt-4o`), which made provider execution brittle.
 
-**Status:** ⏳ Not started — needs investigation. Do not rerun paid attempts repeatedly; first inspect `codeTaskCoordinator` / `codeModelSelector` routing alignment and improve OpenRouter error reporting.
+**Fix:** Paid `route_task` decisions now execute directly through `taskExecutor` with the selected OpenRouter model instead of being silently reselected by `codeTaskCoordinator`. Paid model selection now asks the registered paid provider for real model ids and prefers `openai/gpt-4o` / `openai/gpt-4o-mini` when available. The selected paid model gets its own `COST_THRESHOLD` check before execution.
+
+**Status:** ✅ Fixed — 2026-05-19. Live MCP verification with `OPENROUTER_FREE_ONLY=false`: `route_task` returned `providerId: "openrouter"`, `costClass: "paid"`, `modelId: "openai/gpt-4o"`, estimated cost `$0.0036`, valid content `{"status":"paid-openrouter-ok","check":"route_task"}`, and monitoring metadata. OpenRouter credits changed from `$1.635033553` remaining to `$1.634338553`, about `$0.000695` consumed.
 
 ---
 
 ## End-to-End Functional Test Status (2026-05-19)
 
-Tested from Claude Code desktop on System A. OpenRouter not configured.
+Tested from Claude Code desktop on System A. OpenRouter is configured locally for bounded paid-routing checks; paid execution remains opt-in with `OPENROUTER_FREE_ONLY=false`.
 
 | Tool | Status | Notes |
 |---|---|---|
@@ -815,7 +817,7 @@ Tested from Claude Code desktop on System A. OpenRouter not configured.
 | `route_task` — local execution, `qwen2.5-coder:3b` | ✅ Works | Router selects 3b for all local tasks; multiple tasks confirmed 2026-05-19 |
 | `route_task` — local execution, `qwen3:4b` | ⚠️ Not independently confirmed | Router never selects `qwen3:4b`; see Bug 8 |
 | `route_task` — local execution, `gemma4:26b` | ❌ Too slow | Bug 7 — 26B model exceeds timeout on 4GB VRAM hardware |
-| `route_task` — paid/OpenRouter routing | ⚠️ Partially verified | `preemptive_route_task` selects `gpt-4o` for complexity 0.9. Full `route_task` attempted OpenRouter (`openrouter/pareto-code`) but fell back to local `qwen2.5-coder:7b`; no OpenRouter credits were consumed. |
+| `route_task` — paid/OpenRouter routing | ✅ Works | Fixed 2026-05-19. With `OPENROUTER_FREE_ONLY=false`, full MCP `route_task` returned paid `openai/gpt-4o` via OpenRouter and consumed about `$0.000695`. |
 | `benchmark_task` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call ran `qwen2.5-coder:3b` once in ~9.4s |
 | `benchmark_tasks` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call returned a two-task summary |
 | `retriv_init` | ⚪ Untested | No blocking dependencies; needs dedicated test session |
@@ -851,7 +853,7 @@ After running 5 additional tasks, the router consistently selects `qwen2.5-coder
 **Next test targets:**
 1. ~~`route_task` with a simple TypeScript task~~ ✅ Done
 2. ~~Test `qwen2.5-coder:3b` via `route_task`~~ ✅ Done — consistently selected, confirmed working
-3. `route_task` with complexity 0.9 → expect paid routing (fails gracefully without OpenRouter key) — ⚠️ Partial 2026-05-19: preemptive route selects paid `gpt-4o`; full route attempted OpenRouter then returned local `qwen2.5-coder:7b`
+3. ~~`route_task` with complexity 0.9 → expect paid routing~~ ✅ Done — full MCP route returned paid `openai/gpt-4o` via OpenRouter with cost below threshold
 4. ~~`benchmark_task` after Bug 3 is fixed~~ ✅ Done — one live MCP call confirmed
 5. Re-test `qwen2.5-coder:7b` and `qwen3:4b` selection after benchmarks populate performance history
 6. Full smoke test with all tools documented in `docs/client-compatibility.md`

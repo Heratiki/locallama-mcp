@@ -15,7 +15,7 @@ import { codeModelSelector } from './services/codeModelSelector.js';
 import { modelPerformanceTracker } from './services/modelPerformance.js';
 import { lmStudioModule } from '../lm-studio/index.js';
 import { ollamaModule } from '../ollama/index.js';
-import { isProviderLocal } from '../core/provider/index.js';
+import { getProviderRegistry, isProviderLocal } from '../core/provider/index.js';
 // import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
 /**
  * Represents a single factor in the routing decision.
@@ -551,11 +551,31 @@ export const decisionEngine = {
       const bestModel = await modelSelector.getBestLocalModel(complexity, totalTokens);
       return bestModel?.id || config.defaultLocalModel;
     } else {
-      if (complexity >= COMPLEXITY_THRESHOLDS.COMPLEX) {
-        return 'gpt-4o';
-      } else {
-        return 'gpt-3.5-turbo';
+      const preferredModelIds = complexity >= COMPLEXITY_THRESHOLDS.COMPLEX
+        ? ['openai/gpt-4o', 'openai/gpt-4o-mini']
+        : ['openai/gpt-4o-mini', 'openai/gpt-4o'];
+
+      for (const paidProvider of getProviderRegistry().listByCostClass('paid')) {
+        try {
+          const models = await paidProvider.listModels();
+          const suitableModels = models.filter(model => !model.contextWindow || model.contextWindow >= totalTokens);
+          const preferredModel = preferredModelIds
+            .map(modelId => suitableModels.find(model => model.id === modelId))
+            .find((model): model is NonNullable<typeof model> => Boolean(model));
+
+          if (preferredModel) {
+            return preferredModel.id;
+          }
+
+          if (suitableModels.length > 0) {
+            return suitableModels[0].id;
+          }
+        } catch (error) {
+          logger.warn(`Failed to list paid provider models from ${paidProvider.id}:`, error);
+        }
       }
+
+      return complexity >= COMPLEXITY_THRESHOLDS.COMPLEX ? 'openai/gpt-4o' : 'openai/gpt-4o-mini';
     }
   },
 

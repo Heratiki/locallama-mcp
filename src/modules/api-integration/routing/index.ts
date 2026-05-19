@@ -4,7 +4,7 @@ import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
 import { IRouter, RouteTaskParams, RouteTaskResult, CancelJobResult } from './types.js';
-import { providerCostClass } from '../../core/provider/helpers.js';
+import { getProviderRegistry, providerCostClass } from '../../core/provider/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
 import { costEstimator } from '../cost-estimation/index.js';
@@ -16,6 +16,80 @@ import { Model } from '../../../types/index.js'; // Import Model type
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
 export class Router implements IRouter {
+  private async resolveProviderIdForModel(modelId: string, fallbackProviderId: string): Promise<string> {
+    const registry = getProviderRegistry();
+
+    for (const provider of registry.list()) {
+      try {
+        if (await provider.supportsModel(modelId)) {
+          return provider.id;
+        }
+      } catch (error) {
+        logger.debug(`Provider ${provider.id} support check failed for ${modelId}:`, error);
+      }
+    }
+
+    return fallbackProviderId === 'paid' ? 'openrouter' : fallbackProviderId;
+  }
+
+  private async executePaidDecisionDirectly(
+    params: RouteTaskParams,
+    decision: { provider: string; model: string; explanation?: string },
+    costEstimate: Awaited<ReturnType<typeof costEstimator.estimateCost>>,
+    retrivResults: RetrivSearchResult[],
+  ): Promise<RouteTaskResult | null> {
+    if (decision.provider !== 'paid') return null;
+    if (!config.openRouterApiKey) return null;
+
+    if (config.openRouterFreeOnly) {
+      logger.warn(
+        'Paid route_task decision reached, but OPENROUTER_FREE_ONLY is enabled. Continuing through normal fallback path.',
+      );
+      return null;
+    }
+
+    const selectedModelCostEstimate = await costEstimator.estimateCost({
+      contextLength: params.contextLength,
+      outputLength: params.expectedOutputLength || 0,
+      model: decision.model,
+    });
+
+    if (selectedModelCostEstimate.paid.cost.total > config.costThreshold) {
+      throw new Error(
+        `Paid route_task estimate $${selectedModelCostEstimate.paid.cost.total.toFixed(6)} exceeds COST_THRESHOLD=$${config.costThreshold.toFixed(6)}.`,
+      );
+    }
+
+    const providerId = await this.resolveProviderIdForModel(decision.model, decision.provider);
+    const jobId = `route-${uuidv4()}`;
+    const tracker = await getJobTracker();
+    await tracker.createJob(jobId, params.task, decision.model);
+
+    try {
+      const resultCode = await taskExecutor.executeTask(decision.model, params.task, jobId);
+      await tracker.completeJob(jobId, [resultCode]);
+
+      return {
+        model: decision.model,
+        providerId,
+        costClass: providerCostClass(providerId),
+        provider: providerId,
+        reason:
+          `Paid routing decision preserved and executed directly with ${decision.model}. ` +
+          (decision.explanation ? decision.explanation : ''),
+        resultCode,
+        estimatedCost: selectedModelCostEstimate.paid.cost.total,
+        details: {
+          costEstimate: selectedModelCostEstimate,
+          retrivResults: retrivResults.length > 0 ? retrivResults : undefined,
+        },
+      };
+    } catch (error) {
+      await tracker.failJob(jobId, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
   /**
    * Route a coding task to either a local LLM, Free API LLM, or paid API LLM based on cost and complexity
    */
@@ -75,6 +149,15 @@ export class Router implements IRouter {
         complexity: params.complexity || 0.5,
         priority: params.priority || 'quality',
       });
+
+      const paidResult = await this.executePaidDecisionDirectly(
+        params,
+        decision,
+        costEstimate,
+        retrivResults,
+      );
+
+      if (paidResult) return paidResult;
 
       // --- Full Task Processing via Coordinator ---
       logger.info('Proceeding with full task processing (decomposition, execution, synthesis)');
