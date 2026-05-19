@@ -228,4 +228,27 @@ describe('benchmarkModel', () => {
 
     expect(result.providerId).toBe('test-provider');
   });
+
+  it('resolves provider-prefixed model ids when requested id is unprefixed', async () => {
+    modelRegistryMock.getModel.mockReturnValue(undefined);
+
+    // Provider only claims support for prefixed id, not bare id.
+    supportsModelMock.mockImplementation((id: string) => id === 'test-provider:google/gemma-4-e4b');
+    fakeProvider.listModels.mockResolvedValueOnce([
+      {
+        id: 'test-provider:google/gemma-4-e4b',
+        displayName: 'Gemma 4 E4B',
+        contextWindow: 4096,
+        costPerToken: { prompt: 0, completion: 0 },
+      },
+    ]);
+
+    await benchmarkModel({
+      modelId: 'google/gemma-4-e4b',
+      taskCategories: ['chat'],
+    });
+
+    expect(executeTaskMock).toHaveBeenCalled();
+    expect(executeTaskMock.mock.calls[0]?.[0]).toBe('test-provider:google/gemma-4-e4b');
+  });
 });

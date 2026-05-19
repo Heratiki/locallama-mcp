@@ -128,6 +128,7 @@ REMOVE_STALE_LOCK_FILES=true
 | 2026-05-19 | targeted live MCP | 2 | 0 | 0 | Verified `benchmark_task` and `benchmark_tasks` dispatcher fixes through the MCP stdio path. `benchmark_task` ran one `qwen2.5-coder:3b` inference for a debounce regression task in ~9.4s. `benchmark_tasks` returned a two-task summary using cached recent 3b benchmark data. |
 | 2026-05-19 | targeted paid-routing MCP | 2 | 0 | 0 | Checked OpenRouter credits (`$1.644186` remaining), then ran `get_cost_estimate` + `preemptive_route_task` for complexity 0.9. Preemptive selected paid `gpt-4o`; estimate was `$0.0084`. Full `route_task` attempted OpenRouter (`openrouter/pareto-code`) but returned local `qwen2.5-coder:7b`; balance unchanged afterward. |
 | 2026-05-19 | targeted paid-routing MCP | 2 | 0 | 0 | After Issue #12 fix, ran `get_cost_estimate` and full `route_task` with `OPENROUTER_FREE_ONLY=false`. Full route returned `providerId: openrouter`, `costClass: paid`, `modelId: openai/gpt-4o`, estimated cost `$0.0036`, valid JSON content, and monitoring metadata. OpenRouter remaining credits changed from `$1.635033553` to `$1.634338553` (~`$0.000695`). |
+| 2026-05-19 | focused lm-studio/openrouter-free validation | 3 | 0 | 0 | `benchmark_model` for LM Studio `google/gemma-4-e4b` no longer fails provider resolution; now returns structured result with `providerId: lm-studio` and `categoryResults.code`. Runtime execution still fails (`successRate: 0`). In same pass, `route_task` selected OpenRouter free models that failed with `invalid_request` (`baidu/cobuddy:free`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`). |
 
 **Full suite command used:**
 ```bash
@@ -170,6 +171,10 @@ Track issues found during operational testing here. This is separate from PLAN.m
 | 11 | P1 (fixed) | `src/index.ts` `setupToolCallHandler` | `benchmark_task` and `benchmark_tasks` listed as tools but returned `Unknown tool` | Dispatcher `switch` statement had no cases for the two legacy benchmark tools after the Section 6 benchmark refactor | **Fixed 2026-05-19**: added dispatcher cases, snake_case→camelCase argument normalization, and realistic dispatcher tests. Verified with targeted live MCP calls against Ollama `qwen2.5-coder:3b`. First live attempt exposed stale native dependency state (`sqlite3@5.1.7` invalid for Node 22); `npm install` reconciled to `sqlite3@6.0.1`. |
 | 12 | P2 (fixed) | `route_task` / `codeTaskCoordinator` | High-complexity full `route_task` did not preserve the paid routing decision | Initial decision engine selected paid `gpt-4o`, but full execution delegated to `codeTaskCoordinator`, which reselected per-subtask models independently. Paid model selection also returned aliases instead of OpenRouter catalog ids. | **Fixed 2026-05-19**: paid decisions now execute directly through `taskExecutor`, paid model selection returns real OpenRouter ids (`openai/gpt-4o` / `openai/gpt-4o-mini`), and selected-model cost is checked before execution. Live MCP route returned paid `openai/gpt-4o` and consumed ~`$0.000695`. |
 | 13 | P2 (fixed) | `cost-monitor/api.ts` | OpenRouter credit usage check hits stale `/api/v1/auth/credits` endpoint and receives 404 HTML | OpenRouter now exposes credits at `/api/v1/credits` with `{ data: { total_credits, total_usage } }` | **Fixed 2026-05-19**: updated endpoint/response parsing and added unit coverage. |
+| 14 | P1 (fixed) | `benchmark_model` provider resolution | `benchmark_model` rejected valid LM Studio model ids from `locallama://models` as "not found in any registered provider" | ID format mismatch: call path used unprefixed ids (for example `google/gemma-4-e4b`) while LM Studio provider support checks/listing could require provider-prefixed variants | **Fixed 2026-05-19**: benchmark path now resolves prefixed/non-prefixed id variants and executes with provider-native id. Verified in focused live pass: tool now resolves to `providerId: lm-studio` instead of failing resolution. |
+| 15 | P2 (open) | `lm-studio` runtime execution | LM Studio benchmark runs return structured results but all task executions fail (`successRate: 0`, empty output/error detail) | Runtime failure reason is currently opaque in logs/tool output; missing actionable diagnostics (transport/model-load/payload compatibility) | **Open (2026-05-19):** add execution diagnostics and reproduce with direct LM Studio provider calls to isolate timeout vs payload vs model-state failures. |
+| 16 | P2 (open) | OpenRouter free-model routing | `route_task` can choose OpenRouter free models that repeatedly fail with `invalid_request` | Free-model selection lacks live health filtering; selection can choose catalog entries that are currently unusable for given payload/profile | **Open (2026-05-19):** add free-model health gating (failure-aware denylist/quarantine) and fallback to next healthy free model before returning tool error content. |
+| 17 | P2 (open) | Cross-provider local runtime lifecycle | Switching local tasks between Ollama and LM Studio can leave previously loaded models resident in memory | No explicit unload handoff when local provider changes; stale model residency can waste VRAM/RAM and increase failure risk under memory pressure | **Open (new TODO, 2026-05-19):** before cross-provider local dispatch, unload inactive local models and verify with operational telemetry (memory usage + unload/load timing). |
 
 ### Severity legend
 - **P0** — Server crashes or hangs; all tests blocked
@@ -203,6 +208,15 @@ When you add a new MCP tool to the server, add a test case here:
 | `get_free_models` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
 | `clear_openrouter_tracking` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
 | `set_model_prompting_strategy` | Requires `OPENROUTER_API_KEY` (tool only registers with key) | Schema and dispatcher fixed 2026-05-18; add live test when OpenRouter key is available |
+
+---
+
+## Immediate provider hardening TODOs (added 2026-05-19)
+
+1. Add a focused LM Studio execution test path that logs transport status, provider error payloads, and model-load state when `benchmark_model` task execution fails.
+2. Add OpenRouter free-model health checks so repeatedly failing free models are temporarily excluded from routing.
+3. Add benchmark seeding checks for Ollama local models (`qwen2.5-coder:3b`, `qwen2.5-coder:7b`, `qwen3:4b`) to reduce first-run routing bias.
+4. Add explicit local-model unload behavior before cross-provider local handoff (Ollama ↔ LM Studio) to prevent stale VRAM/RAM usage.
 
 ---
 

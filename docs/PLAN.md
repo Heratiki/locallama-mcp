@@ -881,4 +881,26 @@ After running 5 additional tasks, the router consistently selects `qwen2.5-coder
   - ⚠️ Live multi-subtask decomposition still needs a reproducible task in this runtime to capture production logs.
 6. ✅ Full smoke test with all tools documented in `docs/client-compatibility.md` (registration + core execution coverage via operational smoke/routing/llm suites)
 
+### Provider stabilization backlog (added 2026-05-19)
+
+The focused live pass on 2026-05-19 confirms that provider wiring is now mostly correct but still partially failing at runtime. The following backlog is required to make Ollama, LM Studio, and OpenRouter free-model flows reliable.
+
+1. **LM Studio benchmark path parity (partially fixed, still open):**
+  - Fixed today: `benchmark_model` now resolves provider-prefixed/non-prefixed LM Studio ids correctly (`google/gemma-4-e4b` no longer fails with "model not found in any registered provider").
+  - Still failing: LM Studio benchmark execution for `google/gemma-4-e4b` returns opaque runtime failures; tool output is now structured but reports `successRate: 0`.
+  - Next work: add actionable LM Studio error diagnostics (HTTP status/body, timeout reason, model-load state) and validate prompt/task payload compatibility for `google/gemma-4-e4b`.
+
+2. **OpenRouter free-model reliability (open):**
+  - Observed today: full `route_task` frequently selects OpenRouter free models (`baidu/cobuddy:free`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`) that fail with `invalid_request`.
+  - Next work: add free-model health gating (temporary denylist/quarantine based on recent failure telemetry) so routing avoids repeatedly selecting currently failing models.
+
+3. **Ollama local routing/benchmark continuity (open):**
+  - `qwen2.5-coder:7b` routing consistency improved, but local model ranking still depends heavily on sparse benchmark history and can regress to smaller defaults.
+  - Next work: run bounded benchmark coverage for `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b`, then tighten fallback scoring so first-run noise does not dominate selection.
+
+4. **Cross-provider local model lifecycle (new TODO):**
+  - **TODO:** before switching a task between local runtimes (Ollama → LM Studio, LM Studio → Ollama), explicitly unload models that are no longer active.
+  - Rationale: prevent stale VRAM/RAM occupancy by previously loaded models and reduce memory-pressure failures during runtime switching.
+  - Implementation target: add a provider transition hook in task execution that performs safe unload, then logs unload/load timing and memory state for operational verification.
+
 

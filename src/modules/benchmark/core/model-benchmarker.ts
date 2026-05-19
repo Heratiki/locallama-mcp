@@ -7,6 +7,7 @@
  * pipeline introduced in Section 5.
  */
 import { getProviderRegistry } from '../../core/provider/index.js';
+import type { LLMProvider } from '../../core/provider/types.js';
 import { getModelRegistry } from '../../core/model/index.js';
 import type { BenchmarkSummary } from '../../core/model/types.js';
 import { evaluateQuality } from '../evaluation/quality.js';
@@ -104,6 +105,56 @@ export interface BenchmarkModelResult {
   summary: BenchmarkSummary;
 }
 
+const KNOWN_PROVIDER_PREFIXES = ['lm-studio', 'ollama', 'openrouter'] as const;
+
+function buildModelIdVariants(modelId: string, providerId?: string): string[] {
+  const variants = new Set<string>();
+  variants.add(modelId);
+
+  let bare = modelId;
+  for (const prefix of KNOWN_PROVIDER_PREFIXES) {
+    const withPrefix = `${prefix}:`;
+    if (bare.startsWith(withPrefix)) {
+      bare = bare.slice(withPrefix.length);
+      variants.add(bare);
+      break;
+    }
+  }
+
+  for (const prefix of KNOWN_PROVIDER_PREFIXES) {
+    variants.add(`${prefix}:${bare}`);
+  }
+  if (providerId) {
+    variants.add(`${providerId}:${bare}`);
+  }
+
+  return Array.from(variants);
+}
+
+async function resolveExecutableModelId(
+  provider: LLMProvider,
+  requestedModelId: string,
+): Promise<string> {
+  const variants = buildModelIdVariants(requestedModelId, provider.id);
+  try {
+    const providerModels = await provider.listModels();
+    const providerIds = new Set((providerModels ?? []).map((m) => m.id));
+    for (const variant of variants) {
+      if (providerIds.has(variant)) return variant;
+    }
+  } catch {
+    // Ignore listModels failures and fall back to supportsModel checks below.
+  }
+
+  // If provider list is stale, fall back to support checks on variants.
+  for (const variant of variants) {
+    const supported = await Promise.resolve(provider.supportsModel(variant));
+    if (supported) return variant;
+  }
+
+  return requestedModelId;
+}
+
 /**
  * Run categorised benchmarks for a specific model.
  *
@@ -128,16 +179,25 @@ export async function benchmarkModel(
   // 1. Resolve provider
   // -------------------------------------------------------------------------
   let providerId: string;
+  let executableModelId = modelId;
   const meta = modelRegistry.getModel(modelId);
   if (meta) {
     providerId = meta.providerId;
   } else {
     // Model not in registry yet — scan providers for one that claims to support it
     let found: string | undefined;
+    let foundModelId: string | undefined;
     for (const provider of registry.list()) {
-      const supported = await Promise.resolve(provider.supportsModel(modelId));
-      if (supported) {
-        found = provider.id;
+      const variants = buildModelIdVariants(modelId, provider.id);
+      for (const variant of variants) {
+        const supported = await Promise.resolve(provider.supportsModel(variant));
+        if (supported) {
+          found = provider.id;
+          foundModelId = variant;
+          break;
+        }
+      }
+      if (found) {
         break;
       }
     }
@@ -147,6 +207,7 @@ export async function benchmarkModel(
       );
     }
     providerId = found;
+    executableModelId = foundModelId ?? modelId;
   }
 
   const provider = registry.get(providerId);
@@ -156,8 +217,11 @@ export async function benchmarkModel(
     );
   }
 
+  // Canonicalize model id to what the provider currently exposes.
+  executableModelId = await resolveExecutableModelId(provider, executableModelId);
+
   logger.info(
-    `benchmark_model: starting for model '${modelId}' via provider '${providerId}', categories: [${taskCategories.join(', ')}]`,
+    `benchmark_model: starting for model '${modelId}' (exec='${executableModelId}') via provider '${providerId}', categories: [${taskCategories.join(', ')}]`,
   );
 
   await initBenchmarkDb();
@@ -182,11 +246,11 @@ export async function benchmarkModel(
     for (let taskIdx = 0; taskIdx < tasks.length; taskIdx++) {
       const benchTask = tasks[taskIdx];
       const contextWindow = meta?.contextWindow ?? 4096;
-      const timeoutMs = getDynamicTimeout(modelId, contextWindow, benchTask.complexity);
+      const timeoutMs = getDynamicTimeout(executableModelId, contextWindow, benchTask.complexity);
       const startMs = Date.now();
 
       try {
-        const execResult = await provider.executeTask(modelId, benchTask.task, { timeoutMs });
+        const execResult = await provider.executeTask(executableModelId, benchTask.task, { timeoutMs });
         const elapsed = Date.now() - startMs;
         const quality = evaluateQuality(benchTask.task, execResult.content);
 
@@ -197,14 +261,14 @@ export async function benchmarkModel(
 
         // Persist each run to benchmarkDb (Section 6 acceptance criterion)
         await saveBenchmarkResult({
-          taskId: `bm_${modelId.replace(/[^a-z0-9]/gi, '_')}_${category}_${taskIdx}`,
+          taskId: `bm_${executableModelId.replace(/[^a-z0-9]/gi, '_')}_${category}_${taskIdx}`,
           task: benchTask.task,
           contextLength: benchTask.contextLength,
           outputLength:
             execResult.completionTokens ?? benchTask.expectedOutputLength,
           complexity: benchTask.complexity,
           local: {
-            model: modelId,
+            model: executableModelId,
             timeTaken: elapsed,
             successRate: 1,
             qualityScore: quality,
@@ -232,7 +296,7 @@ export async function benchmarkModel(
       } catch (err) {
         const elapsed = Date.now() - startMs;
         logger.warn(
-          `benchmark_model: ${category}[${taskIdx}] failed for '${modelId}': ${
+          `benchmark_model: ${category}[${taskIdx}] failed for '${executableModelId}': ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
@@ -288,7 +352,7 @@ export async function benchmarkModel(
   modelRegistry.updateBenchmarkSummary(modelId, registrySummary);
 
   logger.info(
-    `benchmark_model: completed for '${modelId}' (${providerId}) — overallSuccess=${overallSuccessRate.toFixed(2)}, overallQuality=${overallQuality.toFixed(2)}`,
+    `benchmark_model: completed for '${modelId}' (exec='${executableModelId}', ${providerId}) — overallSuccess=${overallSuccessRate.toFixed(2)}, overallQuality=${overallQuality.toFixed(2)}`,
   );
 
   return {
