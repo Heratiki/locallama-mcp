@@ -13,6 +13,9 @@ import { getCodeSearchEngine } from '../../cost-monitor/codeSearchEngine.js';
 import type { RetrivSearchResult } from '../retriv-integration/types.js';
 import { codeTaskCoordinator } from '../../decision-engine/services/codeTaskCoordinator.js'; // Import coordinator
 import { Model } from '../../../types/index.js'; // Import Model type
+import { getModelRegistry } from '../../core/model/index.js';
+import { countTokens } from '../../utils/tokenCount.js';
+import { ContextWindowError } from '../../utils/contextWindow.js';
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -203,6 +206,18 @@ export class Router implements IRouter {
         expectedOutputLength: params.expectedOutputLength || 0,
         priority: params.priority || 'quality',
       });
+
+      const modelWindows = getModelRegistry()
+        .listAll()
+        .map((model) => model.contextWindow)
+        .filter((contextWindow): contextWindow is number => Number.isFinite(contextWindow) && contextWindow > 0);
+      const maxKnownContextWindow = modelWindows.length > 0 ? Math.max(...modelWindows) : undefined;
+      if (maxKnownContextWindow !== undefined) {
+        const estimatedPromptTokens = countTokens(params.task);
+        if (estimatedPromptTokens > maxKnownContextWindow) {
+          throw new ContextWindowError('registered_models', estimatedPromptTokens, maxKnownContextWindow);
+        }
+      }
 
       // Load user preferences
       const userPreferences = await loadUserPreferences();

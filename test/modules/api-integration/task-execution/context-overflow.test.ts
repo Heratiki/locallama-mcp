@@ -29,6 +29,7 @@ const { ModelRegistry, _setModelRegistryForTests } = await import(
 const { TaskExecutor, ContextWindowError } = await import(
   '../../../../dist/modules/api-integration/task-execution/index.js'
 );
+const { countTokens } = await import('../../../../dist/modules/utils/tokenCount.js');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -60,15 +61,15 @@ describe('TaskExecutor — context-window enforcement', () => {
   });
 
   it('throws ContextWindowError when task exceeds model contextWindow', async () => {
-    // A task of 401 characters → ceil(401/4) = 101 tokens > contextWindow 100
-    const bigTask = 'x'.repeat(401);
+    const bigTask = 'token '.repeat(120);
+    const contextWindow = countTokens(bigTask) - 1;
 
     const modelReg = new ModelRegistry();
     modelReg.registerModel({
       id: 'small-model',
       providerId: 'ollama',
       displayName: 'Small Model',
-      contextWindow: 100,
+      contextWindow,
       capabilities: {
         chat: true,
         code: true,
@@ -89,14 +90,15 @@ describe('TaskExecutor — context-window enforcement', () => {
   });
 
   it('ContextWindowError has correct fields', async () => {
-    const bigTask = 'x'.repeat(401); // 101 tokens
+    const bigTask = 'token '.repeat(120);
+    const estimatedTokens = countTokens(bigTask);
 
     const modelReg = new ModelRegistry();
     modelReg.registerModel({
       id: 'small-model',
       providerId: 'ollama',
       displayName: 'Small Model',
-      contextWindow: 100,
+      contextWindow: estimatedTokens - 1,
       capabilities: {
         chat: true,
         code: true,
@@ -122,23 +124,23 @@ describe('TaskExecutor — context-window enforcement', () => {
     const err = caughtError as ContextWindowError;
     expect(err.name).toBe('ContextWindowError');
     expect(err.modelId).toBe('small-model');
-    expect(err.estimatedTokens).toBe(101);
-    expect(err.contextWindow).toBe(100);
+    expect(err.estimatedTokens).toBe(estimatedTokens);
+    expect(err.modelContextWindow).toBe(estimatedTokens - 1);
+    expect(err.contextWindow).toBe(estimatedTokens - 1);
     expect(err.message).toContain('small-model');
-    expect(err.message).toContain('101');
-    expect(err.message).toContain('100');
+    expect(err.message).toContain(String(estimatedTokens));
+    expect(err.message).toContain(String(estimatedTokens - 1));
   });
 
   it('does NOT throw ContextWindowError when task fits within contextWindow', async () => {
-    // A task of 40 characters → ceil(40/4) = 10 tokens < contextWindow 100
-    const smallTask = 'x'.repeat(40);
+    const smallTask = 'short task';
 
     const modelReg = new ModelRegistry();
     modelReg.registerModel({
       id: 'small-model',
       providerId: 'ollama',
       displayName: 'Small Model',
-      contextWindow: 100,
+      contextWindow: countTokens(smallTask),
       capabilities: {
         chat: true,
         code: true,

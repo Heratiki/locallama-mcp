@@ -5,26 +5,12 @@ import { getProviderRegistry } from '../../core/provider/registry.js';
 import { getModelRegistry } from '../../core/model/registry.js';
 import type { TaskExecutionOptions } from '../../core/provider/types.js';
 import { buildCodeTaskExecutionOptions } from '../../core/prompting/execution-profile.js';
-import { estimateTokens } from '../../utils/tokenCount.js';
+import {
+  assertPromptWithinContextWindow,
+  ContextWindowError,
+} from '../../utils/contextWindow.js';
 
-/**
- * Thrown when an estimated task token count exceeds the target model's
- * context window.  Callers (e.g. the MCP dispatcher) should catch this and
- * surface a structured error response rather than a generic message.
- */
-export class ContextWindowError extends Error {
-  readonly name = 'ContextWindowError' as const;
-  constructor(
-    public readonly modelId: string,
-    public readonly estimatedTokens: number,
-    public readonly contextWindow: number,
-  ) {
-    super(
-      `Task exceeds context window for model '${modelId}': ` +
-        `estimated ${estimatedTokens} tokens > limit ${contextWindow} tokens`,
-    );
-  }
-}
+export { ContextWindowError };
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -130,10 +116,12 @@ export class TaskExecutor implements ITaskExecutor {
     let lastError: Error | undefined;
 
     // Context-window enforcement: reject early if the task is too large.
-    const estimatedTokens = estimateTokens(task);
     const metaForCheck = modelRegistry.getModel(bareId) ?? modelRegistry.getModel(modelId);
-    if (metaForCheck && estimatedTokens > metaForCheck.contextWindow) {
-      throw new ContextWindowError(modelId, estimatedTokens, metaForCheck.contextWindow);
+    if (metaForCheck) {
+      assertPromptWithinContextWindow(
+        { id: modelId, provider: metaForCheck.providerId, contextWindow: metaForCheck.contextWindow },
+        task,
+      );
     }
 
     // 1. Registry lookup: model metadata tells us which provider to use.

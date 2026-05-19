@@ -10,6 +10,10 @@ import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../typ
 import { Model } from '../../../types/index.js';
 import { getJobTracker, JobStatus } from './jobTracker.js'; // Import job tracker
 import { config } from '../../../config/index.js';
+import {
+  assertPromptWithinContextWindow,
+  ContextWindowError,
+} from '../../utils/contextWindow.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -364,6 +368,7 @@ Output only the code required for this subtask. Do not include explanations unle
 
     // Log the prompt we're sending to the model
     logger.debug(`Prompt for subtask ${subtask.id}:\n${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}`);
+    assertPromptWithinContextWindow(model, prompt);
 
     const timeout = 180000; // 3 minutes timeout
 
@@ -407,6 +412,10 @@ Output only the code required for this subtask. Do not include explanations unle
       return resultText;
 
     } catch (error) {
+       if (error instanceof ContextWindowError) {
+         logger.warn(`Subtask ${subtask.id} exceeds context window for ${error.modelId}: ${error.estimatedTokens}/${error.modelContextWindow}`);
+         throw error;
+       }
        // Handle specific ModelNotFoundError from OpenRouter cache check
        if (error instanceof ModelNotFoundError) {
          logger.warn(`Model ${model.id} not found in ${model.provider} cache during execution.`);
@@ -599,6 +608,10 @@ Output only the code required for this subtask. Do not include explanations unle
         } else {
            logger.debug(`JobTracker not available, skipping job failure marking for subtask ${subtask.id}`);
         }
+
+        if (error instanceof ContextWindowError) {
+          throw error;
+        }
         
         // Still set the result, but with the error message
         results.set(subtask.id, `Error executing subtask: ${errorMessage}`);
@@ -671,6 +684,7 @@ Please provide only the integrated code, without explanations or wrappers, unles
           ? model.id.slice(model.provider.length + 1)
           : model.id;
         const provider = registry.get(model.provider) ?? registry.list().find((p) => p.supportsModel(bareId));
+        assertPromptWithinContextWindow(model, integrationPrompt);
 
         let resultText: string | undefined;
         if (provider) {
@@ -694,6 +708,10 @@ Please provide only the integrated code, without explanations or wrappers, unles
           logger.warn(`Integration step failed with model ${model.id}: no content returned`);
         }
       } catch (error) {
+        if (error instanceof ContextWindowError) {
+          logger.warn(`Integration step skipped for ${model.id}: ${error.message}`);
+          continue;
+        }
         logger.warn(`Error during integration step with model ${model.id}:`, error);
       }
     }

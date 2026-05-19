@@ -410,6 +410,56 @@ async function runSuite(client, serverEnv) {
       }
     });
 
+    await runTest('route_task — oversized prompt returns context_overflow', async () => {
+      const { countTokens } = await import('./dist/modules/utils/tokenCount.js');
+      const modelsResp = await client.readResource({ uri: 'locallama://models' });
+      const modelsText = modelsResp.contents?.[0]?.text;
+      let maxContextWindow = 256000;
+      try {
+        const parsedModels = JSON.parse(modelsText);
+        const models = Array.isArray(parsedModels) ? parsedModels : parsedModels.models ?? [];
+        const windows = models
+          .map((model) => Number(model.contextWindow ?? model.capabilities?.contextWindow))
+          .filter((value) => Number.isFinite(value) && value > 0);
+        if (windows.length > 0) maxContextWindow = Math.max(...windows);
+      } catch { /* keep conservative fallback */ }
+
+      const oversizedPrompt = [
+        'Return the word overflow after reading this intentionally oversized prompt.',
+        'token '.repeat(maxContextWindow + 1000),
+      ].join('\n');
+      assert(
+        countTokens(oversizedPrompt) > maxContextWindow,
+        'Test prompt is longer than the largest declared model context window'
+      );
+
+      const result = await client.callTool(
+        {
+          name: 'route_task',
+          arguments: {
+            task: oversizedPrompt,
+            context_length: 100,
+            expected_output_length: 10,
+            complexity: 0.1,
+            priority: 'cost',
+          },
+        },
+        undefined,
+        { timeout: 60_000 }
+      );
+
+      const text = extractText(result);
+      dim(`context_overflow response: ${text?.substring(0, 300)}`);
+      assert(!!text, 'route_task oversized prompt returns content');
+
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { /* fail below */ }
+      assert(parsed?.error === 'context_overflow', 'Oversized prompt returns context_overflow error');
+      assert(Number.isFinite(parsed?.estimatedTokens), 'context_overflow includes estimatedTokens');
+      assert(Number.isFinite(parsed?.modelContextWindow), 'context_overflow includes modelContextWindow');
+      assert(parsed.estimatedTokens > parsed.modelContextWindow, 'estimatedTokens exceeds modelContextWindow');
+    });
+
   }
 
   // ── 3. LLM: Real model calls via Ollama ───────────────────────────────────

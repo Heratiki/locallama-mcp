@@ -133,6 +133,7 @@ REMOVE_STALE_LOCK_FILES=true
 | 2026-05-19 | issue-15 startup-discovery fix validation | 2 | 0 | 0 | LM Studio provider now forces model refresh on startup (`initialize(true)`), and tracking file updates immediately with live LM Studio inventory (`qwen/qwen3.5-9b`, `google/gemma-4-e4b`, embeddings). Focused MCP `benchmark_model` on `google/gemma-4-e4b` (`tool-use`) succeeded with `successRate: 1`, confirming non-embedding LM Studio execution path works. |
 | 2026-05-19 | smoke (Issue 34 / Gap 5) | 30 | 0 | 0 | Added Windows-native smoke assertions for `rootDir` equality and artifact-path placement under expected root (`locallama.lock`, `ollama-models.json`, `data/benchmarks.db`). Also aligned benchmark DB default path to root-scoped `data/benchmarks.db` to avoid host-CWD drift. |
 | 2026-05-19 | routing (Issues 24+26 / Gap 2) | 6 | 0 | 0 | Added provider-availability assertion in routing suite. With `EXPECT_LOCAL_PROVIDER_DOWN=true`, `preemptive_route_task` returned non-local recommendation (`costClass=paid`) and suite passed: `Passed: 6 Failed: 0`. |
+| 2026-05-19 | routing (Issues 20+25 / Gap 8) | 11 | 0 | 0 | Added oversized-prompt `route_task` operational assertion. The suite constructs a prompt longer than the largest declared model context window and verifies the MCP tool response contains `error: "context_overflow"`, `estimatedTokens`, and `modelContextWindow` with no silent dispatch. |
 
 **Full suite command used:**
 ```bash
@@ -383,13 +384,15 @@ Issue 16 (free-model health gating) has no test coverage beyond the live observa
 
 ### Gap 8 — Token overflow detection (Issue 25)
 
-No test verifies that a prompt exceeding a model's context window is handled gracefully:
+2026-05-19 update: routing-suite coverage added and passed (`node test-operational.mjs --suite routing` -> `Passed: 11, Failed: 0`).
 
-- Construct a task string that is provably longer than `contextWindow` for the selected model.
-- Assert that the server returns a `context_overflow` error (or similar structured error) rather than dispatching and receiving a silent truncation.
-- Assert that the error message includes the estimated token count and the model's declared context window, so the developer can act on it.
+Completed checks:
 
-**Blocker:** Issues 20 (token counting) and 25 (context-window enforcement) must be implemented.
+- Construct a task string that is provably longer than the largest declared `contextWindow` exposed by `locallama://models`.
+- Assert that the server returns a structured `context_overflow` error rather than silently dispatching.
+- Assert that the error body includes `estimatedTokens` and `modelContextWindow`, and that `estimatedTokens > modelContextWindow`.
+
+**Status:** Completed for routing-suite baseline on 2026-05-19.
 
 ---
 

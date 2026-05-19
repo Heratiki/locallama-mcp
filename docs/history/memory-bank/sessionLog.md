@@ -66,3 +66,21 @@ Verification:
 
 Follow-ups:
 - Keep future state updates concise and dated in `docs/PROJECT_STATE.md`.
+
+## 2026-05-19 - Token Overflow Enforcement
+
+Author: Codex
+
+Summary:
+- Replaced the old character-based utility estimator with `js-tiktoken`-backed token counting.
+- Added a shared context-window guard and wired it into route-level overflow checks, direct task execution, and coordinator subtask/integration dispatch.
+- Updated MCP `route_task` error handling to return structured `context_overflow` JSON with estimated and declared context-window counts.
+- Added routing-suite operational coverage for a prompt larger than the largest declared model context window.
+
+Verification:
+- `npm run build` passes.
+- `npm test` passes: 33 suites / 234 tests.
+- `node test-operational.mjs --suite routing` passes: 11 passed / 0 failed.
+
+Follow-ups:
+- Task 5 in `docs/ROADMAP_ACTIVE.md` is now unblocked: per-provider backpressure/rate limiting and timeout strategy.

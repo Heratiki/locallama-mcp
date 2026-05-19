@@ -451,11 +451,11 @@ export class LocalLamaMcpServer {
                 content: [{
                   type: 'text' as const,
                   text: JSON.stringify({
-                    error: 'ContextWindowError',
+                    error: 'context_overflow',
                     message: error.message,
                     modelId: error.modelId,
                     estimatedTokens: error.estimatedTokens,
-                    contextWindow: error.contextWindow,
+                    modelContextWindow: error.modelContextWindow,
                   }),
                 }],
                 isError: true,

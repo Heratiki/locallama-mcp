@@ -33,6 +33,7 @@ and this file for the current snapshot.
 - OpenRouter credit usage now uses the current `/api/v1/credits` endpoint. Full paid `route_task` routing is fixed and live-verified: with `OPENROUTER_FREE_ONLY=false`, MCP `route_task` returned paid `openai/gpt-4o` via OpenRouter and consumed about `$0.000695`.
 - The MCP install/self-update feature is implemented in source (`src/modules/updater/index.ts`, `check_for_updates`, `update_server`, startup check). Older superpowers spec/plan files are historical implementation notes unless their status block says otherwise.
 - `docs/PLAN.md` and `docs/OPERATIONAL_TEST_PLAN.md` are the authoritative future-testing docs when they differ from older notes.
+- Task 4 in `docs/ROADMAP_ACTIVE.md` is complete as of 2026-05-19: routing now uses `js-tiktoken`-backed prompt token counting and returns structured `context_overflow` errors before dispatch when prompts exceed declared model context windows. Latest verification: `npm run build`, `npm test`, and `node test-operational.mjs --suite routing` pass.
 
 ## What to keep out of docs
 

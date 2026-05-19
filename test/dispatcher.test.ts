@@ -198,9 +198,11 @@ jest.unstable_mockModule('../dist/modules/api-integration/task-execution/index.j
   taskExecutor: { executeTask: jest.fn().mockResolvedValue('result') },
   TaskExecutor: jest.fn(() => ({ executeTask: jest.fn().mockResolvedValue('result') })),
   ContextWindowError: class ContextWindowError extends Error {
-    constructor(public modelId: string, public estimatedTokens: number, public contextWindow: number) {
+    public modelContextWindow: number;
+    constructor(public modelId: string, public estimatedTokens: number, contextWindow: number) {
       super(`ContextWindowError: ${modelId}`);
       this.name = 'ContextWindowError';
+      this.modelContextWindow = contextWindow;
     }
   },
 }));
@@ -281,6 +283,32 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
       jobProgressUriTemplate: 'locallama://jobs/progress/{jobId}',
     });
     expect(parsed.monitoring.note).toContain('live job updates');
+  });
+
+  it('returns a structured context_overflow body from route_task', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    const { ContextWindowError } = await import('../dist/modules/api-integration/task-execution/index.js');
+    mockRouteTask.mockRejectedValueOnce(new ContextWindowError('tiny-model', 42, 32));
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'route_task',
+          arguments: { task: 'oversized prompt', context_length: 42 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[]; isError?: boolean };
+    expect(typed.isError).toBe(true);
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed).toMatchObject({
+      error: 'context_overflow',
+      modelId: 'tiny-model',
+      estimatedTokens: 42,
+      modelContextWindow: 32,
+    });
   });
 
   it('routes preemptive_route_task to the routing module', async () => {
