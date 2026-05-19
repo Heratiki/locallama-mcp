@@ -1,6 +1,6 @@
 # Plan: Make LocaLLama MCP Provider-Agnostic and Local-First
 
-> **Current reader guide (updated 2026-05-19).** This file is both roadmap and historical record. For the fastest orientation, read this guide, then `docs/PROJECT_STATE.md`, then the **Known Bugs / Operational Fixes** and **End-to-End Functional Test Status** sections near the bottom of this file. Sections 0-9 document completed modernization work unless a later operational bug explicitly overrides them. The currently actionable work is: keep `npm run build` and `npm test` green on native Windows/macOS/Linux, fix the missing `benchmark_task` / `benchmark_tasks` dispatcher cases, then run local benchmarks so routing can distinguish `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b`.
+> **Current reader guide (updated 2026-05-19).** This file is both roadmap and historical record. For the fastest orientation, read this guide, then `docs/PROJECT_STATE.md`, then the **Known Bugs / Operational Fixes** and **End-to-End Functional Test Status** sections near the bottom of this file. Sections 0-9 document completed modernization work unless a later operational bug explicitly overrides them. The currently actionable work is: keep `npm run build` and `npm test` green on native Windows/macOS/Linux, run bounded local benchmarks so routing can distinguish `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b`, then re-test model selection.
 >
 > **Verification baseline (2026-05-19).** `npm run build` succeeds. `npm test` is now shell-agnostic because the script invokes `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of Unix-style `NODE_OPTIONS=...`; latest local result: 21 suites / 181 tests passing on Windows. `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but is not installed.
 >
@@ -620,13 +620,13 @@ Issues found during live testing of the MCP server against a real Ollama instanc
 
 **Symptom:** Calling `benchmark_task` or `benchmark_tasks` via MCP returns `MCP error -32603: Unknown tool`. Both tools are listed in `README.md` and their schemas are exposed in the MCP tool list, but the server cannot execute them.
 
-**Root cause (investigation pending):** The tool definitions almost certainly exist in `src/modules/api-integration/tool-definition/index.ts`, but the dispatch handler in `src/index.ts` does not have a `case 'benchmark_task':` / `case 'benchmark_tasks':` branch. This gap likely opened during the Section 6 refactor which restructured the benchmarking pipeline. The tool definitions were preserved but the dispatch cases were not ported.
+**Root cause:** The tool definitions existed in `src/modules/api-integration/tool-definition/index.ts`, but the dispatch handler in `src/index.ts` did not have `case 'benchmark_task':` / `case 'benchmark_tasks':` branches. This gap likely opened during the Section 6 refactor which restructured the benchmarking pipeline. The tool definitions were preserved but the dispatch cases were not ported.
 
-**Fix needed:** In `src/index.ts`, locate the `switch (toolName)` (or equivalent `if/else` chain) that dispatches tool calls. Add cases for `benchmark_task` and `benchmark_tasks` that delegate to the benchmark service — following the same pattern as `route_task` and `get_cost_estimate`. Also verify `benchmark_free_models` and `benchmark_model` (added in Section 6) are similarly affected.
+**Fix:** Added dispatcher cases in `src/index.ts` for `benchmark_task` and `benchmark_tasks`. The dispatcher now maps MCP snake_case arguments into `BenchmarkTaskParams`, applies safe defaults for optional `expected_output_length` and `complexity`, passes run overrides such as `runs_per_task` / `task_timeout`, and delegates to `benchmarkModule.benchmarkTask()` / `benchmarkModule.benchmarkTasks()`.
 
-**Status:** ⏳ Not started — needs implementation. A background task has been spawned to investigate the exact dispatch gap. See `src/index.ts` tool handler and `src/modules/benchmark/index.ts` for the entry points.
+**Status:** ✅ Fixed — 2026-05-19. `npm test` passes (21 suites / 184 tests). Focused dispatcher coverage added with realistic benchmark payloads. Live MCP verification: `benchmark_task` ran one local `qwen2.5-coder:3b` inference for `live-debounce-regression-guard` in ~9.4s; `benchmark_tasks` returned a two-task summary through the MCP tool path.
 
-**Note on scope:** `benchmark_task` and `benchmark_tasks` require a running local model to actually benchmark. End-to-end testing cannot complete until Bug 7 (model fit / timeout) is resolved with a model that runs at full GPU speed on this hardware.
+**Operational note:** The first live attempt failed before dispatch could complete because `node_modules` contained invalid `sqlite3@5.1.7` while `package.json` requires `sqlite3@^6.0.1`. Running `npm install` reconciled the dependency to `sqlite3@6.0.1`; `require('sqlite3')` then succeeded and live benchmark calls worked.
 
 ---
 
@@ -781,11 +781,11 @@ To enable OpenRouter: set `OPENROUTER_API_KEY` in the environment before startin
 3. Random jitter (up to +0.05) is inconsistent but small models already lead
 4. Once one task succeeds, `modelPerformance` history reinforces 3b for future calls
 
-**Fix needed:** Run `benchmark_task` for each local model to populate performance history. This is blocked by Bug 3 (dispatch gap in `src/index.ts`). Fix priority: **Bug 3 → benchmark all local models → router will select higher-capability models appropriately**.
+**Fix needed:** Run `benchmark_task` for each local model to populate performance history. Bug 3 is now fixed, so the next step is to benchmark `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b` with bounded, realistic tasks, then re-test route selection.
 
 **Workaround:** None without code changes. Alternatively, the `scoreModelForSubtask` function could apply a context-window or parameter-count heuristic to prefer larger models for higher complexity tasks when benchmark history is absent.
 
-**Status:** ⏳ Not started — blocked by Bug 3.
+**Status:** ⏳ Not started — unblocked by Bug 3 on 2026-05-19; needs local benchmark runs across the installed small models.
 
 ---
 
@@ -804,8 +804,8 @@ Tested from Claude Code desktop on System A. OpenRouter not configured.
 | `route_task` — local execution, `qwen3:4b` | ⚠️ Not independently confirmed | Router never selects `qwen3:4b`; see Bug 8 |
 | `route_task` — local execution, `gemma4:26b` | ❌ Too slow | Bug 7 — 26B model exceeds timeout on 4GB VRAM hardware |
 | `route_task` — paid/OpenRouter routing | ⚪ Untested | Requires `OPENROUTER_API_KEY`; not configured on System A |
-| `benchmark_task` | ❌ Unknown tool | Bug 3 — dispatch case missing in `src/index.ts` |
-| `benchmark_tasks` | ❌ Unknown tool | Bug 3 — same |
+| `benchmark_task` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call ran `qwen2.5-coder:3b` once in ~9.4s |
+| `benchmark_tasks` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call returned a two-task summary |
 | `retriv_init` | ⚪ Untested | No blocking dependencies; needs dedicated test session |
 | `retriv_search` | ⚪ Untested | Requires `retriv_init` first |
 | `cancel_job` | ⚪ Untested | Requires an active long-running job to cancel |
@@ -834,13 +834,13 @@ Multiple `route_task` calls across complexity 0.2–0.85 with both `cost` and `q
 
 After running 5 additional tasks, the router consistently selects `qwen2.5-coder:3b` for all local-tier tasks. `qwen2.5-coder:7b` and `qwen3:4b` were never selected. Root cause: the scoring algorithm (`codeModelSelector.ts`) heavily weights benchmark history. Without a prior `benchmark_task` run, all local models fall back to a heuristic score (~0.5 base). `qwen2.5-coder:3b` wins due to its "coder" name pattern boost (+0.1) plus random jitter. Once the first task succeeds, its `modelPerformance` history further reinforces its selection.
 
-**Implication:** To use `qwen2.5-coder:7b` or `qwen3:4b` as the primary inference model, run `benchmark_task` against each model first to populate performance history. This is blocked by Bug 3 (dispatch gap). Fix Bug 3 first, then run benchmarks to enable proper model ranking.
+**Implication:** To use `qwen2.5-coder:7b` or `qwen3:4b` as the primary inference model, run `benchmark_task` against each model first to populate performance history. Bug 3 is now fixed, so benchmark runs are unblocked; keep them bounded because large repeated runs can waste time on this hardware.
 
 **Next test targets:**
 1. ~~`route_task` with a simple TypeScript task~~ ✅ Done
 2. ~~Test `qwen2.5-coder:3b` via `route_task`~~ ✅ Done — consistently selected, confirmed working
 3. `route_task` with complexity 0.9 → expect paid routing (fails gracefully without OpenRouter key)
-4. `benchmark_task` after Bug 3 is fixed
+4. ~~`benchmark_task` after Bug 3 is fixed~~ ✅ Done — one live MCP call confirmed
 5. Re-test `qwen2.5-coder:7b` and `qwen3:4b` selection after benchmarks populate performance history
 6. Full smoke test with all tools documented in `docs/client-compatibility.md`
 

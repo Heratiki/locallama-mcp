@@ -14,7 +14,28 @@ Verification:
 
 Follow-ups:
 - `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but not installed.
-- `benchmark_task` and `benchmark_tasks` still need MCP dispatcher cases.
+- `benchmark_task` and `benchmark_tasks` still need MCP dispatcher cases. Addressed later on 2026-05-19; see the next entry.
+
+## 2026-05-19 — Benchmark Tool Dispatcher Fix
+
+Summary:
+- Added MCP dispatcher cases for `benchmark_task` and `benchmark_tasks` in `src/index.ts`.
+- Added argument normalization from MCP snake_case fields to `BenchmarkTaskParams`, including defaults for optional `expected_output_length` and `complexity`.
+- Added dispatcher tests with realistic refactor/debug/security benchmark payloads.
+
+Verification:
+- `npm run build` passes.
+- Focused dispatcher test passes: 10 tests.
+- `npm test` passes: 21 suites / 184 tests.
+- Targeted live MCP `benchmark_task` call against Ollama `qwen2.5-coder:3b` completed in ~9.4s.
+- Targeted live MCP `benchmark_tasks` call returned a two-task summary.
+
+Notes:
+- First live benchmark attempt exposed an environment dependency issue: `node_modules` had invalid `sqlite3@5.1.7` while `package.json` requires `^6.0.1`. Running `npm install` reconciled to `sqlite3@6.0.1`; `require('sqlite3')` then passed.
+
+Follow-ups:
+- Run bounded `benchmark_task` coverage across `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b`, then re-test route selection.
+- `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but not installed.
 
 ## 2026-04-24 Revival Work
 

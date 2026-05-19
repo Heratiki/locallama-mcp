@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import type { RouteTaskParams } from './modules/api-integration/routing/types.js';
 import type { CostEstimationParams } from './modules/api-integration/cost-estimation/types.js';
 import type { OpenRouterBenchmarkConfig } from './modules/api-integration/openrouter-integration/types.js';
+import type { BenchmarkConfig, BenchmarkTaskParams } from './types/index.js';
 import { createLockFile, isLockFilePresent, removeLockFile, getLockFileInfo } from './utils/lock-file.js';
 import type { LockFileInfo } from './utils/lock-file.js';
 import { setClientHints } from './modules/core/client/hints.js';
@@ -212,6 +213,52 @@ export class LocalLamaMcpServer {
                 };
               };
 
+              const toOptionalFiniteNumber = (value: unknown): number | undefined => {
+                if (value === undefined || value === null || value === '') return undefined;
+                const numeric = Number(value);
+                return Number.isFinite(numeric) ? numeric : undefined;
+              };
+
+              const ensureBenchmarkTaskParams = (rawTask: unknown, toolName: string): BenchmarkTaskParams => {
+                if (typeof rawTask !== 'object' || rawTask === null) {
+                  throw new Error(`Invalid benchmark task format for ${toolName}`);
+                }
+
+                const taskObj = rawTask as Record<string, unknown>;
+                const taskId = taskObj.task_id;
+                const task = taskObj.task;
+                const contextLength = toOptionalFiniteNumber(taskObj.context_length);
+
+                if (typeof taskId !== 'string' || !taskId || typeof task !== 'string' || !task || contextLength === undefined) {
+                  throw new Error(`Missing required benchmark task properties for ${toolName}`);
+                }
+
+                return {
+                  taskId,
+                  task,
+                  contextLength,
+                  expectedOutputLength: toOptionalFiniteNumber(taskObj.expected_output_length) ?? 512,
+                  complexity: toOptionalFiniteNumber(taskObj.complexity) ?? 0.5,
+                  localModel: typeof taskObj.local_model === 'string' ? taskObj.local_model : undefined,
+                  paidModel: typeof taskObj.paid_model === 'string' ? taskObj.paid_model : undefined,
+                  skipPaidModel: typeof taskObj.skip_paid_model === 'boolean' ? taskObj.skip_paid_model : undefined,
+                };
+              };
+
+              const benchmarkConfigOverridesFromArgs = (args: Record<string, unknown> | undefined): Partial<BenchmarkConfig> => {
+                const runsPerTask = toOptionalFiniteNumber(args?.runs_per_task);
+                const taskTimeout = toOptionalFiniteNumber(args?.task_timeout);
+                const maxParallelTasks = toOptionalFiniteNumber(args?.max_parallel_tasks);
+                const overrides: Partial<BenchmarkConfig> = {};
+
+                if (runsPerTask !== undefined) overrides.runsPerTask = runsPerTask;
+                if (taskTimeout !== undefined) overrides.taskTimeout = taskTimeout;
+                if (maxParallelTasks !== undefined) overrides.maxParallelTasks = maxParallelTasks;
+                if (typeof args?.parallel === 'boolean') overrides.parallel = args.parallel;
+
+                return overrides;
+              };
+
               switch (name) {
                 case 'route_task': {
                   const routeResult = await routingModule.routeTask(ensureRouteTaskParams(args));
@@ -245,6 +292,27 @@ export class LocalLamaMcpServer {
                 case 'get_free_models':
                   return await import('./modules/api-integration/openrouter-integration/index.js')
                     .then(module => module.getFreeModels(Boolean(args?.preemptive)));
+                case 'benchmark_task': {
+                  const { benchmarkModule } = await import('./modules/benchmark/index.js');
+                  return await benchmarkModule.benchmarkTask(
+                    ensureBenchmarkTaskParams(args, 'benchmark_task'),
+                    benchmarkConfigOverridesFromArgs(args)
+                  );
+                }
+                case 'benchmark_tasks': {
+                  if (!args?.tasks || !Array.isArray(args.tasks)) {
+                    throw new Error('benchmark_tasks requires a tasks array');
+                  }
+                  const { benchmarkModule } = await import('./modules/benchmark/index.js');
+                  const benchmarkConfig: BenchmarkConfig = {
+                    ...benchmarkModule.defaultConfig,
+                    ...benchmarkConfigOverridesFromArgs(args),
+                  };
+                  return await benchmarkModule.benchmarkTasks(
+                    args.tasks.map(task => ensureBenchmarkTaskParams(task, 'benchmark_tasks')),
+                    benchmarkConfig
+                  );
+                }
                 case 'benchmark_free_models':
                   return await import('./modules/api-integration/openrouter-integration/index.js')
                     .then(module => module.benchmarkFreeModels(ensureBenchmarkConfig(args)));

@@ -101,6 +101,41 @@ jest.unstable_mockModule('../dist/modules/api-integration/cost-estimation/index.
 }));
 
 // ---------------------------------------------------------------------------
+// Benchmark module
+// ---------------------------------------------------------------------------
+
+const mockBenchmarkTask = jest.fn<() => Promise<{ taskId: string; local: { model: string; successRate: number }; paid: { model: string; successRate: number } }>>()
+  .mockResolvedValue({
+    taskId: 'refactor-auth-token-refresh',
+    local: { model: 'qwen2.5-coder:7b', successRate: 0.82 },
+    paid: { model: 'skipped', successRate: 0 },
+  });
+
+const mockBenchmarkTasks = jest.fn<() => Promise<{ taskCount: number; local: { avgSuccessRate: number }; paid: { avgSuccessRate: number } }>>()
+  .mockResolvedValue({
+    taskCount: 3,
+    local: { avgSuccessRate: 0.76 },
+    paid: { avgSuccessRate: 0 },
+  });
+
+const mockDefaultBenchmarkConfig = {
+  runsPerTask: 1,
+  parallel: false,
+  maxParallelTasks: 1,
+  taskTimeout: 300000,
+  saveResults: true,
+  resultsPath: 'benchmark-results.json',
+};
+
+jest.unstable_mockModule('../dist/modules/benchmark/index.js', () => ({
+  benchmarkModule: {
+    defaultConfig: mockDefaultBenchmarkConfig,
+    benchmarkTask: mockBenchmarkTask,
+    benchmarkTasks: mockBenchmarkTasks,
+  },
+}));
+
+// ---------------------------------------------------------------------------
 // Heavy deps imported by index.ts at module level
 // ---------------------------------------------------------------------------
 
@@ -193,6 +228,8 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     mockPreemptiveRouteTask.mockClear();
     mockCancelJob.mockClear();
     mockEstimateCost.mockClear();
+    mockBenchmarkTask.mockClear();
+    mockBenchmarkTasks.mockClear();
   });
 
   it('registers a tool call handler with the MCP Server', () => {
@@ -275,6 +312,150 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     expect(mockCancelJob).toHaveBeenCalledWith('test-job-123');
     const typed = result as { content: { type: string; text: string }[] };
     expect(typed.content[0].type).toBe('text');
+  });
+
+  it('routes benchmark_task to the benchmark module with realistic client arguments', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'benchmark_task',
+          arguments: {
+            task_id: 'refactor-auth-token-refresh',
+            task: [
+              'Refactor an Express middleware that refreshes OAuth tokens.',
+              'Preserve the existing public API, add typed error handling,',
+              'and avoid retrying non-idempotent requests.',
+            ].join(' '),
+            context_length: 2400,
+            expected_output_length: 900,
+            complexity: 0.72,
+            local_model: 'qwen2.5-coder:7b',
+            skip_paid_model: true,
+            runs_per_task: 2,
+            task_timeout: 420000,
+          },
+        },
+      },
+      {},
+    );
+
+    expect(mockBenchmarkTask).toHaveBeenCalledTimes(1);
+    expect(mockBenchmarkTask).toHaveBeenCalledWith(
+      {
+        taskId: 'refactor-auth-token-refresh',
+        task: expect.stringContaining('Express middleware'),
+        contextLength: 2400,
+        expectedOutputLength: 900,
+        complexity: 0.72,
+        localModel: 'qwen2.5-coder:7b',
+        paidModel: undefined,
+        skipPaidModel: true,
+      },
+      {
+        runsPerTask: 2,
+        taskTimeout: 420000,
+      },
+    );
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed.local.model).toBe('qwen2.5-coder:7b');
+  });
+
+  it('routes benchmark_tasks to the benchmark module with varied real-world task shapes', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    await capturedHandler(
+      {
+        params: {
+          name: 'benchmark_tasks',
+          arguments: {
+            tasks: [
+              {
+                task_id: 'debug-streaming-json-parser',
+                task: 'Find and fix an intermittent JSON parsing bug in a Node stream pipeline where chunks may split UTF-8 characters.',
+                context_length: 1800,
+                expected_output_length: 700,
+                complexity: 0.64,
+                local_model: 'qwen2.5-coder:3b',
+              },
+              {
+                task_id: 'add-postgres-migration-guard',
+                task: 'Write a migration guard that prevents dropping a populated Postgres column unless an explicit override flag is present.',
+                context_length: 3200,
+                expected_output_length: 1100,
+                complexity: 0.81,
+                local_model: 'qwen2.5-coder:7b',
+              },
+              {
+                task_id: 'review-jwt-cache-security',
+                task: 'Review a JWT verification cache for replay and key-rotation risks and propose a minimal TypeScript patch.',
+                context_length: 4100,
+                expected_output_length: 1300,
+                complexity: 0.88,
+              },
+            ],
+            runs_per_task: 2,
+            parallel: true,
+            max_parallel_tasks: 2,
+            task_timeout: 480000,
+          },
+        },
+      },
+      {},
+    );
+
+    expect(mockBenchmarkTasks).toHaveBeenCalledTimes(1);
+    const [tasks, config] = mockBenchmarkTasks.mock.calls[0];
+    expect(tasks).toHaveLength(3);
+    expect(tasks[0]).toMatchObject({
+      taskId: 'debug-streaming-json-parser',
+      contextLength: 1800,
+      expectedOutputLength: 700,
+      complexity: 0.64,
+      localModel: 'qwen2.5-coder:3b',
+    });
+    expect(tasks[2]).toMatchObject({
+      taskId: 'review-jwt-cache-security',
+      expectedOutputLength: 1300,
+      complexity: 0.88,
+    });
+    expect(config).toMatchObject({
+      runsPerTask: 2,
+      parallel: true,
+      maxParallelTasks: 2,
+      taskTimeout: 480000,
+      saveResults: true,
+    });
+  });
+
+  it('does not overwrite benchmark defaults when optional run settings are omitted', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    await capturedHandler(
+      {
+        params: {
+          name: 'benchmark_task',
+          arguments: {
+            task_id: 'minimal-real-client-payload',
+            task: 'Patch a TypeScript helper so it handles null input without changing the exported API.',
+            context_length: 1200,
+          },
+        },
+      },
+      {},
+    );
+
+    expect(mockBenchmarkTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'minimal-real-client-payload',
+        contextLength: 1200,
+        expectedOutputLength: 512,
+        complexity: 0.5,
+      }),
+      {},
+    );
   });
 
   it('throws for an unknown tool name', async () => {

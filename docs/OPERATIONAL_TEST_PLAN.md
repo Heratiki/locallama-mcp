@@ -125,6 +125,7 @@ REMOVE_STALE_LOCK_FILES=true
 | 2026-05-18 | all | 25 | 0 | 4 | Smoke 17, Routing 5, LLM 3. LLM inference blocked by agent sandbox (EPERM on localhost:11434) — route_task returned graceful error content; structural assertions passed. route_task chose `gpt-oss:20b` for simple task (vs `gemma3n:e2b` from preemptive); full routing engine uses different selection path than preemptive. |
 | 2026-05-18 | all | 25 | 0 | 4 | After Issue #9 fix. `route_task` now correctly selects `gemma3n:e2b` for simple tasks. All routing paths (preemptive + full) consistently prefer the smallest available model for low-complexity tasks. |
 | 2026-05-18 | all | 29 | 0 | 4 | After Issue #10 fix. Added `retriv_init` + `retriv_search` dispatcher cases and functional test coverage. Smoke 21, Routing 5, LLM 3. Both routing paths consistently choose `gemma3n:e2b` for simple tasks. |
+| 2026-05-19 | targeted live MCP | 2 | 0 | 0 | Verified `benchmark_task` and `benchmark_tasks` dispatcher fixes through the MCP stdio path. `benchmark_task` ran one `qwen2.5-coder:3b` inference for a debounce regression task in ~9.4s. `benchmark_tasks` returned a two-task summary using cached recent 3b benchmark data. |
 
 **Full suite command used:**
 ```bash
@@ -164,6 +165,7 @@ Track issues found during operational testing here. This is separate from PLAN.m
 | 8 | P2 (resolved, arch decision) | `cost-monitor/bm25.ts` | Python `retriv` v0.2.3 unmaintainable; `numba` dependency cannot build on Python 3.11–3.14 | `retriv` is unmaintained (~2023); `numba` wheels absent for modern Python | **Resolved**: replaced entire Python subprocess bridge with native TypeScript Okapi BM25 implementation (`bm25.ts`). No Python required. `retriv_bridge.py` kept as historical reference only. `retriv_init` and `retriv_search` now always available. |
 | 9 | P2 (fixed) | `decision-engine/services/codeModelSelector.ts` | `route_task` routes simple tasks to `gpt-oss:20b` (13GB) instead of `gemma3n:e2b` (5.6GB) | Same root cause as Issue #5 but in `codeModelSelector.ts` (used by `route_task` via `codeTaskCoordinator`). `calculateComplexityMatchScore` regex for small models (`1\.5b|1b|3b|mini|tiny`) didn't include `2b`/`4b` and had no `e2b`→`2b` normalization. Both fallback and main scoring paths had the gap. | **Fixed 2026-05-18**: added `normalizedId` regex (`e2b`→`2b`, `e4b`→`4b`) and extended size regexes to `2b|3b|4b` (small), `9b|12b|14b` (medium), `20b|27b|32b|65b` (large) in both scoring paths. Verified: `route_task` on simple JS task now returns `ollama:gemma3n:e2b`. |
 | 10 | P2 (fixed) | `src/index.ts` `setupToolCallHandler` | `retriv_init` and `retriv_search` listed as registered tools but return `Unknown tool` when called | Dispatcher `switch` statement had no `case` blocks for `retriv_init` or `retriv_search` — tools were defined in schema but not wired to `RetrivIntegration` | **Fixed 2026-05-18**: added `case 'retriv_init'` and `case 'retriv_search'` to the dispatcher, mapping snake_case args to `RetrivIntegration.initializeRetriv()` and `.search()`. Added functional test coverage to the smoke suite. Verified: `retriv_init` indexes `src/config/` and `retriv_search` returns a result array. |
+| 11 | P1 (fixed) | `src/index.ts` `setupToolCallHandler` | `benchmark_task` and `benchmark_tasks` listed as tools but returned `Unknown tool` | Dispatcher `switch` statement had no cases for the two legacy benchmark tools after the Section 6 benchmark refactor | **Fixed 2026-05-19**: added dispatcher cases, snake_case→camelCase argument normalization, and realistic dispatcher tests. Verified with targeted live MCP calls against Ollama `qwen2.5-coder:3b`. First live attempt exposed stale native dependency state (`sqlite3@5.1.7` invalid for Node 22); `npm install` reconciled to `sqlite3@6.0.1`. |
 
 ### Severity legend
 - **P0** — Server crashes or hangs; all tests blocked
@@ -188,8 +190,8 @@ When you add a new MCP tool to the server, add a test case here:
 | Tool | Reason not covered | When to add |
 |---|---|---|
 | `cancel_job` | Requires a running job ID | After `route_task` async flow is verified |
-| `benchmark_task` | Makes LLM calls | Add to suite llm after basic routing passes |
-| `benchmark_tasks` | Makes multiple LLM calls | After single benchmark passes |
+| `benchmark_task` | ~~Makes LLM calls~~ | ✅ Targeted live MCP check passed 2026-05-19. Add to automated llm suite only with an opt-in flag to avoid slow routine runs. |
+| `benchmark_tasks` | ~~Makes multiple LLM calls~~ | ✅ Targeted live MCP check passed 2026-05-19 using cached recent 3b benchmark data. Add to automated llm suite only with an opt-in flag. |
 | `benchmark_model` | Makes LLM calls | After benchmark_task passes |
 | `benchmark_free_models` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
 | `retriv_init` | ~~Always available (native TS BM25)~~ | ✅ Added to smoke suite 2026-05-18 — indexes `src/config/`, verifies `success` and `summary` fields |
