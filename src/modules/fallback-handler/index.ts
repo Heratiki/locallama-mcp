@@ -146,9 +146,15 @@ export const fallbackHandler = {
         }
       }
 
-      const provider = getProviderRegistry().get(service);
+      const registry = getProviderRegistry();
+      const provider = registry.get(service);
       if (!provider) {
         logger.debug(`Provider '${service}' not registered`);
+        return false;
+      }
+      // Skip the actual network call when the circuit is open.
+      if (!registry.isAvailable(service)) {
+        logger.debug(`Provider '${service}' is unavailable (circuit open)`);
         return false;
       }
       return provider.isAvailable();
@@ -165,8 +171,9 @@ export const fallbackHandler = {
       const paidApiAvailable = await this.checkServiceAvailability('paid-api');
       if (paidApiAvailable) return 'paid-api';
     } else {
-      for (const p of getProviderRegistry().listByCostClass('local')) {
-        if (await p.isAvailable()) return p.id;
+      const registry = getProviderRegistry();
+      for (const p of registry.listByCostClass('local')) {
+        if (registry.isAvailable(p.id) && await p.isAvailable()) return p.id;
       }
     }
 

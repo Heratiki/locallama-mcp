@@ -6,8 +6,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const LOCK_FILE_NAME = 'locallama.lock';
-const rootDir = process.env.LOCALLAMA_ROOT_DIR || path.resolve(__dirname, '..', '..');
-const LOCK_FILE_PATH = path.join(rootDir, LOCK_FILE_NAME);
+
+// Compute the lock file path at call time so that LOCALLAMA_ROOT_DIR changes
+// (e.g. between tests) are always reflected without re-importing this module.
+function getLockFilePath() {
+  const rootDir = process.env.LOCALLAMA_ROOT_DIR || path.resolve(__dirname, '..', '..');
+  return path.join(rootDir, LOCK_FILE_NAME);
+}
 
 /**
  * Creates a lock file to prevent multiple instances of the server from running
@@ -23,8 +28,8 @@ export function createLockFile(additionalInfo = {}) {
       startTime: new Date().toISOString(),
       ...additionalInfo
     };
-    
-    fs.writeFileSync(LOCK_FILE_PATH, JSON.stringify(lockInfo), { flag: 'wx' });
+
+    fs.writeFileSync(getLockFilePath(), JSON.stringify(lockInfo), { flag: 'wx' });
   } catch (error) {
     if (error.code === 'EEXIST') {
       console.log('Lock file already exists.');
@@ -40,7 +45,7 @@ export function createLockFile(additionalInfo = {}) {
  * @returns {boolean} True if a lock file exists
  */
 export function isLockFilePresent() {
-  return fs.existsSync(LOCK_FILE_PATH);
+  return fs.existsSync(getLockFilePath());
 }
 
 /**
@@ -48,8 +53,9 @@ export function isLockFilePresent() {
  */
 export function removeLockFile() {
   try {
-    if (fs.existsSync(LOCK_FILE_PATH)) {
-      fs.unlinkSync(LOCK_FILE_PATH);
+    const lockFilePath = getLockFilePath();
+    if (fs.existsSync(lockFilePath)) {
+      fs.unlinkSync(lockFilePath);
       console.log('Lock file removed.');
     }
   } catch (error) {
@@ -63,8 +69,9 @@ export function removeLockFile() {
  */
 export function getLockFileInfo() {
   try {
-    if (fs.existsSync(LOCK_FILE_PATH)) {
-      const lockFileContent = fs.readFileSync(LOCK_FILE_PATH, 'utf8');
+    const lockFilePath = getLockFilePath();
+    if (fs.existsSync(lockFilePath)) {
+      const lockFileContent = fs.readFileSync(lockFilePath, 'utf8');
       try {
         return JSON.parse(lockFileContent);
       } catch (parseError) {
@@ -97,26 +104,14 @@ export function isLockFileProcessRunning() {
     if (!lockInfo || !lockInfo.pid) {
       return false;
     }
-    
-    // Different ways to check if a process is running depending on platform
-    if (process.platform === 'win32') {
-      try {
-        // On Windows, we can use tasklist and search for the PID
-        const { execSync } = require('child_process');
-        execSync(`tasklist /FI "PID eq ${lockInfo.pid}" /NH`);
-        return true;
-      } catch (error) {
-        return false; // Process not found
-      }
-    } else {
-      // On Unix-like systems (Linux, macOS), we can just try to send signal 0
-      // which doesn't actually send a signal but checks if the process exists
-      try {
-        process.kill(lockInfo.pid, 0);
-        return true;
-      } catch (error) {
-        return false; // Process not running
-      }
+
+    // signal(0) checks process existence without sending a real signal.
+    // Node.js supports this on all platforms including Windows (uses OpenProcess internally).
+    try {
+      process.kill(lockInfo.pid, 0);
+      return true;
+    } catch (error) {
+      return false;
     }
   } catch (error) {
     console.error('Error checking if lock file process is running:', error);

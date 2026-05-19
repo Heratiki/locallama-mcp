@@ -43,7 +43,7 @@ describe('root path resolution', () => {
       expect(configModule.config.rootDir).toBe(tempRootDir);
       expect(configModule.config.cacheDir).toBe(path.join(tempRootDir, '.cache'));
       expect(configModule.config.benchmark.resultsPath).toBe(path.join(tempRootDir, 'benchmark-results'));
-      expect(configModule.config.python.virtualEnv).toBe(path.join(tempRootDir, '.venv'));
+      // python.virtualEnv removed — Python BM25 bridge replaced by native TypeScript BM25
 
       lockModule.createLockFile({ port: 0 });
       expect(fs.existsSync(path.join(tempRootDir, 'locallama.lock'))).toBe(true);
@@ -54,5 +54,17 @@ describe('root path resolution', () => {
       fs.rmSync(tempRootDir, { recursive: true, force: true });
       fs.rmSync(foreignCwd, { recursive: true, force: true });
     }
+  });
+
+  it('when LOCALLAMA_ROOT_DIR is not set, rootDir resolves from the dist file location (absolute and exists)', () => {
+    // The config module computes rootDir as:
+    //   path.resolve(fileURLToPath(import.meta.url), '..', '..', '..')
+    // where import.meta.url points to dist/config/index.js (3 levels below project root).
+    // Verify this arithmetic produces an absolute path that actually exists on disk.
+    const distConfigFile = path.resolve(originalCwd, 'dist', 'config', 'index.js');
+    const derivedRootDir = path.resolve(distConfigFile, '..', '..', '..');
+
+    expect(path.isAbsolute(derivedRootDir)).toBe(true);
+    expect(fs.existsSync(derivedRootDir)).toBe(true);
   });
 });

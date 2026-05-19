@@ -17,6 +17,7 @@ import type { LockFileInfo } from './utils/lock-file.js';
 import { setClientHints } from './modules/core/client/hints.js';
 import { checkForUpdates, runUpdate, runStartupCheck } from './modules/updater/index.js';
 import { getJobTrackerSync } from './modules/decision-engine/services/jobTracker.js';
+import { ContextWindowError } from './modules/api-integration/task-execution/index.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -155,6 +156,13 @@ export class LocalLamaMcpServer {
    */
   private async shutdown(): Promise<void> {
     logger.info('Shutting down LocalLama MCP Server...');
+    try {
+      // Stop health probe before closing the server transport.
+      const { getProviderRegistry } = await import('./modules/core/provider/index.js');
+      getProviderRegistry().stopHealthProbe();
+    } catch {
+      // Registry may not have been initialized; ignore.
+    }
     try {
       await this.server.close();
       logger.info('Server closed successfully');
@@ -438,6 +446,21 @@ export class LocalLamaMcpServer {
             };
           } catch (error) {
             logger.error(`Error executing tool ${name}:`, error);
+            if (error instanceof ContextWindowError) {
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: JSON.stringify({
+                    error: 'ContextWindowError',
+                    message: error.message,
+                    modelId: error.modelId,
+                    estimatedTokens: error.estimatedTokens,
+                    contextWindow: error.contextWindow,
+                  }),
+                }],
+                isError: true,
+              };
+            }
             throw error;
           }
         });
@@ -520,6 +543,9 @@ export class LocalLamaMcpServer {
         const ready = await registry.initAll();
         logger.info(`Provider registry initialized: [${ready.join(', ')}]`);
 
+        // Start periodic health probing (Issue 26 — 30 s interval).
+        registry.startHealthProbe();
+        logger.info('Provider health probe started (30 s interval)');
         // Seed the ModelRegistry with models from every initialized provider.
         // Errors from a single provider's listModels() are isolated.
         const { getModelRegistry } = await import('./modules/core/model/index.js');

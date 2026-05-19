@@ -9,3 +9,5 @@ export {
   localProviderLifecycle,
   _resetLocalProviderLifecycleForTests,
 } from './local-runtime-lifecycle.js';
+export { CircuitBreaker, CircuitState } from './circuit-breaker.js';
+export type { CircuitBreakerOptions } from './circuit-breaker.js';

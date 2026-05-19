@@ -197,6 +197,12 @@ jest.unstable_mockModule('../dist/modules/decision-engine/index.js', () => ({
 jest.unstable_mockModule('../dist/modules/api-integration/task-execution/index.js', () => ({
   taskExecutor: { executeTask: jest.fn().mockResolvedValue('result') },
   TaskExecutor: jest.fn(() => ({ executeTask: jest.fn().mockResolvedValue('result') })),
+  ContextWindowError: class ContextWindowError extends Error {
+    constructor(public modelId: string, public estimatedTokens: number, public contextWindow: number) {
+      super(`ContextWindowError: ${modelId}`);
+      this.name = 'ContextWindowError';
+    }
+  },
 }));
 
 // ---------------------------------------------------------------------------
