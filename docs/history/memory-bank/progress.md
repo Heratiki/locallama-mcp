@@ -1,6 +1,20 @@
 # Project Progress
 
-Last updated: 2026-04-24
+Last updated: 2026-05-19
+
+## 2026-05-19 — Cross-Platform Test Script and Planning Doc Refresh
+
+Summary:
+- Replaced Unix-style `NODE_OPTIONS=...` npm test scripts with direct `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` invocations so `npm test` works on native Windows and remains portable to macOS/Linux.
+- Rewrote updater tests to use ESM-compatible Jest module mocks for `child_process` and `https`.
+- Added current-status notes to `docs/PLAN.md`, `docs/PROJECT_STATE.md`, and the install/self-update superpowers docs so future readers can quickly tell current work from historical implementation records.
+
+Verification:
+- `npm test` passes on native Windows: 21 suites / 181 tests.
+
+Follow-ups:
+- `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but not installed.
+- `benchmark_task` and `benchmark_tasks` still need MCP dispatcher cases.
 
 ## 2026-04-24 Revival Work
 

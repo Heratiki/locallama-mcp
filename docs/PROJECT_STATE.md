@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-05-18
+Last updated: 2026-05-19
 
 ## Purpose
 
@@ -23,9 +23,12 @@ and this file for the current snapshot.
 ## Current snapshot
 
 - Windows build currently works with the Node-based copy step.
+- `npm test` is now OS-agnostic: the package script calls Jest through `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of shell-specific `NODE_OPTIONS=...`.
+- Latest local verification on Windows: `npm run build` passes; `npm test` passes with 21 suites / 181 tests.
 - Benchmark npm scripts now invoke the root `run-benchmarks.js` CLI after build.
 - The benchmark runner uses discovered models from the server path, with optional CLI filtering via `benchmark-models.json`.
-- The repo still has open work around lint dependency drift, benchmark realism, and remaining routing modernization.
+- The repo still has open work around lint dependency drift, missing `benchmark_task` / `benchmark_tasks` dispatch, benchmark realism, and remaining routing modernization.
+- The MCP install/self-update feature is implemented in source (`src/modules/updater/index.ts`, `check_for_updates`, `update_server`, startup check). Older superpowers spec/plan files are historical implementation notes unless their status block says otherwise.
 - `docs/PLAN.md` and `docs/OPERATIONAL_TEST_PLAN.md` are the authoritative future-testing docs when they differ from older notes.
 
 ## What to keep out of docs

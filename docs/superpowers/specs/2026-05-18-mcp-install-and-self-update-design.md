@@ -3,7 +3,9 @@
 **Date:** 2026-05-18  
 **Branch:** future-testing  
 **Repo:** https://github.com/Heratiki/locallama-mcp  
-**Status:** Approved, pending implementation
+**Status:** Implemented in source as of 2026-05-19; retained as historical design context
+
+> **Current note (2026-05-19).** This design has been implemented in `src/modules/updater/index.ts`, `src/modules/api-integration/tool-definition/index.ts`, and `src/index.ts`. The current state is tracked in `docs/PROJECT_STATE.md` and `docs/PLAN.md`; use this document to understand the original design intent, not as an open implementation checklist.
 
 ---
 

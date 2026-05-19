@@ -1,5 +1,7 @@
 # MCP Install & Self-Update Implementation Plan
 
+> **Status (2026-05-19): Completed / historical.** The self-update module and MCP tools are implemented in source. Keep this file as a record of the execution plan; use `docs/PROJECT_STATE.md` and `docs/PLAN.md` for current work. The current verification baseline is `npm run build` passing and `npm test` passing with 21 suites / 181 tests on native Windows.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix Windows build, add a self-update module with two MCP tools (`check_for_updates`, `update_server`), add a startup update check, then clone/build/register the server in Claude Code.

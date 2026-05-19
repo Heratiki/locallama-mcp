@@ -43,6 +43,7 @@ Do not store secrets, API keys, private prompts, or sensitive logs in tracked do
 - `npm test` - Run all tests
 - `npm test:watch` - Run tests in watch mode
 - Tests live in `test/` and mirror `src/`
+- The test scripts are OS-agnostic: they invoke Jest through `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of shell-specific environment-variable syntax.
 
 ### Code Quality
 

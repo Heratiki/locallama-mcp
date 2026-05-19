@@ -1,5 +1,11 @@
 # Plan: Make LocaLLama MCP Provider-Agnostic and Local-First
 
+> **Current reader guide (updated 2026-05-19).** This file is both roadmap and historical record. For the fastest orientation, read this guide, then `docs/PROJECT_STATE.md`, then the **Known Bugs / Operational Fixes** and **End-to-End Functional Test Status** sections near the bottom of this file. Sections 0-9 document completed modernization work unless a later operational bug explicitly overrides them. The currently actionable work is: keep `npm run build` and `npm test` green on native Windows/macOS/Linux, fix the missing `benchmark_task` / `benchmark_tasks` dispatcher cases, then run local benchmarks so routing can distinguish `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b`.
+>
+> **Verification baseline (2026-05-19).** `npm run build` succeeds. `npm test` is now shell-agnostic because the script invokes `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of Unix-style `NODE_OPTIONS=...`; latest local result: 21 suites / 181 tests passing on Windows. `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but is not installed.
+>
+> **Self-update status (2026-05-19).** The install/self-update design is implemented in source: `src/modules/updater/index.ts`, `check_for_updates`, `update_server`, and startup update checks are wired. Older superpowers design/plan files are retained as implementation history, not as the current task list.
+
 > **Audit note (2026-05-14).** The prior version of this plan marked sections 1–6 as ✅ Completed. A code audit found those completions are stubs or broken: `ProviderRegistry` is referenced but the file does not exist, `ModelRegistry` is a 32-line stub that is never populated, two conflicting `TaskExecutor` classes exist and neither is wired into routing, `CapabilityDetector` only proxies `ModelMetadata.capabilities` and throws on any unregistered model, and `benchmarkModel()` is an unreferenced placeholder. Forty-five hardcoded `provider === 'local'|'lm-studio'|'ollama'|'openrouter'` conditionals remain across the decision-engine, benchmark, and fallback-handler modules. **All sections below are reset to a real status. The prior "agnostic" code must be either finished or removed before further work — it currently breaks the build.**
 
 ---

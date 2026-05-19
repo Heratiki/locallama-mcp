@@ -29,6 +29,22 @@ This document tracks key architectural and technical decisions made throughout t
 23. [Begin Implementation Phase (2/25/2025)](#2252025---begin-implementation-phase)
 24. [Memory Bank Initialization (2/25/2025)](#2252025---memory-bank-initialization)
 
+## 2026-05-19 - Cross-Platform Jest Invocation
+
+**Context:** The repository had a Windows-native build script, but `npm test` still used Unix-style `NODE_OPTIONS=--experimental-vm-modules ...`, which fails under Windows `cmd` before Jest starts.
+
+**Decision:** Invoke Jest through Node directly in `package.json`: `node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs`. Keep tests importing compiled `dist/` output by chaining `npm run build` first.
+
+**Rationale:**
+- The direct Node invocation is shell-agnostic and works on Windows, macOS, and Linux without adding a dependency.
+- It preserves the existing ESM/Jest behavior that requires `--experimental-vm-modules`.
+- It keeps `npm test` as the single canonical verification command for agents and humans.
+
+**Implementation:**
+- Updated `test` and `test:watch` scripts in `package.json`.
+- Updated updater tests to use ESM-compatible Jest mocks.
+- Verified `npm test` passes on Windows with 21 suites / 181 tests.
+
 ## 2/27/2025 - Free Model Benchmarking Improvements
 
 **Context:** The initial implementation of free model benchmarking had several limitations: it only tested a small number of models, didn't verify if the code actually worked, and prioritized well-known providers over potentially better but lesser-known models.
