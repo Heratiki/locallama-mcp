@@ -20,7 +20,7 @@ class OllamaProvider implements LLMProvider {
   private cachedModelIds = new Set<string>();
 
   async init(): Promise<void> {
-    await ollamaModule.initialize();
+    await ollamaModule.initialize(true);
     try {
       const models = await this.listModels();
       this.cachedModelIds = new Set(models.map((m) => m.id));

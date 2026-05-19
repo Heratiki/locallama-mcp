@@ -2,11 +2,16 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
 
 // Load environment variables from .env file
 dotenv.config();
-// Determine root directory in a way that works with both runtime and tests
-const rootDir = process.cwd();
+// Resolve project root from the compiled file location so the server works
+// regardless of what cwd the MCP host process uses when spawning us.
+// dist/config/index.js → dist/config/ → dist/ → project root (3 levels up).
+// LOCALLAMA_ROOT_DIR overrides for tests or custom deployments.
+const rootDir = process.env.LOCALLAMA_ROOT_DIR ||
+  path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 
 /**
  * Helper function to detect python executable with retriv installed
@@ -128,6 +133,7 @@ export interface Config {
   // Local LLM endpoints
   lmStudioEndpoint: string;
   ollamaEndpoint: string;
+  ollamaTimeout: number;
   localLlamaEndpoint: string; // Added local Llama endpoint
   
   // Model configuration
@@ -209,6 +215,7 @@ export const config: Config = {
   // Local LLM endpoints
   lmStudioEndpoint: process.env.LM_STUDIO_ENDPOINT || 'http://localhost:1234/v1',
   ollamaEndpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api',
+  ollamaTimeout: parseInt(process.env.OLLAMA_TIMEOUT || '300000', 10), // 5 min default; large models need it
   localLlamaEndpoint: process.env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api', // Added local Llama endpoint
   
   // Model configuration

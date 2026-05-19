@@ -578,3 +578,264 @@ The `retriv_init` / `retriv_search` tools originally used the Python [retriv](ht
 
 Do not reintroduce Python subprocess bridges for text-search features. If more advanced NLP is needed in future (dense retrieval, embeddings, etc.), prefer a native Node.js library or a dedicated sidecar service with a stable REST API.
 
+---
+
+## Known Bugs / Operational Fixes (2026-05-18)
+
+Issues found during live testing of the MCP server against a real Ollama instance. Fixes applied to both `src/` and the installed copy at `~/.claude/mcp-servers/locallama-mcp/`.
+
+### Bug 1 — Ollama model tracking cache goes stale; route_task always fails on local models
+
+**Symptom:** `route_task` returns `costClass: "local"`, picks a model (e.g. `gemma4:26b`), but execution fails with `"Model gemma4:26b not found in Ollama."` even though `curl http://localhost:11434/api/tags` and `/api/show` confirm the model exists.
+
+**Root cause:** `ollamaModule.initialize()` in `src/modules/ollama/provider.ts:23` is called with `forceUpdate = false` (the default). The 24-hour threshold in `ollamaModule.initialize` skips the live Ollama API query if `ollama-models.json` was written within the last 24 hours. The tracking file can contain a stale model list (e.g. models that were removed and replaced). The router selects the model from a *different* live API path, but the executor checks `this.modelTracking.models[modelId]` against the cached-to-disk list — causing a spurious "not found" error.
+
+**Fix:** `src/modules/ollama/provider.ts:23` — change `await ollamaModule.initialize()` to `await ollamaModule.initialize(true)`. This forces a live Ollama API query every time the provider initializes (i.e. on every server startup). The JSON file still caches metadata enrichment between restarts, but the model list is always authoritative from Ollama.
+
+**Status:** ✅ Fixed — 2026-05-18. Applied to source repo and installed copy.
+
+**Acceptance test:** Start the server, call `route_task` with `priority: "cost"` on a simple task. Response must not contain `"not found in Ollama"` and `costClass` must be `"local"` when Ollama is running with at least one model.
+
+---
+
+### Bug 2 — `ollama-models.json` in installed copy had phantom models
+
+**Symptom:** `ollama-models.json` listed `gpt-oss:20b`, `gemma3n:e2b`, `gemma3n:latest` — none of which were installed in Ollama. The only installed model was `gemma4:26b` (Q4_K_M, 25.8B). The file's `lastUpdated` timestamp was today, so Bug 1's 24h gate never triggered a refresh.
+
+**Root cause:** File was populated at some prior point with models that were subsequently removed or never installed on this machine.
+
+**Fix:** Wiped `ollama-models.json` to `{ "models": {}, "lastUpdated": "1970-01-01T00:00:00.000Z" }` so Bug 1's fix (forced refresh on startup) will repopulate it correctly.
+
+**Status:** ✅ Fixed — 2026-05-18. Applied to installed copy only (source repo file is git-ignored).
+
+---
+
+### Bug 3 — `benchmark_task` / `benchmark_tasks` tools return "Unknown tool" (dispatch gap)
+
+**Symptom:** Calling `benchmark_task` or `benchmark_tasks` via MCP returns `MCP error -32603: Unknown tool`. Both tools are listed in `README.md` and their schemas are exposed in the MCP tool list, but the server cannot execute them.
+
+**Root cause (investigation pending):** The tool definitions almost certainly exist in `src/modules/api-integration/tool-definition/index.ts`, but the dispatch handler in `src/index.ts` does not have a `case 'benchmark_task':` / `case 'benchmark_tasks':` branch. This gap likely opened during the Section 6 refactor which restructured the benchmarking pipeline. The tool definitions were preserved but the dispatch cases were not ported.
+
+**Fix needed:** In `src/index.ts`, locate the `switch (toolName)` (or equivalent `if/else` chain) that dispatches tool calls. Add cases for `benchmark_task` and `benchmark_tasks` that delegate to the benchmark service — following the same pattern as `route_task` and `get_cost_estimate`. Also verify `benchmark_free_models` and `benchmark_model` (added in Section 6) are similarly affected.
+
+**Status:** ⏳ Not started — needs implementation. A background task has been spawned to investigate the exact dispatch gap. See `src/index.ts` tool handler and `src/modules/benchmark/index.ts` for the entry points.
+
+**Note on scope:** `benchmark_task` and `benchmark_tasks` require a running local model to actually benchmark. End-to-end testing cannot complete until Bug 7 (model fit / timeout) is resolved with a model that runs at full GPU speed on this hardware.
+
+---
+
+---
+
+### Bug 4 — `rootDir` resolves to Node.js bin dir; all file writes go to wrong location
+
+**Symptom:** `ollama-models.json` never updates after server restart even with Bug 1 fixed. All file-based state (benchmark DB, model caches, lock file path) resolves to `C:\Program Files\nodejs\` instead of the project root.
+
+**Root cause:** `src/config/index.ts` line 9: `const rootDir = process.cwd()`. When Claude Code (or any MCP host) spawns the server process, it does not set `cwd` to the install directory — the working directory inherits from the host process (in this case `C:\Program Files\nodejs`). Every path built from `rootDir` (tracking files, benchmark DB, lock file, cache dir, etc.) resolves to the wrong location.
+
+**Fix:** Replace `process.cwd()` with a path derived from `import.meta.url` so the server always knows where it lives regardless of how it was spawned:
+```typescript
+import { fileURLToPath } from 'url';
+// dist/config/index.js → dist/config/ → dist/ → project root
+const rootDir = process.env.LOCALLAMA_ROOT_DIR ||
+  path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+```
+`LOCALLAMA_ROOT_DIR` env var still allows override for tests or custom deployments.
+
+**Status:** ✅ Fixed — 2026-05-18. Applied to `src/config/index.ts` in source repo and installed copy.
+
+**Acceptance test:** After restart, `ollama-models.json` at the install root is populated within a few seconds. `locallama.lock` appears at install root (not Node bin dir).
+
+---
+
+---
+
+### Bug 5 — `ERR_CANCELED` from AbortController not handled → always maps to `UNKNOWN` error
+
+**Symptom:** After fixing Bugs 1 and 4, `route_task` still returns `"Error executing task: unknown"` for every local Ollama call. Error classification is wrong.
+
+**Root cause:** When the 180-second `AbortController` fires (or if Axios cancels for any reason), Axios throws a `CanceledError` with `code: 'ERR_CANCELED'`. `handleOllamaError` in `src/modules/ollama/index.ts` only checks `axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ECONNABORTED'` — `ERR_CANCELED` is not listed and falls through to `OllamaErrorType.UNKNOWN`, which is not in the `switch` in `executeTask` and hits the `default: throw new Error(\`Error executing task: ${result.error}\`)` branch.
+
+**Fix:** Add `axiosError.code === 'ERR_CANCELED'` to the connection-failure check in `handleOllamaError`.
+
+**Status:** ✅ Fixed — 2026-05-18. Applied to source repo and installed copy.
+
+---
+
+### Bug 6 — Hardcoded 180-second Ollama timeout too short for large models; no env override
+
+**Symptom:** On hardware where inference is slow (e.g., `gemma4:26b` 25.8B Q4 taking >180s), every `route_task` call times out before the model responds. No env var to adjust without code changes.
+
+**Root cause:** `executeTask` in `src/modules/ollama/index.ts` hardcodes `const timeout = 180000` (3 minutes). A 25.8B model on CPU+integrated GPU takes 120+ seconds just to warm up, and production generation may exceed 3 minutes for non-trivial tasks.
+
+**Fix:** 
+1. Added `ollamaTimeout: parseInt(process.env.OLLAMA_TIMEOUT || '300000', 10)` to `src/config/index.ts` (5-minute default).
+2. Changed `executeTask` to use `config.ollamaTimeout` instead of the literal.
+
+**Status:** ✅ Fixed — 2026-05-18. Applied to source repo and installed copy. Set `OLLAMA_TIMEOUT=600000` in env for very large models.
+
+---
+
+### Bug 7 — `route_task` always fails for local models on hardware with small VRAM (confirmed 2026-05-19)
+
+**Symptom:** `route_task` returns SERVER_ERROR for every local Ollama call even after Bugs 1–6 are fixed. Direct diagnostic test confirms Ollama itself works fine — a raw `axios.post` to `/api/chat` succeeds in **~122 seconds** on the test system.
+
+**Root cause:** `gemma4:26b` (25.8B Q4_K_M, 18GB) runs with only 4GB VRAM and the rest on CPU. The `codeTaskCoordinator` builds a verbose multi-line prompt (~500+ tokens) for every subtask. At 4GB VRAM throughput on an AMD RX 5700 XT, inference takes 120–300+ seconds. The `OLLAMA_TIMEOUT` (even at 300s) may not be enough for the constructed prompt length, and Claude Code's MCP tool-call timeout may add an additional ceiling.
+
+**Fix (immediate):** Pull small models that fit fully in 4GB VRAM (see Model Guidance section below). `qwen2.5-coder:7b` at Q4_K_M fits in ~4GB and runs fully on GPU — expected inference time <10s on this hardware once warm.
+
+**Fix (longer-term):** The `codeTaskCoordinator` prompt template should be trimmed for local-model paths. 500-token system prompts with repeated context waste inference budget on small models. Consider a `LOCALLAMA_PROMPT_MODE=compact` env var that switches to a minimal prompt template when routing to local models.
+
+**Status:** ⚠️ Partially mitigated — timeout increased, correct error returned. Full resolution requires model swap (see below).
+
+---
+
+### Operational note — Two separate codebases to keep in sync
+
+The installed MCP server at `~/.claude/mcp-servers/locallama-mcp/` is a separate clone from the development repo at `~/source/locallama-mcp/`. Fixes must be applied to both, or the installed copy must be built from source. Consider switching the MCP config to point directly at the built `dist/` of the source repo to eliminate this dual-maintenance burden.
+
+---
+
+## Test System Profile
+
+> Hardware and configuration notes captured during live testing (2026-05-19). Update this section when testing on a new machine. Do not add usernames, hostnames, API keys, tokens, or file paths that contain usernames.
+
+### System A — Windows 11 workstation (primary dev machine, 2026-05-19)
+
+| Component | Detail |
+|---|---|
+| OS | Windows 11 Pro |
+| CPU | AMD Ryzen 7 3800X — 8 cores / 16 threads |
+| RAM | 32 GB |
+| GPU | AMD Radeon RX 5700 XT — **4 GB VRAM** |
+| Ollama backend | ROCm (AMD GPU acceleration) |
+| Node.js | v22 (via nvm) |
+
+**Key constraint:** 4 GB VRAM is the dominant limit. Models larger than ~7B Q4 (≈4 GB) spill to CPU and inference speed drops dramatically.
+
+**Observed inference times on this system:**
+
+| Model | Size on disk | VRAM used | Warm-up time | Short prompt |
+|---|---|---|---|---|
+| gemma4:26b Q4_K_M | 18 GB | ~6 GB (partial GPU) | >30s | ~122s |
+| qwen2.5-coder:7b Q4_K_M | ~4 GB | ~4 GB (full GPU) | expected <5s | expected <10s |
+
+**Issues specific to this system:**
+- Bug 7 (route_task timeout) triggered by gemma4:26b being too large for available VRAM.
+- `process.cwd()` resolves to `C:\Program Files\nodejs` when spawned by Claude Code — Bug 4.
+
+---
+
+## Model Guidance
+
+### Recommended models for 4 GB VRAM hardware (System A)
+
+Pull these before running end-to-end tests. They fit fully in GPU memory and give realistic inference speeds.
+
+```bash
+ollama pull qwen2.5-coder:7b   # best coding 7B; HumanEval ~85%; ~4GB VRAM
+ollama pull qwen2.5-coder:3b   # fast fallback; ~2GB VRAM; good for simple tasks
+ollama pull qwen3:4b           # general reasoning + coding; MoE architecture; ~2.5GB VRAM
+```
+
+**Do not use gemma4:26b for automated test runs on 4GB VRAM hardware.** It works for manual one-off queries (see `ollama run gemma4:26b`) but always exceeds the `OLLAMA_TIMEOUT` when called through the MCP server's prompt-building pipeline.
+
+### Model selection rationale (2026)
+
+- **qwen2.5-coder:7b** — Purpose-trained on code. Leads HumanEval among ≤8B models (~85%). 7B Q4_K_M fits in exactly 4GB. Recommended primary local model.
+- **qwen2.5-coder:3b** — Half the VRAM of the 7B, ~70% of the quality. Use as a fallback or for trivial tasks where speed matters.
+- **qwen3:4b** — Qwen3 is trained with RL on SWE-Bench for agentic multi-step workflows. Good complement to the coder variants for planning/reasoning steps.
+
+Sources: [Best Ollama Models 2026 (Morph)](https://www.morphllm.com/best-ollama-models) · [Local AI Coding Models (Local AI Master)](https://localaimaster.com/models/best-local-ai-coding-models) · [Open-Source LLMs 2026 (HuggingFace)](https://huggingface.co/blog/daya-shankar/open-source-llms)
+
+### Models requiring more VRAM (not suitable for System A without CPU offload)
+
+| Model | VRAM needed | Notes |
+|---|---|---|
+| qwen2.5-coder:32b | ~20 GB | Best coding model overall; needs 24GB GPU |
+| deepseek-r1:32b | ~20 GB | Best for reasoning/bug analysis; slow even on 24GB |
+| gemma4:26b Q4_K_M | ~18 GB | Already installed; use only for manual queries |
+
+---
+
+## OpenRouter Integration Status
+
+OpenRouter is **not configured** on the test system — no `OPENROUTER_API_KEY` env var is set. All OpenRouter-gated tools (`get_free_models`, `benchmark_free_models`, `set_model_prompting_strategy`, etc.) are correctly hidden from the MCP tool list when the key is absent.
+
+To enable OpenRouter: set `OPENROUTER_API_KEY` in the environment before starting the server (add to `.env` file at the project root, which is git-ignored). No code changes required.
+
+---
+
+### Bug 8 — Router never selects `qwen2.5-coder:7b` or `qwen3:4b`; all local tasks go to `qwen2.5-coder:3b` (confirmed 2026-05-19)
+
+**Symptom:** Every `route_task` call routes to `qwen2.5-coder:3b` regardless of `complexity` (0.2–0.85) or `priority` (`cost`/`quality`). `qwen2.5-coder:7b` and `qwen3:4b` are registered in Ollama and visible to the server, but are never selected.
+
+**Root cause:** `codeModelSelector.ts` scores models primarily on benchmark history (`modelPerformance` records). Without prior `benchmark_task` runs, all local models fall back to a heuristic score (~0.5 base). `qwen2.5-coder:3b` wins because:
+1. "coder" name pattern match adds +0.1 to base score
+2. Small model size gets an efficiency bonus (+0.1 in `efficiencyScore`)
+3. Random jitter (up to +0.05) is inconsistent but small models already lead
+4. Once one task succeeds, `modelPerformance` history reinforces 3b for future calls
+
+**Fix needed:** Run `benchmark_task` for each local model to populate performance history. This is blocked by Bug 3 (dispatch gap in `src/index.ts`). Fix priority: **Bug 3 → benchmark all local models → router will select higher-capability models appropriately**.
+
+**Workaround:** None without code changes. Alternatively, the `scoreModelForSubtask` function could apply a context-window or parameter-count heuristic to prefer larger models for higher complexity tasks when benchmark history is absent.
+
+**Status:** ⏳ Not started — blocked by Bug 3.
+
+---
+
+## End-to-End Functional Test Status (2026-05-19)
+
+Tested from Claude Code desktop on System A. OpenRouter not configured.
+
+| Tool | Status | Notes |
+|---|---|---|
+| `check_for_updates` | ✅ Works | Returns local/remote SHA correctly |
+| `get_cost_estimate` | ✅ Works | Returns cost breakdown for all tiers |
+| `preemptive_route_task` (low complexity, cost) | ✅ Works | Routes to local `qwen2.5-coder:7b` |
+| `preemptive_route_task` (high complexity, quality) | ✅ Works | Escalates to paid `gpt-4o` |
+| `route_task` — local execution, `qwen2.5-coder:7b` | ✅ Works | Returns working TypeScript code; confirmed 2026-05-19 |
+| `route_task` — local execution, `qwen2.5-coder:3b` | ✅ Works | Router selects 3b for all local tasks; multiple tasks confirmed 2026-05-19 |
+| `route_task` — local execution, `qwen3:4b` | ⚠️ Not independently confirmed | Router never selects `qwen3:4b`; see Bug 8 |
+| `route_task` — local execution, `gemma4:26b` | ❌ Too slow | Bug 7 — 26B model exceeds timeout on 4GB VRAM hardware |
+| `route_task` — paid/OpenRouter routing | ⚪ Untested | Requires `OPENROUTER_API_KEY`; not configured on System A |
+| `benchmark_task` | ❌ Unknown tool | Bug 3 — dispatch case missing in `src/index.ts` |
+| `benchmark_tasks` | ❌ Unknown tool | Bug 3 — same |
+| `retriv_init` | ⚪ Untested | No blocking dependencies; needs dedicated test session |
+| `retriv_search` | ⚪ Untested | Requires `retriv_init` first |
+| `cancel_job` | ⚪ Untested | Requires an active long-running job to cancel |
+
+**Results after pulling qwen2.5-coder:7b (2026-05-19):**
+
+`route_task` with complexity 0.3, priority cost → **✅ SUCCESS**. `qwen2.5-coder:7b` returned working TypeScript code via local Ollama. Full end-to-end local execution confirmed working once correct model is installed.
+
+```typescript
+// Actual output from qwen2.5-coder:7b via route_task:
+function validateEnvVars(requiredVars: string[]): void {
+  const missingVars: string[] = [];
+  for (const varName of requiredVars) {
+    if (!process.env[varName]) missingVars.push(varName);
+  }
+  if (missingVars.length > 0)
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+}
+```
+
+**Results for qwen2.5-coder:3b (2026-05-19):**
+
+Multiple `route_task` calls across complexity 0.2–0.85 with both `cost` and `quality` priority all routed to `qwen2.5-coder:3b`. The model produced correct TypeScript for debounce, LRU cache, typed event emitter, and async retry-with-backoff tasks. Code quality was solid; minor issues (lodash import in retry example) reflect model limitations not routing bugs.
+
+**Router model-selection observation (2026-05-19):**
+
+After running 5 additional tasks, the router consistently selects `qwen2.5-coder:3b` for all local-tier tasks. `qwen2.5-coder:7b` and `qwen3:4b` were never selected. Root cause: the scoring algorithm (`codeModelSelector.ts`) heavily weights benchmark history. Without a prior `benchmark_task` run, all local models fall back to a heuristic score (~0.5 base). `qwen2.5-coder:3b` wins due to its "coder" name pattern boost (+0.1) plus random jitter. Once the first task succeeds, its `modelPerformance` history further reinforces its selection.
+
+**Implication:** To use `qwen2.5-coder:7b` or `qwen3:4b` as the primary inference model, run `benchmark_task` against each model first to populate performance history. This is blocked by Bug 3 (dispatch gap). Fix Bug 3 first, then run benchmarks to enable proper model ranking.
+
+**Next test targets:**
+1. ~~`route_task` with a simple TypeScript task~~ ✅ Done
+2. ~~Test `qwen2.5-coder:3b` via `route_task`~~ ✅ Done — consistently selected, confirmed working
+3. `route_task` with complexity 0.9 → expect paid routing (fails gracefully without OpenRouter key)
+4. `benchmark_task` after Bug 3 is fixed
+5. Re-test `qwen2.5-coder:7b` and `qwen3:4b` selection after benchmarks populate performance history
+6. Full smoke test with all tools documented in `docs/client-compatibility.md`
+
+

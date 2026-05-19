@@ -586,8 +586,9 @@ export const ollamaModule = {
           logger.error('Ollama server error');
           return OllamaErrorType.SERVER_ERROR;
         }
-      } else if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ECONNABORTED') {
-        logger.error('Ollama connection refused or timed out');
+      } else if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ECONNABORTED' ||
+                 axiosError.code === 'ERR_CANCELED') {
+        logger.error('Ollama connection refused, timed out, or request canceled');
         return OllamaErrorType.SERVER_ERROR;
       }
     } else if (error.message.includes('context length')) {
@@ -1019,8 +1020,7 @@ export const ollamaModule = {
         throw new Error('Ollama endpoint not configured');
       }
       
-      // Determine the execution timeout (default to 3 minutes)
-      const timeout = 180000;
+      const timeout = config.ollamaTimeout;
       
       // Call the Ollama API
       const result = await this.callOllamaApi(modelId, task, timeout);
