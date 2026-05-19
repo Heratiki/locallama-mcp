@@ -1,6 +1,8 @@
 import { logger } from '../../../utils/logger.js';
 import { CostClass, LLMProvider } from './types.js';
 import { CircuitBreaker } from './circuit-breaker.js';
+import { ProviderRateLimiter } from './rate-limiter.js';
+import { config } from '../../../config/index.js';
 
 /**
  * Central registry of `LLMProvider` implementations. Lookups are by provider
@@ -20,6 +22,10 @@ export class ProviderRegistry {
   // --- Health probe (Issue 26) ---
   private healthProbeTimer: ReturnType<typeof setInterval> | undefined;
   private availabilityMap = new Map<string, boolean>();
+  private readonly rateLimiter = new ProviderRateLimiter({
+    maxConcurrentLocal: config.providerMaxConcurrentLocal,
+    maxConcurrentRemote: config.providerMaxConcurrentRemote,
+  });
 
   register(provider: LLMProvider): void {
     if (this.providers.has(provider.id)) {
@@ -106,6 +112,14 @@ export class ProviderRegistry {
     this.circuitBreaker.recordFailure(providerId);
   }
 
+  async executeWithConcurrencyLimit<T>(provider: LLMProvider, run: () => Promise<T>): Promise<T> {
+    return await this.rateLimiter.schedule(
+      provider.id,
+      provider.isLocal ? 'local' : 'remote',
+      run,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Health probe (Issue 26)
   // ---------------------------------------------------------------------------
@@ -174,6 +188,7 @@ export class ProviderRegistry {
     this.initialized.clear();
     this.stopHealthProbe();
     this.availabilityMap.clear();
+    this.rateLimiter.clear();
   }
 }
 

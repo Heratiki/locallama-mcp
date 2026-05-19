@@ -13,6 +13,7 @@ import {
   OllamaChatResponse,
   OllamaListModelsResponse
 } from './types.js';
+import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
@@ -587,9 +588,11 @@ export const ollamaModule = {
           logger.error('Ollama server error');
           return OllamaErrorType.SERVER_ERROR;
         }
-      } else if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ECONNABORTED' ||
-                 axiosError.code === 'ERR_CANCELED') {
-        logger.error('Ollama connection refused, timed out, or request canceled');
+      } else if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ERR_CANCELED') {
+        logger.error('Ollama request timed out or was canceled');
+        return OllamaErrorType.TIMEOUT;
+      } else if (axiosError.code === 'ECONNREFUSED') {
+        logger.error('Ollama connection refused');
         return OllamaErrorType.SERVER_ERROR;
       }
     } else if (error.message.includes('context length')) {
@@ -1047,6 +1050,12 @@ export const ollamaModule = {
               throw new Error(`Model ${modelId} not found in Ollama.`);
             case OllamaErrorType.SERVER_ERROR:
               throw new Error('Ollama server error. Please ensure Ollama is running.');
+            case OllamaErrorType.TIMEOUT:
+              throw new InferenceTimeoutError(
+                'ollama',
+                timeout,
+                `Ollama inference timed out after ${timeout}ms.`,
+              );
             default:
               throw new Error(`Error executing task: ${result.error}`);
           }

@@ -3,6 +3,7 @@ import { codeTaskAnalyzer } from './codeTaskAnalyzer.js';
 import { dependencyMapper } from './dependencyMapper.js';
 import { codeModelSelector } from './codeModelSelector.js';
 import { ModelNotFoundError } from '../../openrouter/index.js'; // Import ModelNotFoundError
+import { InferenceTimeoutError } from '../../utils/inferenceTimeout.js';
 import { fallbackHandler } from '../../fallback-handler/index.js'; // Import fallback handler for service availability checks
 import { getProviderRegistry } from '../../core/provider/registry.js';
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
@@ -370,7 +371,7 @@ Output only the code required for this subtask. Do not include explanations unle
     logger.debug(`Prompt for subtask ${subtask.id}:\n${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}`);
     assertPromptWithinContextWindow(model, prompt);
 
-    const timeout = 180000; // 3 minutes timeout
+    const timeout = config.ollamaTimeout;
 
     try {
       // Dispatch through provider registry — no hardcoded provider switch.
@@ -384,7 +385,10 @@ Output only the code required for this subtask. Do not include explanations unle
 
       if (provider) {
         logger.info(`Executing subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
-        const execResult = await provider.executeTask(bareId, prompt, { timeoutMs: timeout });
+        const execResult = await registry.executeWithConcurrencyLimit(
+          provider,
+          async () => await provider.executeTask(bareId, prompt, { timeoutMs: timeout }),
+        );
         resultText = execResult.content;
         logger.info(`Successfully executed subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
         logger.debug(`Result for subtask ${subtask.id}:\n${resultText.substring(0, 500)}${resultText.length > 500 ? '...' : ''}`);
@@ -396,7 +400,10 @@ Output only the code required for this subtask. Do not include explanations unle
           const supports = await p.supportsModel(bareId);
           if (supports) {
             logger.info(`Falling back to provider '${p.id}' for model ${bareId}`);
-            const execResult = await p.executeTask(bareId, prompt, { timeoutMs: timeout });
+            const execResult = await registry.executeWithConcurrencyLimit(
+              p,
+              async () => await p.executeTask(bareId, prompt, { timeoutMs: timeout }),
+            );
             resultText = execResult.content;
             found = true;
             break;
@@ -414,6 +421,9 @@ Output only the code required for this subtask. Do not include explanations unle
     } catch (error) {
        if (error instanceof ContextWindowError) {
          logger.warn(`Subtask ${subtask.id} exceeds context window for ${error.modelId}: ${error.estimatedTokens}/${error.modelContextWindow}`);
+         throw error;
+       }
+       if (error instanceof InferenceTimeoutError) {
          throw error;
        }
        // Handle specific ModelNotFoundError from OpenRouter cache check
@@ -688,7 +698,10 @@ Please provide only the integrated code, without explanations or wrappers, unles
 
         let resultText: string | undefined;
         if (provider) {
-          const execResult = await provider.executeTask(bareId, integrationPrompt, { timeoutMs: 120_000 });
+          const execResult = await registry.executeWithConcurrencyLimit(
+            provider,
+            async () => await provider.executeTask(bareId, integrationPrompt, { timeoutMs: config.ollamaTimeout }),
+          );
           resultText = execResult.content;
         } else {
           logger.warn(`Integration step: no registered provider for model ${model.id} (provider: ${model.provider}); skipping.`);
@@ -711,6 +724,9 @@ Please provide only the integrated code, without explanations or wrappers, unles
         if (error instanceof ContextWindowError) {
           logger.warn(`Integration step skipped for ${model.id}: ${error.message}`);
           continue;
+        }
+        if (error instanceof InferenceTimeoutError) {
+          throw error;
         }
         logger.warn(`Error during integration step with model ${model.id}:`, error);
       }

@@ -922,7 +922,9 @@ Issues below are in the same severity and scope class as Issues #15–17. None a
 
 **Required research before implementation:** The MCP SDK's `StdioTransport` and `SSETransport` have different streaming semantics. Streaming tool results may require a protocol-level change. Investigate whether the MCP spec supports incremental tool result chunks, or whether the correct approach is an async job model (call `route_task` → get `jobId` → poll `cancel_job`/status until done). This is a **major design decision** requiring extensive research and planning before implementation.
 
-**Status:** ⏳ Not started. No workaround beyond increasing `OLLAMA_TIMEOUT`.
+**Decision (2026-05-19):** Use the async job model as the primary long-run transport strategy and treat streaming tool chunks as an optional future enhancement. The current MCP tool contract already has `jobId`/`cancel_job` semantics and works across stdio clients without introducing protocol-specific partial-result behavior, while async jobs avoid client timeout ceilings for long inference and benchmark runs. This keeps compatibility stable for Codex/Copilot/Claude clients today and lets us ship reliability controls (timeouts, queueing, progress resources) immediately without waiting on transport-level streaming guarantees.
+
+**Status:** 🚧 In progress. Transport decision documented; async-job execution path hardening still ongoing.
 
 ---
 

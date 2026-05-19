@@ -245,6 +245,7 @@ PYTHON_DETECT_VENV=true
 - **Local LLM Endpoints**
   - `LM_STUDIO_ENDPOINT`: URL where your LM Studio instance is running
   - `OLLAMA_ENDPOINT`: URL where your Ollama instance is running
+  - `OLLAMA_TIMEOUT`: Per-request Ollama timeout in milliseconds (default `120000`)
 
 - **Configuration**
   - `DEFAULT_LOCAL_MODEL`: The local LLM model to use when offloading tasks
@@ -252,6 +253,8 @@ PYTHON_DETECT_VENV=true
   - `COST_THRESHOLD`: Cost threshold (in USD) that triggers local LLM usage
   - `QUALITY_THRESHOLD`: Quality score below which to use paid APIs regardless of cost
   - `PROVIDER_HEALTH_PROBE_INTERVAL_MS`: Interval in milliseconds for provider health probing (default `60000`)
+  - `PROVIDER_MAX_CONCURRENT_LOCAL`: Max concurrent requests per local provider (default `2`)
+  - `PROVIDER_MAX_CONCURRENT_REMOTE`: Max concurrent requests per remote provider (default `5`)
 
 - **Code Search Configuration**
   - `CODE_SEARCH_ENABLED`: Enable or disable semantic code search functionality

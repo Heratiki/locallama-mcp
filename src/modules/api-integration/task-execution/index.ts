@@ -9,6 +9,7 @@ import {
   assertPromptWithinContextWindow,
   ContextWindowError,
 } from '../../utils/contextWindow.js';
+import { InferenceTimeoutError } from '../../utils/inferenceTimeout.js';
 
 export { ContextWindowError };
 
@@ -98,7 +99,10 @@ export class TaskExecutor implements ITaskExecutor {
 
     try {
       const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
-      const result = await provider.executeTask(bareId, task, executionOptions);
+      const result = await registry.executeWithConcurrencyLimit(
+        provider,
+        async () => await provider.executeTask(bareId, task, executionOptions),
+      );
       registry.recordProviderSuccess(provider.id);
       return result.content;
     } catch (error) {
@@ -192,6 +196,9 @@ export class TaskExecutor implements ITaskExecutor {
     }
 
     if (lastError) {
+      if (lastError instanceof InferenceTimeoutError) {
+        throw lastError;
+      }
       throw new Error(
         `Failed to execute model '${modelId}' after trying available providers: ${lastError.message}`,
       );

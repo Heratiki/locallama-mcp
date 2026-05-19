@@ -18,6 +18,7 @@ import { setClientHints } from './modules/core/client/hints.js';
 import { checkForUpdates, runUpdate, runStartupCheck } from './modules/updater/index.js';
 import { getJobTrackerSync } from './modules/decision-engine/services/jobTracker.js';
 import { ContextWindowError } from './modules/api-integration/task-execution/index.js';
+import { InferenceTimeoutError } from './modules/utils/inferenceTimeout.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -456,6 +457,20 @@ export class LocalLamaMcpServer {
                     modelId: error.modelId,
                     estimatedTokens: error.estimatedTokens,
                     modelContextWindow: error.modelContextWindow,
+                  }),
+                }],
+                isError: true,
+              };
+            }
+            if (error instanceof InferenceTimeoutError) {
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: JSON.stringify({
+                    error: 'inference_timeout',
+                    message: error.message,
+                    providerId: error.providerId,
+                    timeoutMs: error.timeoutMs,
                   }),
                 }],
                 isError: true,

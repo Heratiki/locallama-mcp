@@ -379,6 +379,37 @@ async function runSuite(client, serverEnv) {
       assert(!!text, 'preemptive_route_task (complex) returns content');
     });
 
+    await runTest('preemptive_route_task — three simultaneous calls', async () => {
+      const makeArgs = (index) => ({
+        task: `Generate a concise helper function example #${index}.`,
+        context_length: 64,
+        expected_output_length: 128,
+        complexity: 0.35,
+        priority: 'cost',
+      });
+
+      const responses = await Promise.all([
+        client.callTool({ name: 'preemptive_route_task', arguments: makeArgs(1) }),
+        client.callTool({ name: 'preemptive_route_task', arguments: makeArgs(2) }),
+        client.callTool({ name: 'preemptive_route_task', arguments: makeArgs(3) }),
+      ]);
+
+      assert(responses.length === 3, 'Concurrent preemptive routing returned three responses');
+
+      for (let i = 0; i < responses.length; i++) {
+        const text = extractText(responses[i]);
+        assert(!!text, `Concurrent preemptive response ${i + 1} has content`);
+        let parsed;
+        try { parsed = JSON.parse(text); } catch { /* plain text fallback */ }
+        if (parsed) {
+          assert(
+            !!parsed.reason || !!parsed.costClass || !!parsed.modelId || !!parsed.providerId,
+            `Concurrent preemptive response ${i + 1} has routing fields`,
+          );
+        }
+      }
+    });
+
     await runTest('get_cost_estimate', async () => {
       const result = await client.callTool({
         name: 'get_cost_estimate',
