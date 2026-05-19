@@ -11,6 +11,8 @@ import {
   PromptingStrategy,
   LMStudioErrorType,
   LMStudioResponse,
+  LMStudioApiCallResult,
+  LMStudioErrorDiagnostics,
   SpeculativeInferenceConfig,
   PromptImprovementConfig
 } from './types.js';
@@ -167,6 +169,61 @@ export const lmStudioModule = {
       logger.error(`Unknown LM Studio error: ${error.message}`);
       return LMStudioErrorType.UNKNOWN;
     },
+
+  buildLMStudioErrorDiagnostics(
+    modelId: string,
+    endpoint: string | undefined,
+    error?: Error,
+    responseBody?: unknown,
+  ): LMStudioErrorDiagnostics {
+    const diagnostics: LMStudioErrorDiagnostics = {
+      modelId,
+      endpoint,
+      errorMessage: error?.message,
+    };
+
+    if (responseBody !== undefined) {
+      try {
+        const serialized = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+        diagnostics.responseBodySnippet = serialized.slice(0, 500);
+      } catch {
+        diagnostics.responseBodySnippet = String(responseBody).slice(0, 500);
+      }
+    }
+
+    if (error && axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+      diagnostics.axiosCode = axiosError.code;
+      diagnostics.statusCode = axiosError.response?.status;
+      diagnostics.isTimeout = axiosError.code === 'ECONNABORTED';
+      diagnostics.isConnectionRefused = axiosError.code === 'ECONNREFUSED';
+
+      if (axiosError.response?.data !== undefined && diagnostics.responseBodySnippet === undefined) {
+        try {
+          const serialized = JSON.stringify(axiosError.response.data);
+          diagnostics.responseBodySnippet = serialized.slice(0, 500);
+        } catch {
+          diagnostics.responseBodySnippet = String(axiosError.response.data).slice(0, 500);
+        }
+      }
+    }
+
+    return diagnostics;
+  },
+
+  summarizeErrorDiagnostics(diagnostics?: LMStudioErrorDiagnostics): string {
+    if (!diagnostics) return 'no diagnostics available';
+
+    const summaryParts = [
+      diagnostics.statusCode !== undefined ? `status=${diagnostics.statusCode}` : undefined,
+      diagnostics.axiosCode ? `axiosCode=${diagnostics.axiosCode}` : undefined,
+      diagnostics.isTimeout ? 'timeout=true' : undefined,
+      diagnostics.isConnectionRefused ? 'connectionRefused=true' : undefined,
+      diagnostics.endpoint ? `endpoint=${diagnostics.endpoint}` : undefined,
+    ].filter((part): part is string => Boolean(part));
+
+    return summaryParts.length > 0 ? summaryParts.join(', ') : 'no transport details';
+  },
 
   // Helper function moved inside
   evaluateQuality(task: string, response: string): number {
@@ -546,8 +603,10 @@ export const lmStudioModule = {
       const lastUpdated = new Date(this.modelTracking.lastUpdated || new Date(0));
       const hoursSinceLastUpdate = (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
 
-      if (hoursSinceLastUpdate > 24) {
-        logger.info('LM Studio models data is more than 24 hours old, updating...');
+      // Keep the LM Studio model cache reasonably fresh to avoid stale-id mismatches
+      // between live model listing and execution paths.
+      if (hoursSinceLastUpdate > 1) {
+        logger.info('LM Studio models data is more than 1 hour old, updating...');
         await this.updateModels();
       }
 
@@ -656,30 +715,44 @@ export const lmStudioModule = {
     modelId: string,
     task: string,
     timeout: number
-  ): Promise<{
-    success: boolean;
-    text?: string;
-    usage?: {
-      prompt_tokens: number;
-      completion_tokens: number;
-    };
-    error?: LMStudioErrorType;
-  }> {
+  ): Promise<LMStudioApiCallResult> {
     logger.debug(`Calling LM Studio API for model ${modelId}`);
+    let url: string | undefined;
 
     try {
       // Check if LM Studio endpoint is configured
       if (!config.lmStudioEndpoint) {
         logger.warn('LM Studio endpoint not configured, local models will not be available');
-        return { success: false, error: LMStudioErrorType.SERVER_ERROR };
+        return {
+          success: false,
+          error: LMStudioErrorType.SERVER_ERROR,
+          diagnostics: this.buildLMStudioErrorDiagnostics(modelId, undefined, new Error('LM Studio endpoint not configured')),
+        };
       }
 
       // Get the model information - Use the raw modelId without prefix
       const rawModelId = modelId.startsWith('lm-studio:') ? modelId.substring(10) : modelId;
-      const model = this.modelTracking.models[rawModelId];
+      let model = this.modelTracking.models[rawModelId];
       if (!model) {
-        logger.warn(`Model ${rawModelId} not found in LM Studio tracking data`);
-        return { success: false, error: LMStudioErrorType.MODEL_NOT_FOUND };
+        logger.info(`Model ${rawModelId} not present in LM Studio tracking cache; refreshing model list before execution`);
+        try {
+          await this.updateModels();
+          model = this.modelTracking.models[rawModelId];
+        } catch (refreshError) {
+          logger.warn(
+            `Failed refreshing LM Studio model cache before executing ${rawModelId}: ${
+              refreshError instanceof Error ? refreshError.message : String(refreshError)
+            }`,
+          );
+        }
+      }
+
+      // Do not hard-fail on cache miss; execute against LM Studio directly and
+      // let the API response classify model availability.
+      if (!model) {
+        logger.warn(
+          `Model ${rawModelId} still not present in LM Studio tracking data after refresh; attempting direct API execution`,
+        );
       }
 
       // Get the prompting strategy
@@ -728,7 +801,7 @@ export const lmStudioModule = {
         config.lmStudioEndpoint : 
         `${config.lmStudioEndpoint}/v1`;
       
-      const url = `${baseUrl}/chat/completions`;
+      url = `${baseUrl}/chat/completions`;
 
       // Make the request
       const response = await axios.post<LMStudioResponse>(
@@ -753,12 +826,21 @@ export const lmStudioModule = {
         };
       } else {
         logger.warn('Invalid response from LM Studio API:', response.data);
-        return { success: false, error: LMStudioErrorType.INVALID_REQUEST };
+        return {
+          success: false,
+          error: LMStudioErrorType.INVALID_REQUEST,
+          diagnostics: this.buildLMStudioErrorDiagnostics(rawModelId, url, undefined, response.data),
+        };
       }
     } catch (error) {
       logger.error(`Error calling LM Studio API for model ${modelId}:`, error);
-      const errorType = this.handleLMStudioError(error instanceof Error ? error : new Error('Unknown error')); // Use this.
-      return { success: false, error: errorType };
+      const normalizedError = error instanceof Error ? error : new Error('Unknown error');
+      const errorType = this.handleLMStudioError(normalizedError); // Use this.
+      return {
+        success: false,
+        error: errorType,
+        diagnostics: this.buildLMStudioErrorDiagnostics(modelId, url, normalizedError),
+      };
     }
   },
 
@@ -1163,7 +1245,7 @@ export const lmStudioModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number }): Promise<string> {
     logger.info(`Executing task using LM Studio model ${modelId}`);
 
     try {
@@ -1173,29 +1255,40 @@ export const lmStudioModule = {
       }
 
       // Determine the execution timeout (default to 3 minutes)
-      const timeout = 180000;
+      const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 180000;
 
       // Call the LM Studio API
       const result = await this.callLMStudioApi(modelId, task, timeout); // Use this.
 
       if (!result.success || !result.text) {
+        const diagnosticsSummary = this.summarizeErrorDiagnostics(result.diagnostics);
+        const throwWithDiagnostics = (message: string): never => {
+          const executionError = new Error(`${message} (${diagnosticsSummary})`) as Error & {
+            errorType?: LMStudioErrorType;
+            diagnostics?: LMStudioErrorDiagnostics;
+          };
+          executionError.errorType = result.error;
+          executionError.diagnostics = result.diagnostics;
+          throw executionError;
+        };
+
         if (result.error) {
           switch (result.error) {
             case LMStudioErrorType.RATE_LIMIT:
-              throw new Error('LM Studio rate limit exceeded. Please try again later.');
+              throwWithDiagnostics('LM Studio rate limit exceeded. Please try again later.');
             case LMStudioErrorType.AUTHENTICATION:
-              throw new Error('LM Studio authentication error.');
+              throwWithDiagnostics('LM Studio authentication error.');
             case LMStudioErrorType.CONTEXT_LENGTH_EXCEEDED:
-              throw new Error('Context length exceeded. Please reduce the size of your task.');
+              throwWithDiagnostics('Context length exceeded. Please reduce the size of your task.');
             case LMStudioErrorType.MODEL_NOT_FOUND:
-              throw new Error(`Model ${modelId} not found in LM Studio.`);
+              throwWithDiagnostics(`Model ${modelId} not found in LM Studio.`);
             case LMStudioErrorType.SERVER_ERROR:
-              throw new Error('LM Studio server error. Please ensure LM Studio is running.');
+              throwWithDiagnostics('LM Studio server error. Please ensure LM Studio is running.');
             default:
-              throw new Error(`Error executing task: ${result.error}`);
+              throwWithDiagnostics(`Error executing task: ${result.error}`);
           }
         }
-        throw new Error('Failed to execute task with LM Studio');
+        throwWithDiagnostics('Failed to execute task with LM Studio');
       }
 
       // Log usage information
@@ -1203,7 +1296,12 @@ export const lmStudioModule = {
         logger.debug(`LM Studio usage: ${result.usage.prompt_tokens} prompt tokens, ${result.usage.completion_tokens} completion tokens`);
       }
 
-      return result.text;
+      const text = result.text;
+      if (!text) {
+        throw new Error('LM Studio returned an empty response payload');
+      }
+
+      return text;
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`Error executing task with LM Studio model ${modelId}:`, error);

@@ -36,6 +36,34 @@ export enum LMStudioErrorType {
 }
 
 /**
+ * Structured diagnostics captured for LM Studio API failures.
+ */
+export interface LMStudioErrorDiagnostics {
+  modelId: string;
+  endpoint?: string;
+  statusCode?: number;
+  axiosCode?: string;
+  isTimeout?: boolean;
+  isConnectionRefused?: boolean;
+  responseBodySnippet?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Standardized result shape for LM Studio task API calls.
+ */
+export interface LMStudioApiCallResult {
+  success: boolean;
+  text?: string;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+  };
+  error?: LMStudioErrorType;
+  diagnostics?: LMStudioErrorDiagnostics;
+}
+
+/**
  * LM Studio model information
  */
 export interface LMStudioModel extends Model {

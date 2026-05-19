@@ -174,6 +174,8 @@ describe('benchmarkModel', () => {
     const result = await benchmarkModel({ modelId: 'qwen2.5-coder-7b', taskCategories: ['code'] });
 
     expect(result.categoryResults.code?.successRate).toBeCloseTo(0.5);
+    expect(result.failureCount).toBe(1);
+    expect(result.categoryResults.code?.failures?.[0]?.errorMessage).toContain('timeout');
   });
 
   it('handles all tasks failing gracefully without throwing', async () => {

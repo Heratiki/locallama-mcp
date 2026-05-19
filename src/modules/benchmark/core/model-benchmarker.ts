@@ -95,6 +95,17 @@ export interface CategoryResult {
   qualityScore: number;
   avgResponseTimeMs: number;
   tasksRan: number;
+  failures?: BenchmarkTaskFailure[];
+}
+
+export interface BenchmarkTaskFailure {
+  category: TaskCategory;
+  taskIndex: number;
+  elapsedMs: number;
+  timeoutMs: number;
+  errorMessage: string;
+  errorType?: string;
+  diagnostics?: Record<string, unknown>;
 }
 
 export interface BenchmarkModelResult {
@@ -103,6 +114,7 @@ export interface BenchmarkModelResult {
   taskCategories: TaskCategory[];
   categoryResults: Partial<Record<TaskCategory, CategoryResult>>;
   summary: BenchmarkSummary;
+  failureCount: number;
 }
 
 const KNOWN_PROVIDER_PREFIXES = ['lm-studio', 'ollama', 'openrouter'] as const;
@@ -230,6 +242,7 @@ export async function benchmarkModel(
   // 2. Run tasks per category
   // -------------------------------------------------------------------------
   const categoryResults: Partial<Record<TaskCategory, CategoryResult>> = {};
+  let failureCount = 0;
 
   for (const category of taskCategories) {
     const tasks = CATEGORY_TASKS[category];
@@ -242,6 +255,7 @@ export async function benchmarkModel(
     let totalQuality = 0;
     let totalTime = 0;
     let tasksRan = 0;
+    const failures: BenchmarkTaskFailure[] = [];
 
     for (let taskIdx = 0; taskIdx < tasks.length; taskIdx++) {
       const benchTask = tasks[taskIdx];
@@ -295,11 +309,25 @@ export async function benchmarkModel(
         });
       } catch (err) {
         const elapsed = Date.now() - startMs;
+        const errorObj = err as Error & { errorType?: string; diagnostics?: Record<string, unknown> };
+        const failure: BenchmarkTaskFailure = {
+          category,
+          taskIndex: taskIdx,
+          elapsedMs: elapsed,
+          timeoutMs,
+          errorMessage: err instanceof Error ? err.message : String(err),
+          errorType: errorObj.errorType,
+          diagnostics: errorObj.diagnostics,
+        };
+        failures.push(failure);
+        failureCount++;
+
         logger.warn(
-          `benchmark_model: ${category}[${taskIdx}] failed for '${executableModelId}': ${
-            err instanceof Error ? err.message : String(err)
-          }`,
+          `benchmark_model: ${category}[${taskIdx}] failed for '${executableModelId}' (timeout=${timeoutMs}ms, elapsed=${elapsed}ms): ${failure.errorMessage}`,
         );
+        if (failure.diagnostics) {
+          logger.debug(`benchmark_model: ${category}[${taskIdx}] diagnostics: ${JSON.stringify(failure.diagnostics)}`);
+        }
         totalTime += elapsed;
         tasksRan++;
       }
@@ -310,7 +338,13 @@ export async function benchmarkModel(
       totalSuccess > 0 ? totalQuality / totalSuccess : 0;
     const avgResponseTimeMs = tasksRan > 0 ? totalTime / tasksRan : 0;
 
-    categoryResults[category] = { successRate, qualityScore: avgQuality, avgResponseTimeMs, tasksRan };
+    categoryResults[category] = {
+      successRate,
+      qualityScore: avgQuality,
+      avgResponseTimeMs,
+      tasksRan,
+      failures: failures.length > 0 ? failures : undefined,
+    };
 
     logger.info(
       `benchmark_model: category '${category}' done — success=${successRate.toFixed(2)}, quality=${avgQuality.toFixed(2)}, avgMs=${avgResponseTimeMs.toFixed(0)}`,
@@ -361,5 +395,6 @@ export async function benchmarkModel(
     taskCategories,
     categoryResults,
     summary: registrySummary,
+    failureCount,
   };
 }

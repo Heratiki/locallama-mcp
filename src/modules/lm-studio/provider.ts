@@ -22,7 +22,9 @@ class LMStudioProvider implements LLMProvider {
   private cachedModelIds = new Set<string>();
 
   async init(): Promise<void> {
-    await lmStudioModule.initialize();
+    // Match Ollama behavior: refresh provider models on startup so routing and
+    // execution use the same live model inventory.
+    await lmStudioModule.initialize(true);
     try {
       const models = await this.listModels();
       this.cachedModelIds = new Set(models.map((m) => m.id));
@@ -57,16 +59,22 @@ class LMStudioProvider implements LLMProvider {
 
   supportsModel(modelId: string): boolean {
     if (this.cachedModelIds.has(modelId)) return true;
-    return modelId.startsWith('lm-studio:');
+
+    if (modelId.startsWith('lm-studio:')) {
+      const rawId = modelId.substring('lm-studio:'.length);
+      return this.cachedModelIds.has(rawId);
+    }
+
+    return this.cachedModelIds.has(`lm-studio:${modelId}`);
   }
 
   async executeTask(
     modelId: string,
     task: string,
-    _options?: TaskExecutionOptions,
+    options?: TaskExecutionOptions,
   ): Promise<TaskExecutionResult> {
     const id = modelId.startsWith('lm-studio:') ? modelId.substring('lm-studio:'.length) : modelId;
-    const content = await lmStudioModule.executeTask(id, task);
+    const content = await lmStudioModule.executeTask(id, task, { timeoutMs: options?.timeoutMs });
     return { content, model: id };
   }
 
