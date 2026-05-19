@@ -97,3 +97,17 @@ The project is a TypeScript ESM MCP server built around these areas:
 ## Code Search Dependencies
 
 Retriv code search is implemented with the native TypeScript BM25 engine and has no Python runtime dependency.
+
+## Agent skills
+
+### Issue tracker
+
+Issues tracked in GitHub Issues (`Heratiki/locallama-mcp`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — one `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
