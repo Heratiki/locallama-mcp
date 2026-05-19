@@ -24,7 +24,7 @@ and this file for the current snapshot.
 
 - Windows build currently works with the Node-based copy step.
 - `npm test` is now OS-agnostic: the package script calls Jest through `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of shell-specific `NODE_OPTIONS=...`.
-- Latest local verification on Windows: `npm run build` passes; `npm test` passes with 21 suites / 181 tests.
+- Latest local verification on Windows: `npm run build` passes; `npm test` passes with 22 suites / 185 tests. The prior Jest forced-worker-exit warning was fixed by adding JobTracker WebSocket teardown and clearing/unref'ing benchmark API timeout handles.
 - Benchmark npm scripts now invoke the root `run-benchmarks.js` CLI after build.
 - The benchmark runner uses discovered models from the server path, with optional CLI filtering via `benchmark-models.json`.
 - The repo still has open work around lint dependency drift, benchmark realism, and remaining routing modernization.

@@ -53,6 +53,19 @@ Follow-ups:
 - Investigate why full `route_task` does not preserve the initial paid routing decision and why `openrouter/pareto-code` fails with an opaque `{}` error.
 - Avoid repeated paid-route execution attempts until that code path is inspected.
 
+## 2026-05-19 — Jest Open-Handle Cleanup
+
+Summary:
+- Added explicit teardown for the decision-engine JobTracker WebSocket singleton so API integration tests do not leave a server/listeners open.
+- Unref'ed long-lived decision-engine timers and benchmark API request timeout handles, and made the LM Studio API timeout clear in a `finally` block.
+- Mocked the benchmark simulation logger in the expected Generic API failure-path test so the suite no longer prints a warning for intentional fallback coverage.
+
+Verification:
+- `npm run build` passes.
+- Focused `resources.test.ts` and `lm-studio.test.ts` runs pass with `--runInBand --detectOpenHandles`.
+- Full `--runInBand --detectOpenHandles` run passes: 22 suites / 185 tests, no open-handle report.
+- Full `npm test` passes: 22 suites / 185 tests, no forced-worker-exit warning and no Generic API simulation warning.
+
 ## 2026-04-24 Revival Work
 
 ### Completed

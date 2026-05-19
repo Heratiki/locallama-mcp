@@ -44,7 +44,7 @@ export interface Job {
  */
 export class JobTracker extends EventEmitter {
   private activeJobs: Map<string, Job> = new Map();
-  private static instance: JobTracker;
+  private static instance: JobTracker | null = null;
   private initialized = false;
   private wss: WebSocketServer | null = null;
   private readonly BASE_PORT = 8080;
@@ -64,6 +64,12 @@ export class JobTracker extends EventEmitter {
       await JobTracker.instance.initializeTracker();
     }
     return JobTracker.instance;
+  }
+
+  static async shutdownInstance(): Promise<void> {
+    if (!JobTracker.instance) return;
+    await JobTracker.instance.shutdown();
+    JobTracker.instance = null;
   }
 
   // Method to set the broadcast function after initialization to avoid circular dependency
@@ -363,6 +369,28 @@ export class JobTracker extends EventEmitter {
   isInitialized(): boolean {
     return this.initialized;
   }
+
+  async shutdown(): Promise<void> {
+    const server = this.wss;
+    this.wss = null;
+    this.initialized = false;
+    this.activeJobs.clear();
+    this.removeAllListeners();
+
+    if (!server) return;
+
+    for (const client of server.clients) {
+      try {
+        client.close();
+      } catch {
+        // Best-effort shutdown; ignore individual client close failures.
+      }
+    }
+
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  }
 }
 
 // Initialize singleton instance immediately but safely
@@ -390,4 +418,10 @@ export const getJobTracker = async (): Promise<JobTracker> => {
 // Export synchronous function to get instance without initialization
 export const getJobTrackerSync = (): JobTracker | null => {
   return jobTrackerInstance;
+};
+
+export const shutdownJobTracker = async (): Promise<void> => {
+  await JobTracker.shutdownInstance();
+  jobTrackerInstance = null;
+  initializationPromise = null;
 };

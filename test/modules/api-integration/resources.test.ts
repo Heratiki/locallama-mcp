@@ -1,5 +1,6 @@
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { describe, expect, it, jest, beforeEach, afterAll } from '@jest/globals';
 import { setupResourceHandlers } from '../../../dist/modules/api-integration/resources.js';
+import { shutdownJobTracker } from '../../../dist/modules/decision-engine/services/jobTracker.js';
 
 jest.mock('@modelcontextprotocol/sdk/server/index.js'); // Keep external mock
 jest.mock('../../../dist/modules/cost-monitor/index.js'); // Corrected path (added ../)
@@ -17,6 +18,10 @@ describe('setupResourceHandlers', () => {
     mockServer = {
       setRequestHandler: jest.fn()
     };
+  });
+
+  afterAll(async () => {
+    await shutdownJobTracker();
   });
 
   it('should register resource handlers with the server', async () => {

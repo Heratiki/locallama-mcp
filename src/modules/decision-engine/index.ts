@@ -105,13 +105,14 @@ export const decisionEngine = {
           jobTracker = await getJobTracker();
           
           // Setup cleanup interval once successfully initialized
-          setInterval(() => {
+          const cleanupInterval = setInterval(() => {
             try {
               jobTracker.cleanupCompletedJobs();
             } catch (cleanupError) {
               logger.error('Error cleaning up completed jobs:', cleanupError);
             }
           }, 3600000); // Clean up every hour
+          cleanupInterval.unref?.();
           
           logger.info('Job tracker successfully initialized');
           break; // Break out of retry loop on success
@@ -153,7 +154,7 @@ export const decisionEngine = {
       // so adding a new local provider Just Works (Section 6 of PLAN.md).
       const targets = config.startupBenchmarkTargets;
       if (targets.length > 0) {
-        void setTimeout(async () => {
+        const startupBenchmarkTimer = setTimeout(async () => {
           try {
             const { getProviderRegistry } = await import('../core/provider/index.js');
             const { getModelRegistry } = await import('../core/model/index.js');
@@ -186,6 +187,7 @@ export const decisionEngine = {
             logger.error('Error during startup benchmark scheduling:', err);
           }
         }, 5000); // Wait 5 seconds before starting benchmarks
+        startupBenchmarkTimer.unref?.();
       }
       
       logger.info('Decision engine initialized successfully');
