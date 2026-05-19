@@ -232,6 +232,18 @@ ${result}
         useResourceEfficient,
         task // Pass original task description
       );
+
+      const coordinatorAssignmentSummary = resolvedTask.subtasks.map((subtask) => {
+        const model = modelAssignments.get(subtask.id);
+        return {
+          subtaskId: subtask.id,
+          complexity: Number(subtask.complexity.toFixed(3)),
+          recommendedModelSize: subtask.recommendedModelSize,
+          assignedModelId: model?.id || 'unassigned',
+          assignedProviderId: model?.provider || 'unassigned',
+        };
+      });
+      logger.debug('Coordinator model assignment summary', coordinatorAssignmentSummary);
       
       // Step 7: Calculate estimated cost
       const estimatedCost = await this.calculateEstimatedCost(
@@ -450,6 +462,13 @@ Output only the code required for this subtask. Do not include explanations unle
     logger.info(`Original task: ${decomposedTask.originalTask}`);
     logger.info(`Total subtasks: ${executionOrder.length}`);
     logger.info(`Execution order: ${executionOrder.map(s => s.id).join(' -> ')}`);
+    logger.debug('Execution order details', executionOrder.map((subtask) => ({
+      id: subtask.id,
+      complexity: Number(subtask.complexity.toFixed(3)),
+      estimatedTokens: subtask.estimatedTokens,
+      dependencies: subtask.dependencies,
+      recommendedModelSize: subtask.recommendedModelSize,
+    })));
     
     // Log model assignments
     logger.info(`===== MODEL ASSIGNMENTS =====`);
@@ -528,6 +547,12 @@ Output only the code required for this subtask. Do not include explanations unle
           logger.warn(`Missing dependency result for ${depId} (required by subtask ${subtask.id})`);
         }
       }
+
+      logger.debug('Subtask dependency context summary', {
+        subtaskId: subtask.id,
+        dependencyCount: subtask.dependencies.length,
+        dependencyContextChars: dependencyContext.length,
+      });
       
       // Update job progress (if job tracker is available)
       // Check if jobTracker is not null before using it

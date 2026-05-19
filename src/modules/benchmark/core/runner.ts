@@ -19,6 +19,34 @@ function trackModelFailure(modelId: string): number {
   return currentFailures + 1;
 }
 
+function getEffectiveRunTimeout(dynamicTimeout: number, benchmarkTaskTimeout: number): number {
+  // Keep each run below the benchmark tool timeout with a small buffer so the
+  // MCP request can still serialize and return a result payload.
+  const safetyBufferMs = 2000;
+  const minTimeoutMs = 5000;
+  const boundedByConfig = Math.max(minTimeoutMs, benchmarkTaskTimeout - safetyBufferMs);
+  return Math.max(minTimeoutMs, Math.min(dynamicTimeout, boundedByConfig));
+}
+
+async function withHardTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeoutMessage: string): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      const error = new Error(onTimeoutMessage);
+      (error as Error & { code?: string }).code = 'BENCHMARK_TIMEOUT';
+      reject(error);
+    }, timeoutMs);
+    timeoutHandle.unref?.();
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
+
 /**
  * Run a benchmark for a specific model
  */
@@ -64,7 +92,11 @@ export async function runModelBenchmark(
       
       // Calculate dynamic timeout based on model size and task complexity
       const dynamicTimeout = getDynamicTimeout(model.id, model.contextWindow, task.length / 1000);
-      logger.info(`Using dynamic timeout of ${dynamicTimeout}ms for model ${model.id}`);
+      const effectiveTimeout = getEffectiveRunTimeout(dynamicTimeout, config.taskTimeout);
+      logger.info(
+        `Using benchmark timeout of ${effectiveTimeout}ms for model ${model.id} ` +
+        `(dynamic=${dynamicTimeout}ms, benchmarkTaskTimeout=${config.taskTimeout}ms)`
+      );
       
       // Measure response time
       const startTime = Date.now();
@@ -79,7 +111,11 @@ export async function runModelBenchmark(
       const registryProvider = getProviderRegistry().get(model.provider);
       if (registryProvider) {
         try {
-          const execResult = await registryProvider.executeTask(model.id, task, { timeoutMs: dynamicTimeout });
+          const execResult = await withHardTimeout(
+            registryProvider.executeTask(model.id, task, { timeoutMs: effectiveTimeout }),
+            effectiveTimeout,
+            `Benchmark run timed out after ${effectiveTimeout}ms for model ${model.id}`
+          );
           success = true;
           qualityScore = evaluateQuality(task, execResult.content);
           promptTokens = execResult.promptTokens ?? contextLength;
@@ -87,11 +123,17 @@ export async function runModelBenchmark(
           runOutput = execResult.content;
           output = runOutput;
         } catch (err) {
-          logger.warn(`Provider ${model.provider} executeTask failed for ${model.id}: ${err instanceof Error ? err.message : String(err)}`);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          logger.warn(`Provider ${model.provider} executeTask failed for ${model.id}: ${errorMessage}`);
+          runOutput = `Benchmark run failed for ${model.id}: ${errorMessage}`;
         }
       } else {
         // Unknown provider — fall back to generic simulation
-        const simResponse = await simulateGenericApi(task, config.taskTimeout);
+        const simResponse = await withHardTimeout(
+          simulateGenericApi(task, effectiveTimeout),
+          effectiveTimeout,
+          `Benchmark simulation timed out after ${effectiveTimeout}ms for model ${model.id}`
+        );
         success = simResponse.success;
         qualityScore = simResponse.text ? evaluateQuality(task, simResponse.text) : 0;
         promptTokens = contextLength;

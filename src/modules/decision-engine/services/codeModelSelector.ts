@@ -205,7 +205,15 @@ export const codeModelSelector = {
           // Add randomness to prevent always choosing the same models
           score += Math.random() * 0.1;
           
-          logger.debug(`Fallback score for ${model.id} (${model.provider}): ${score.toFixed(2)}`);
+            logger.debug('Fallback scoring breakdown', {
+              modelId: model.id,
+              providerId: model.provider,
+              subtaskId: subtask.id,
+              subtaskComplexity: Number(subtask.complexity.toFixed(3)),
+              languageBoost: Number(languageBoost.toFixed(3)),
+              finalScore: Number(Math.min(score, 1.0).toFixed(3)),
+              hasPerformanceData,
+            });
           return Math.min(score, 1.0);
       }
 
@@ -243,7 +251,19 @@ export const codeModelSelector = {
     // Add small randomization factor to avoid always selecting the same model
     score += Math.random() * 0.05;
     
-    logger.debug(`Full score for ${model.id} (${model.provider}): ${score.toFixed(2)}`);
+    logger.debug('Full scoring breakdown', {
+      modelId: model.id,
+      providerId: model.provider,
+      subtaskId: subtask.id,
+      subtaskComplexity: Number(subtask.complexity.toFixed(3)),
+      complexityScore: Number(complexityScore.toFixed(3)),
+      historyScore: Number(historyScore.toFixed(3)),
+      efficiencyScore: Number(efficiencyScore.toFixed(3)),
+      costScore: Number(costScore.toFixed(3)),
+      languageBoost: Number(languageBoost.toFixed(3)),
+      hasModelStats: Boolean(modelStats),
+      finalScore: Number(Math.min(score, 1.0).toFixed(3)),
+    });
     return Math.min(score, 1.0);
   },
 

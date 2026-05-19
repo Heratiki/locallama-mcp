@@ -95,7 +95,14 @@ export class Router implements IRouter {
    */
   async routeTask(params: RouteTaskParams): Promise<RouteTaskResult> {
     try {
+      const routeTraceId = `route-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       logger.info(`Routing task with complexity ${params.complexity || 0.5}, context length ${params.contextLength}, priority ${params.priority || 'quality'}`);
+      logger.debug(`[${routeTraceId}] route_task input summary`, {
+        complexity: params.complexity || 0.5,
+        contextLength: params.contextLength,
+        expectedOutputLength: params.expectedOutputLength || 0,
+        priority: params.priority || 'quality',
+      });
 
       // Load user preferences
       const userPreferences = await loadUserPreferences();
@@ -150,6 +157,14 @@ export class Router implements IRouter {
         priority: params.priority || 'quality',
       });
 
+      logger.debug(`[${routeTraceId}] decisionEngine.routeTask decision`, {
+        provider: decision.provider,
+        model: decision.model,
+        confidence: decision.confidence,
+        preemptive: decision.preemptive || false,
+        scores: decision.scores,
+      });
+
       const paidResult = await this.executePaidDecisionDirectly(
         params,
         decision,
@@ -161,6 +176,10 @@ export class Router implements IRouter {
 
       // --- Full Task Processing via Coordinator ---
       logger.info('Proceeding with full task processing (decomposition, execution, synthesis)');
+      logger.debug(`[${routeTraceId}] full-task path may reselect models during decomposition`, {
+        initialDecisionProvider: decision.provider,
+        initialDecisionModel: decision.model,
+      });
 
       // Process the task: decompose, assign models, determine order
       // THIS IS NOW THE *ONLY* PLACE DECOMPOSITION HAPPENS
@@ -170,6 +189,21 @@ export class Router implements IRouter {
       );
 
       const { decomposedTask, modelAssignments, executionOrder } = processingResult;
+
+      const assignmentSummary = executionOrder.map((subtask) => {
+        const assignedModel = modelAssignments.get(subtask.id);
+        return {
+          subtaskId: subtask.id,
+          complexity: Number(subtask.complexity.toFixed(3)),
+          assignedModelId: assignedModel?.id || 'unassigned',
+          assignedProviderId: assignedModel?.provider || 'unassigned',
+        };
+      });
+
+      logger.debug(`[${routeTraceId}] decomposition + assignment summary`, {
+        subtaskCount: decomposedTask.subtasks.length,
+        assignmentSummary,
+      });
 
       // Execute all subtasks sequentially or in parallel based on dependencies
       const subtaskResults = await codeTaskCoordinator.executeAllSubtasks(
@@ -185,6 +219,13 @@ export class Router implements IRouter {
 
       // Determine the primary model/provider used (e.g., for the synthesis step)
       const finalModelInfo = modelAssignments.get(executionOrder[executionOrder.length - 1]?.id) || { id: 'unknown', provider: 'unknown' };
+
+      logger.debug(`[${routeTraceId}] final response model vs initial decision`, {
+        initialDecisionProvider: decision.provider,
+        initialDecisionModel: decision.model,
+        finalResponseProvider: finalModelInfo.provider,
+        finalResponseModel: finalModelInfo.id,
+      });
 
       // Return the final synthesized result
       return {

@@ -785,7 +785,7 @@ To enable OpenRouter: set `OPENROUTER_API_KEY` in the environment before startin
 
 **Workaround:** None without code changes. Alternatively, the `scoreModelForSubtask` function could apply a context-window or parameter-count heuristic to prefer larger models for higher complexity tasks when benchmark history is absent.
 
-**Status:** ⏳ Not started — unblocked by Bug 3 on 2026-05-19; needs local benchmark runs across the installed small models.
+**Status:** 🚧 In progress — 2026-05-19 retest: bounded `benchmark_task` run succeeded for `qwen2.5-coder:7b`; initial `qwen3:4b` benchmark timed out at MCP boundary (`-32001`). Follow-up fix landed in `src/modules/benchmark/core/runner.ts` to cap each run with a hard timeout (`min(dynamicTimeout, BENCHMARK_TASK_TIMEOUT - safetyBuffer)`) and record timeout failures as failed benchmark runs instead of hanging the entire tool call. Local-only preemptive routing now selects `qwen2.5-coder:7b` for some mid-complexity cost tasks, but full `route_task` still executed with `qwen2.5-coder:3b` on the same profile.
 
 ---
 
@@ -820,8 +820,8 @@ Tested from Claude Code desktop on System A. OpenRouter is configured locally fo
 | `route_task` — paid/OpenRouter routing | ✅ Works | Fixed 2026-05-19. With `OPENROUTER_FREE_ONLY=false`, full MCP `route_task` returned paid `openai/gpt-4o` via OpenRouter and consumed about `$0.000695`. |
 | `benchmark_task` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call ran `qwen2.5-coder:3b` once in ~9.4s |
 | `benchmark_tasks` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call returned a two-task summary |
-| `retriv_init` | ⚪ Untested | No blocking dependencies; needs dedicated test session |
-| `retriv_search` | ⚪ Untested | Requires `retriv_init` first |
+| `retriv_init` | ✅ Works | Confirmed in smoke suite (`node test-operational.mjs --suite smoke`) |
+| `retriv_search` | ✅ Works | Confirmed in smoke suite after `retriv_init` |
 | `cancel_job` | ⚪ Untested | Requires an active long-running job to cancel |
 
 **Results after pulling qwen2.5-coder:7b (2026-05-19):**
@@ -850,12 +850,30 @@ After running 5 additional tasks, the router consistently selects `qwen2.5-coder
 
 **Implication:** To use `qwen2.5-coder:7b` or `qwen3:4b` as the primary inference model, run `benchmark_task` against each model first to populate performance history. Bug 3 is now fixed, so benchmark runs are unblocked; keep them bounded because large repeated runs can waste time on this hardware.
 
+**Retest update (2026-05-19, next-target execution):**
+
+- Full compatibility smoke pass completed from this repo using:
+  - `node test-operational.mjs --suite smoke` → 25/25 passed
+  - `node test-operational.mjs --suite routing` → 5/5 passed
+  - `node test-operational.mjs --suite llm` → 3/3 passed (with a logged OpenRouter `ERR_CANCELED` during complexity analysis fallback, but route call returned successfully)
+- Bounded benchmark retest:
+  - `benchmark_task` with `local_model: qwen2.5-coder:7b` completed successfully.
+  - `benchmark_task` with `local_model: qwen3:4b` originally timed out through MCP (`-32001`).
+  - After the runner timeout-cap fix, isolated `benchmark_task` for `qwen3:4b` now returns a structured benchmark result with a failed run entry (`success: false`, output includes timeout reason) instead of failing the entire MCP request.
+- Post-benchmark model-selection retest:
+  - Local-only `preemptive_route_task` checks (OpenRouter key unset) selected `qwen2.5-coder:7b` for medium-complexity cost-oriented input.
+  - Full local-only `route_task` for a comparable complexity still executed on `qwen2.5-coder:3b`.
+  - This indicates a remaining selection-path mismatch between preemptive routing and full execution routing.
+
 **Next test targets:**
 1. ~~`route_task` with a simple TypeScript task~~ ✅ Done
 2. ~~Test `qwen2.5-coder:3b` via `route_task`~~ ✅ Done — consistently selected, confirmed working
 3. ~~`route_task` with complexity 0.9 → expect paid routing~~ ✅ Done — full MCP route returned paid `openai/gpt-4o` via OpenRouter with cost below threshold
 4. ~~`benchmark_task` after Bug 3 is fixed~~ ✅ Done — one live MCP call confirmed
-5. Re-test `qwen2.5-coder:7b` and `qwen3:4b` selection after benchmarks populate performance history
-6. Full smoke test with all tools documented in `docs/client-compatibility.md`
+5. ✅/⚠️ Partial — Re-test `qwen2.5-coder:7b` and `qwen3:4b` selection after benchmarks populate performance history:
+  - ✅ `qwen2.5-coder:7b` benchmark completed and appears in local preemptive selection.
+  - ⚠️ `qwen3:4b` benchmark timed out (`-32001`) and did not provide usable scoring data.
+  - ⚠️ Full `route_task` still selected `qwen2.5-coder:3b` in the local path despite preemptive 7b selection.
+6. ✅ Full smoke test with all tools documented in `docs/client-compatibility.md` (registration + core execution coverage via operational smoke/routing/llm suites)
 
 
