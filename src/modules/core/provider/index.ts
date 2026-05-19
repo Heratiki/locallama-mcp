@@ -5,3 +5,7 @@ export {
   _setProviderRegistryForTests,
 } from './registry.js';
 export { isProviderLocal, providerCostClass, isProviderId } from './helpers.js';
+export {
+  localProviderLifecycle,
+  _resetLocalProviderLifecycleForTests,
+} from './local-runtime-lifecycle.js';

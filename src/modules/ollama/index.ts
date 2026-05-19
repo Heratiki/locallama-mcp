@@ -1068,5 +1068,32 @@ export const ollamaModule = {
       }
       throw error;
     }
+  },
+
+  async unloadModel(modelId: string): Promise<void> {
+    logger.info(`Unloading Ollama model ${modelId}`);
+
+    if (!config.ollamaEndpoint) {
+      logger.warn('Ollama endpoint not configured; cannot unload model');
+      return;
+    }
+
+    await axios.post(
+      `${config.ollamaEndpoint}/generate`,
+      {
+        model: modelId,
+        prompt: '',
+        stream: false,
+        keep_alive: 0,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      },
+    );
+
+    logger.debug(`Requested immediate unload for Ollama model ${modelId}`);
   }
 };

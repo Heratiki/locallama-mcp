@@ -1319,6 +1319,32 @@ export const lmStudioModule = {
     }
   },
 
+  async unloadModel(instanceId: string): Promise<void> {
+    logger.info(`Unloading LM Studio model ${instanceId}`);
+
+    if (!config.lmStudioEndpoint) {
+      logger.warn('LM Studio endpoint not configured; cannot unload model');
+      return;
+    }
+
+    const baseEndpoint = config.lmStudioEndpoint.replace(/\/v1\/?$/, '');
+    const url = `${baseEndpoint}/api/v1/models/unload`;
+
+    await axios.post(
+      url,
+      { instance_id: instanceId },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        timeout: 15000,
+      },
+    );
+
+    logger.debug(`Requested unload for LM Studio model ${instanceId}`);
+  },
+
   /**
    * Execute a task using a specific LM Studio model with speculative inference
    * @param modelId The ID of the model to use

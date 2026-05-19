@@ -6,6 +6,7 @@ import {
   TaskExecutionOptions,
   TaskExecutionResult,
 } from '../core/provider/types.js';
+import { localProviderLifecycle } from '../core/provider/local-runtime-lifecycle.js';
 import { lmStudioModule } from './index.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
@@ -21,6 +22,7 @@ class LMStudioProvider implements LLMProvider {
   readonly isLocal = true;
 
   private cachedModelIds = new Set<string>();
+  private lastExecutedModelId: string | undefined;
 
   async init(): Promise<void> {
     // Match Ollama behavior: refresh provider models on startup so routing and
@@ -75,12 +77,29 @@ class LMStudioProvider implements LLMProvider {
     options?: TaskExecutionOptions,
   ): Promise<TaskExecutionResult> {
     const id = modelId.startsWith('lm-studio:') ? modelId.substring('lm-studio:'.length) : modelId;
+    await localProviderLifecycle.beforeExecution(this, id);
     const executionOptions = {
       ...buildCodeTaskExecutionOptions(task, 'lm-studio'),
       ...options,
     };
     const content = await lmStudioModule.executeTask(id, task, { ...executionOptions, timeoutMs: options?.timeoutMs });
+    this.lastExecutedModelId = id;
     return { content, model: id };
+  }
+
+  async releaseResources(options?: { reason?: 'cross-provider-handoff' | 'shutdown' | 'manual'; modelId?: string }): Promise<void> {
+    const modelId = options?.modelId ?? this.lastExecutedModelId;
+    if (!modelId) {
+      return;
+    }
+
+    try {
+      await lmStudioModule.unloadModel(modelId);
+    } catch (error) {
+      logger.warn(
+        `Failed to unload LM Studio model ${modelId} during ${options?.reason ?? 'manual'}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   getCost(_modelId: string): { prompt: number; completion: number } {

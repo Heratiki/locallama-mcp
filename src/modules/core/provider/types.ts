@@ -57,5 +57,10 @@ export interface LLMProvider {
     options?: TaskExecutionOptions,
   ): Promise<TaskExecutionResult>;
 
+  releaseResources?(options?: {
+    reason?: 'cross-provider-handoff' | 'shutdown' | 'manual';
+    modelId?: string;
+  }): Promise<void>;
+
   getCost(modelId: string): { prompt: number; completion: number };
 }

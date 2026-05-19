@@ -176,7 +176,7 @@ Track issues found during operational testing here. This is separate from PLAN.m
 | 14 | P1 (fixed) | `benchmark_model` provider resolution | `benchmark_model` rejected valid LM Studio model ids from `locallama://models` as "not found in any registered provider" | ID format mismatch: call path used unprefixed ids (for example `google/gemma-4-e4b`) while LM Studio provider support checks/listing could require provider-prefixed variants | **Fixed 2026-05-19**: benchmark path now resolves prefixed/non-prefixed id variants and executes with provider-native id. Verified in focused live pass: tool now resolves to `providerId: lm-studio` instead of failing resolution. |
 | 15 | P2 (resolved) | `lm-studio` runtime execution | LM Studio benchmark runs returned `successRate: 0` with no actionable detail | Root causes were stale startup model discovery and cache/listing mismatch between LM Studio tracking and live model list. Added structured diagnostics, startup forced refresh for LM Studio provider init, and cache-miss refresh before execution. | **Resolved 2026-05-19:** live MCP validation shows startup tracking now includes non-embedding models and `benchmark_model` executes `google/gemma-4-e4b` successfully (`tool-use` category, `successRate: 1`, `failureCount: 0`). |
 | 16 | P2 (implemented, pending live validation) | OpenRouter free-model routing | `route_task` can choose OpenRouter free models that repeatedly fail with `invalid_request` | Free-model selection lacked health filtering and repeatedly retried currently unusable catalog entries | **Implemented 2026-05-19:** added free-model failure tracking with automatic quarantine after repeated `invalid_request` / `model_not_found` / `server_error` failures, excluded quarantined models from `getFreeModels()` results (routing input), and switched OpenRouter execution in `benchmarkFreeModels()` to the provider path so provider rate limiting and quarantine gating are consistently applied there too. Unit coverage exists for quarantine/filtering in `test/modules/openrouter/index.test.ts`; live MCP quarantine/fallback validation still pending. |
-| 17 | P2 (open) | Cross-provider local runtime lifecycle | Switching local tasks between Ollama and LM Studio can leave previously loaded models resident in memory | No explicit unload handoff when local provider changes; stale model residency can waste VRAM/RAM and increase failure risk under memory pressure | **Open (new TODO, 2026-05-19):** before cross-provider local dispatch, unload inactive local models and verify with operational telemetry (memory usage + unload/load timing). |
+| 17 | P2 (implemented, pending live validation) | Cross-provider local runtime lifecycle | Switching local tasks between Ollama and LM Studio can leave previously loaded models resident in memory | No explicit unload handoff when local provider changes; stale model residency can waste VRAM/RAM and increase failure risk under memory pressure | **Implemented 2026-05-19:** added a shared local-provider lifecycle handoff in the provider layer so cross-provider local execution unloads the previously active local runtime first. Ollama now requests immediate unload via `keep_alive: 0`, and LM Studio uses `POST /api/v1/models/unload`. Focused unit coverage added in `test/modules/core/provider/local-runtime-lifecycle.test.ts`; live telemetry validation (memory usage + unload/load timing) is still pending. |
 
 ### Severity legend
 - **P0** — Server crashes or hangs; all tests blocked
@@ -213,12 +213,13 @@ When you add a new MCP tool to the server, add a test case here:
 
 ---
 
-## Immediate provider hardening TODOs (added 2026-05-19)
+## Immediate provider hardening TODOs (reprioritized 2026-05-19)
 
-1. Add a focused LM Studio execution test path that logs transport status, provider error payloads, and model-load state when `benchmark_model` task execution fails.
-2. Run a focused live MCP validation of OpenRouter quarantine/fallback behavior (Issue 16) using known-failing free-model candidates and confirm routing skips quarantined IDs.
-3. Add benchmark seeding checks for Ollama local models (`qwen2.5-coder:3b`, `qwen2.5-coder:7b`, `qwen3:4b`) to reduce first-run routing bias.
-4. Add explicit local-model unload behavior before cross-provider local handoff (Ollama ↔ LM Studio) to prevent stale VRAM/RAM usage.
+1. Issue 34 / Gap 5: harden Windows path and shell assumptions, then add the missing Windows-native operational checks for `rootDir`, lock/caches/DB placement, and the Session Continuity Checklist commands.
+2. Issues 24 and 26 / Gap 2: add provider-level circuit breaking and periodic health probing, then add focused failure-injection operational tests for provider-down scenarios.
+3. Issues 20 and 25 / Gap 8: replace character-based token estimates with real token counting, then enforce context-window limits before dispatch and add overflow-focused operational coverage.
+4. Issue 19 / Gap 3: design and implement per-provider rate limiting/backpressure for concurrent MCP calls, then add concurrency operational tests once the behavior is defined.
+5. Issue 18 / Gap 1: research and choose the transport strategy for long-running inference (streaming tool results vs async job model), then add timeout-boundary operational tests around the chosen design.
 
 ---
 
@@ -355,7 +356,7 @@ Issue 17 (cross-provider local model lifecycle) has no test coverage:
 - Assert that after a cross-provider switch, the previously loaded model in the prior provider is explicitly unloaded (when Issue 17's unload hook is implemented).
 - Assert that VRAM/RAM usage does not accumulate across multiple provider switches (requires the memory monitoring from Issue 31 to be in place for a quantitative assertion).
 
-**Blocker:** Issue 17 (unload hook) and Issue 31 (memory monitoring) must be implemented. Failover assertion can be added now (asserts error shape, not resource cleanup).
+**Blocker:** Issue 17's unload hook is now implemented. The failover and explicit-unload assertions can be added now. Quantitative VRAM/RAM accumulation checks still depend on Issue 31 (memory monitoring).
 
 ---
 
@@ -367,7 +368,7 @@ Issue 16 (free-model health gating) has no test coverage beyond the live observa
 - Assert that after the quarantine window expires, the model becomes eligible again.
 - Assert that a quarantined model appears in diagnostic output (tool response or log) so the developer knows why routing avoided it.
 
-**Blocker:** Issue 16 must be implemented before these tests are meaningful.
+**Blocker:** Issue 16 is now implemented. Remaining work is operational coverage: add route-selection, quarantine-expiry, and quarantine-diagnostic assertions against the live routing path.
 
 ---
 

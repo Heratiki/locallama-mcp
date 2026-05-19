@@ -6,6 +6,7 @@ import {
   TaskExecutionOptions,
   TaskExecutionResult,
 } from '../core/provider/types.js';
+import { localProviderLifecycle } from '../core/provider/local-runtime-lifecycle.js';
 import { ollamaModule } from './index.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
@@ -19,6 +20,7 @@ class OllamaProvider implements LLMProvider {
   readonly isLocal = true;
 
   private cachedModelIds = new Set<string>();
+  private lastExecutedModelId: string | undefined;
 
   async init(): Promise<void> {
     await ollamaModule.initialize(true);
@@ -65,12 +67,29 @@ class OllamaProvider implements LLMProvider {
     options?: TaskExecutionOptions,
   ): Promise<TaskExecutionResult> {
     const id = modelId.startsWith('ollama:') ? modelId.substring('ollama:'.length) : modelId;
+    await localProviderLifecycle.beforeExecution(this, id);
     const executionOptions = {
       ...buildCodeTaskExecutionOptions(task, 'ollama'),
       ...options,
     };
     const content = await ollamaModule.executeTask(id, task, executionOptions);
+    this.lastExecutedModelId = id;
     return { content, model: id };
+  }
+
+  async releaseResources(options?: { reason?: 'cross-provider-handoff' | 'shutdown' | 'manual'; modelId?: string }): Promise<void> {
+    const modelId = options?.modelId ?? this.lastExecutedModelId;
+    if (!modelId) {
+      return;
+    }
+
+    try {
+      await ollamaModule.unloadModel(modelId);
+    } catch (error) {
+      logger.warn(
+        `Failed to unload Ollama model ${modelId} during ${options?.reason ?? 'manual'}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   getCost(_modelId: string): { prompt: number; completion: number } {
