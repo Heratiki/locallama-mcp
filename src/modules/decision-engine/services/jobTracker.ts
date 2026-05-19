@@ -13,6 +13,7 @@ import {
   getActiveJobs as dbGetActiveJobs,
   deleteOldJobs as dbDeleteOldJobs
 } from '../../job-store/index.js';
+import { refreshAlertState } from '../../job-store/alert.js';
 
 // Job status enum for better type safety
 export enum JobStatus {
@@ -155,6 +156,7 @@ export class JobTracker extends EventEmitter {
         this.activeJobs.set(persisted.id, this.persistedToJob(persisted));
       }
       logger.info(`Loaded ${existingJobs.length} existing job(s) from persistent store`);
+      await refreshAlertState();
     } catch (storeError) {
       logger.error('Failed to initialize persistent job store:', storeError);
       // Continue — the tracker can still function (with degraded persistence)
@@ -355,6 +357,7 @@ export class JobTracker extends EventEmitter {
       logger.warn(`Failed to broadcast job cancellation for ${id}:`, error);
     }
     this.emit('jobCancelled', job);
+    await refreshAlertState();
   }
 
   async failJob(id: string, error?: string): Promise<void> {
@@ -390,6 +393,7 @@ export class JobTracker extends EventEmitter {
       logger.warn(`Failed to broadcast job failure for ${id}:`, broadcastError);
     }
     this.emit('jobFailed', job);
+    await refreshAlertState();
   }
 
   getJob(id: string): Job | undefined {

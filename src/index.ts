@@ -42,6 +42,17 @@ const MONITORED_TOOL_NAMES = new Set([
   'benchmark_free_models',
 ]);
 
+async function attachQueueAlert(result: unknown): Promise<unknown> {
+  const { isAlertActive, buildQueueAlert } = await import('./modules/job-store/alert.js');
+  if (!isAlertActive()) return result;
+  const alert = await buildQueueAlert();
+  if (!alert) return result;
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return { ...result, _queue_alert: alert };
+  }
+  return { result, _queue_alert: alert };
+}
+
 function attachMonitoringInfo(toolName: string, result: unknown): unknown {
   if (!MONITORED_TOOL_NAMES.has(toolName)) return result;
 
@@ -439,11 +450,12 @@ export class LocalLamaMcpServer {
             // (costClass, providerId, modelId, …) while plain-text clients still
             // get a readable string.
             const resultWithMonitoring = attachMonitoringInfo(name, result);
-            const textContent = typeof resultWithMonitoring === 'string'
-              ? resultWithMonitoring
-              : JSON.stringify(resultWithMonitoring, null, 2);
+            const resultWithAlert = await attachQueueAlert(resultWithMonitoring);
+            const textContent = typeof resultWithAlert === 'string'
+              ? resultWithAlert
+              : JSON.stringify(resultWithAlert, null, 2);
             return {
-              content: [{ type: 'text' as const, text: textContent }]
+              content: [{ type: 'text' as const, text: textContent }],
             };
           } catch (error) {
             logger.error(`Error executing tool ${name}:`, error);
@@ -605,6 +617,23 @@ export class LocalLamaMcpServer {
         logger.error('Failed to initialize decision engine:', errorMessage);
         logger.error('Error details:', error);
         throw error;
+      }
+
+      // Run job recovery and refresh alert state after decision engine (job store) is ready
+      try {
+        const { recoverInProgressJobs } = await import('./modules/job-store/recovery.js');
+        const { refreshAlertState } = await import('./modules/job-store/alert.js');
+        const recovery = await recoverInProgressJobs();
+        await refreshAlertState();
+        if (recovery.recovering > 0 || recovery.permanentlyFailed > 0) {
+          logger.warn(
+            `[locallama] Job Queue alert: ${recovery.recovering} recovering, ` +
+            `${recovery.permanentlyFailed} permanently failed. ` +
+            `Call get_task_status to inspect or cancel.`
+          );
+        }
+      } catch (error) {
+        logger.warn('Job recovery failed (non-fatal):', error instanceof Error ? error.message : String(error));
       }
 
       // Set up resource and tool handlers

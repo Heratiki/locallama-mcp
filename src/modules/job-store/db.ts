@@ -83,6 +83,24 @@ function getDb(): Database {
   return dbInstance;
 }
 
+export async function getDbOrNull(): Promise<Database | null> {
+  return dbInstance;
+}
+
+export async function getJobsByStatus(statuses: JobStatus[]): Promise<PersistedJob[]> {
+  if (!dbInstance) return [];
+  try {
+    const placeholders = statuses.map(() => '?').join(', ');
+    return await dbInstance.all<PersistedJob[]>(
+      `SELECT * FROM jobs WHERE status IN (${placeholders}) ORDER BY created_at ASC`,
+      statuses
+    );
+  } catch (error) {
+    logger.error('Failed to get jobs by status:', error);
+    return [];
+  }
+}
+
 export async function insertJob(job: PersistedJob): Promise<void> {
   const db = getDb();
   try {
