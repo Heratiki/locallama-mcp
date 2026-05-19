@@ -4,6 +4,7 @@ import { ITaskExecutor } from '../types.js';
 import { getProviderRegistry } from '../../core/provider/registry.js';
 import { getModelRegistry } from '../../core/model/registry.js';
 import type { TaskExecutionOptions } from '../../core/provider/types.js';
+import { buildCodeTaskExecutionOptions } from '../../core/prompting/execution-profile.js';
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -85,7 +86,8 @@ export class TaskExecutor implements ITaskExecutor {
       const provider = registry.get(meta.providerId);
       if (provider) {
         logger.debug(`Dispatching ${bareId} via registry (provider: ${meta.providerId})`);
-        const r = await provider.executeTask(bareId, task, options);
+        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
+        const r = await provider.executeTask(bareId, task, executionOptions);
         return r.content;
       }
     }
@@ -95,7 +97,8 @@ export class TaskExecutor implements ITaskExecutor {
       const provider = registry.get(prefixProviderId);
       if (provider) {
         logger.debug(`Dispatching ${bareId} via prefix (provider: ${prefixProviderId})`);
-        const r = await provider.executeTask(bareId, task, options);
+        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
+        const r = await provider.executeTask(bareId, task, executionOptions);
         return r.content;
       }
     }
@@ -106,7 +109,8 @@ export class TaskExecutor implements ITaskExecutor {
       const supports = await provider.supportsModel(bareId);
       if (supports) {
         logger.debug(`Dispatching ${bareId} to local provider ${provider.id} (fallback probe)`);
-        const r = await provider.executeTask(bareId, task, options);
+        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
+        const r = await provider.executeTask(bareId, task, executionOptions);
         return r.content;
       }
     }
@@ -117,7 +121,8 @@ export class TaskExecutor implements ITaskExecutor {
       const supports = await provider.supportsModel(bareId);
       if (supports) {
         logger.debug(`Dispatching ${bareId} to provider ${provider.id} (fallback probe)`);
-        const r = await provider.executeTask(bareId, task, options);
+        const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
+        const r = await provider.executeTask(bareId, task, executionOptions);
         return r.content;
       }
     }

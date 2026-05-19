@@ -17,6 +17,7 @@ import {
   PromptImprovementConfig
 } from './types.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
 // File path for storing LM Studio model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'lm-studio-models.json');
@@ -715,7 +716,7 @@ export const lmStudioModule = {
     modelId: string,
     task: string,
     timeout: number
-  ): Promise<LMStudioApiCallResult> {
+    , options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<LMStudioApiCallResult> {
     logger.debug(`Calling LM Studio API for model ${modelId}`);
     let url: string | undefined;
 
@@ -769,15 +770,16 @@ export const lmStudioModule = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-      // Use temperature and maxTokens from the default model config
-      const temperature = config.defaultModelConfig.temperature;
-      const maxTokens = config.defaultModelConfig.maxTokens;
+      // Prefer task-tuned execution options, then fall back to the model defaults.
+      const temperature = options?.temperature ?? config.defaultModelConfig.temperature;
+      const maxTokens = options?.maxTokens ?? config.defaultModelConfig.maxTokens;
 
       // Prepare the messages based on the prompting strategy
       const messages = [];
 
-      if (strategy.systemPrompt) {
-        messages.push({ role: 'system', content: strategy.systemPrompt });
+      const systemPrompt = options?.systemPrompt ?? strategy.systemPrompt;
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       }
 
       if (strategy.userPrompt) {
@@ -1258,7 +1260,12 @@ export const lmStudioModule = {
       const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 180000;
 
       // Call the LM Studio API
-      const result = await this.callLMStudioApi(modelId, task, timeout); // Use this.
+      const result = await this.callLMStudioApi(
+        modelId,
+        task,
+        timeout,
+        buildCodeTaskExecutionOptions(task, 'lm-studio'),
+      ); // Use this.
 
       if (!result.success || !result.text) {
         const diagnosticsSummary = this.summarizeErrorDiagnostics(result.diagnostics);

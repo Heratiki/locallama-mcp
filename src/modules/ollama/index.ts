@@ -14,6 +14,7 @@ import {
   OllamaListModelsResponse
 } from './types.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
 // File path for storing Ollama model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'ollama-models.json');
@@ -609,7 +610,8 @@ export const ollamaModule = {
   async callOllamaApi(
     modelId: string,
     task: string,
-    timeout: number
+    timeout: number,
+    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }
   ): Promise<{
     success: boolean;
     text?: string;
@@ -649,14 +651,16 @@ export const ollamaModule = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
-      // Use temperature and maxTokens from the default model config
-      const temperature = config.defaultModelConfig.temperature;
+      // Prefer task-tuned settings, then fall back to the default model config.
+      const temperature = options?.temperature ?? config.defaultModelConfig.temperature;
+      const maxTokens = options?.maxTokens ?? config.defaultModelConfig.maxTokens;
       
       // Prepare the messages based on the prompting strategy
       const messages = [];
       
-      if (strategy.systemPrompt) {
-        messages.push({ role: 'system', content: strategy.systemPrompt });
+      const systemPrompt = options?.systemPrompt ?? strategy.systemPrompt;
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       }
       
       if (strategy.userPrompt) {
@@ -673,11 +677,12 @@ export const ollamaModule = {
         temperature,
         // Ollama doesn't support max_tokens in the same way as OpenAI
         options: {
-          temperature
+          temperature,
+          num_predict: maxTokens
         }
       };
       
-      logger.debug(`Ollama API call for ${modelId} using temperature: ${temperature}`);
+      logger.debug(`Ollama API call for ${modelId} using temperature: ${temperature}, maxTokens: ${maxTokens}`);
       
       // Make the request
       const response = await axios.post<OllamaChatResponse>(
@@ -1011,7 +1016,7 @@ export const ollamaModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<string> {
     logger.info(`Executing task using Ollama model ${modelId}`);
     
     try {
@@ -1020,10 +1025,14 @@ export const ollamaModule = {
         throw new Error('Ollama endpoint not configured');
       }
       
-      const timeout = config.ollamaTimeout;
+      const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : config.ollamaTimeout;
+      const executionOptions = {
+        ...buildCodeTaskExecutionOptions(task, 'ollama'),
+        ...options,
+      };
       
       // Call the Ollama API
-      const result = await this.callOllamaApi(modelId, task, timeout);
+      const result = await this.callOllamaApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
         if (result.error) {

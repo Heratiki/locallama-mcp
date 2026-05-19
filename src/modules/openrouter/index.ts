@@ -15,6 +15,7 @@ import {
 } from './types.js';
 import { speculativeDecodingService } from '../decision-engine/services/speculativeDecoding.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
 
 // Add a custom error class
@@ -588,7 +589,8 @@ export const openRouterModule = {
   async callOpenRouterApi(
     modelId: string,
     task: string,
-    timeout: number
+    timeout: number,
+    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }
   ): Promise<{
     success: boolean;
     text?: string;
@@ -638,8 +640,9 @@ export const openRouterModule = {
       // Prepare the messages based on the prompting strategy
       const messages = [];
       
-      if (strategy.systemPrompt) {
-        messages.push({ role: 'system', content: strategy.systemPrompt });
+      const systemPrompt = options?.systemPrompt ?? strategy.systemPrompt;
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       }
       
       if (strategy.userPrompt) {
@@ -652,8 +655,8 @@ export const openRouterModule = {
       const requestBody: Record<string, unknown> = {
         model: modelId,
         messages,
-        temperature: 0.7,
-        max_tokens: 1000,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 1000,
       };
 
       // Try to find a compatible draft model for speculative decoding
@@ -1154,7 +1157,7 @@ export const openRouterModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<string> {
     logger.info(`Executing task using OpenRouter model ${modelId}`);
     
     try {
@@ -1164,10 +1167,15 @@ export const openRouterModule = {
       }
       
       // Determine the execution timeout (default to 3 minutes)
-      const timeout = 180000;
+      const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 180000;
+
+      const executionOptions = {
+        ...buildCodeTaskExecutionOptions(task, 'openrouter'),
+        ...options,
+      };
       
       // Call the OpenRouter API
-      const result = await this.callOpenRouterApi(modelId, task, timeout);
+      const result = await this.callOpenRouterApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
         if (result.error) {

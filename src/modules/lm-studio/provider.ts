@@ -7,6 +7,7 @@ import {
   TaskExecutionResult,
 } from '../core/provider/types.js';
 import { lmStudioModule } from './index.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
 /**
  * Thin adapter that exposes the existing `lmStudioModule` as an `LLMProvider`.
@@ -74,7 +75,11 @@ class LMStudioProvider implements LLMProvider {
     options?: TaskExecutionOptions,
   ): Promise<TaskExecutionResult> {
     const id = modelId.startsWith('lm-studio:') ? modelId.substring('lm-studio:'.length) : modelId;
-    const content = await lmStudioModule.executeTask(id, task, { timeoutMs: options?.timeoutMs });
+    const executionOptions = {
+      ...buildCodeTaskExecutionOptions(task, 'lm-studio'),
+      ...options,
+    };
+    const content = await lmStudioModule.executeTask(id, task, { ...executionOptions, timeoutMs: options?.timeoutMs });
     return { content, model: id };
   }
 

@@ -7,6 +7,7 @@ import {
   TaskExecutionResult,
 } from '../core/provider/types.js';
 import { ollamaModule } from './index.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
 /**
  * Thin adapter that exposes the existing `ollamaModule` as an `LLMProvider`.
@@ -61,10 +62,14 @@ class OllamaProvider implements LLMProvider {
   async executeTask(
     modelId: string,
     task: string,
-    _options?: TaskExecutionOptions,
+    options?: TaskExecutionOptions,
   ): Promise<TaskExecutionResult> {
     const id = modelId.startsWith('ollama:') ? modelId.substring('ollama:'.length) : modelId;
-    const content = await ollamaModule.executeTask(id, task);
+    const executionOptions = {
+      ...buildCodeTaskExecutionOptions(task, 'ollama'),
+      ...options,
+    };
+    const content = await ollamaModule.executeTask(id, task, executionOptions);
     return { content, model: id };
   }
 

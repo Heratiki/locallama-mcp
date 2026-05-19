@@ -7,6 +7,7 @@ import {
   TaskExecutionResult,
 } from '../core/provider/types.js';
 import { openRouterModule } from './index.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
 /**
  * Thin adapter that exposes the existing `openRouterModule` as an `LLMProvider`.
@@ -99,7 +100,7 @@ class OpenRouterProvider implements LLMProvider {
   async executeTask(
     modelId: string,
     task: string,
-    _options?: TaskExecutionOptions,
+    options?: TaskExecutionOptions,
   ): Promise<TaskExecutionResult> {
     const id = modelId.startsWith('openrouter:')
       ? modelId.substring('openrouter:'.length)
@@ -131,7 +132,11 @@ class OpenRouterProvider implements LLMProvider {
       `OpenRouter call ${this.callTimestamps.length}/${config.openRouterRateLimitPerMinute} this minute for model ${id}`,
     );
 
-    const content = await openRouterModule.executeTask(id, task);
+    const executionOptions = {
+      ...buildCodeTaskExecutionOptions(task, 'openrouter'),
+      ...options,
+    };
+    const content = await openRouterModule.executeTask(id, task, executionOptions);
     return { content, model: id };
   }
 
