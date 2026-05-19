@@ -903,4 +903,463 @@ The focused live pass on 2026-05-19 confirms that provider wiring is now mostly 
   - Rationale: prevent stale VRAM/RAM occupancy by previously loaded models and reduce memory-pressure failures during runtime switching.
   - Implementation target: add a provider transition hook in task execution that performs safe unload, then logs unload/load timing and memory state for operational verification.
 
+---
+
+## Architectural & Operational Gaps — Open Issues (discovered 2026-05-19)
+
+Issues below are in the same severity and scope class as Issues #15–17. None are currently tracked in OPERATIONAL_TEST_PLAN.md. Each requires either a plan section or an explicit "not doing" decision before it can be closed.
+
+---
+
+### Issue 18 — No streaming response path; long completions time out at MCP boundary
+
+**Concern:** All MCP tool calls return complete responses. Ollama and LM Studio both support streaming HTTP responses. For slow hardware (Bug 7) or long-output tasks, the MCP client's tool-call timeout fires before inference completes, causing a `ERR_CANCELED` or `-32001` at the boundary even when the model would eventually succeed. No streaming path exists to return partial content or progress tokens.
+
+**Risks:**
+- Any model inference exceeding the MCP client's timeout ceiling is unreachable via `route_task` regardless of `OLLAMA_TIMEOUT` setting.
+- Large-context tasks (code review, document summarization) are disproportionately affected.
+- No incremental output for debugging — the user sees nothing until success or timeout.
+
+**Required research before implementation:** The MCP SDK's `StdioTransport` and `SSETransport` have different streaming semantics. Streaming tool results may require a protocol-level change. Investigate whether the MCP spec supports incremental tool result chunks, or whether the correct approach is an async job model (call `route_task` → get `jobId` → poll `cancel_job`/status until done). This is a **major design decision** requiring extensive research and planning before implementation.
+
+**Status:** ⏳ Not started. No workaround beyond increasing `OLLAMA_TIMEOUT`.
+
+---
+
+### Issue 19 — No rate limiting or backpressure for provider calls
+
+**Concern:** The server dispatches all incoming MCP tool calls immediately with no queuing or concurrency cap. If a client sends multiple `route_task` or `benchmark_task` calls in rapid succession:
+- Ollama will receive simultaneous inference requests; its queue is hardware-limited and requests may be serialized or rejected.
+- OpenRouter free-tier endpoints have per-minute and per-day rate limits. Simultaneous calls will hit 429s without any retry-after handling.
+- System RAM/VRAM can be overcommitted — multiple simultaneous large model loads cause OOM on constrained hardware.
+
+**Risks:**
+- Cascading failures where one overloaded call causes all concurrent calls to fail.
+- OpenRouter account temporary suspension from rate limit violations.
+- Silent inference degradation (Ollama serializes requests internally; callers see high latency, not an error).
+
+**Required research:** Whether the MCP SDK's transport layer supports backpressure, or whether queuing must be implemented at the application layer. Concurrency limits should be per-provider, not global. This interacts with Issue 18 (streaming/async job model). **Moderate engineering effort; design required.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 20 — Token counting uses character approximations, not actual tokenization
+
+**Concern:** Cost estimates and context-window overflow checks use character-count heuristics (divide by 4) to approximate token counts. Real tokenization differs significantly:
+- Non-English input (Chinese, Arabic, CJK) tokenizes at 1–2 chars/token instead of 4, inflating actual token counts 2–4× vs. the estimate.
+- Code with dense punctuation (TypeScript generics, regex) also tokenizes at higher density.
+- `get_cost_estimate` may understate actual cost by a factor of 2–3× for code-heavy tasks.
+- Context-window overflow guard (`caps.largeContext` check) may pass tasks that are actually too long.
+
+**Risks:**
+- Budget overruns on OpenRouter paid routing when actual tokens exceed estimate.
+- Silent truncation of inputs that exceed model context window but pass the heuristic guard.
+
+**Required research:** Evaluate `tiktoken` (OpenAI tokenizer, npm port available), `@anthropic-ai/tokenizer`, or model-specific tokenizer APIs exposed by LM Studio / Ollama. A pluggable `tokenize(text, modelId): number` interface on `LLMProvider` would let each provider use its native tokenizer. **Low-to-moderate effort, but requires provider interface change (Section 1 extension).**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 21 — Benchmark DB has no schema migration; field additions can corrupt old reads
+
+**Concern:** `data/benchmarks.db` is a SQLite database. As the benchmark result schema evolves (new capability scores, new task categories, new timing fields), existing rows written in the old schema will be read by new code that expects the new fields. There is no migration framework — `CREATE TABLE IF NOT EXISTS` silently succeeds without altering existing tables, leaving old rows without new columns.
+
+**Risks:**
+- `ModelRegistry.updateBenchmarkSummary()` reads columns that don't exist in old rows → returns `undefined` → capability scoring degrades silently.
+- A partial migration (some rows have new columns, some don't) causes inconsistent routing decisions.
+- No rollback path if a new schema is applied and then reverted.
+
+**Required research:** Evaluate a lightweight migration library (e.g., `better-sqlite3-migrations`, hand-rolled version-table approach). The migration must run at server startup before any benchmark reads. **Low effort if addressed early; high effort to retrofit after schema diverges across many installs.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 22 — Model capability drift: cached benchmark scores not invalidated on model updates
+
+**Concern:** Benchmark scores persist in `data/benchmarks.db` and are associated with `modelId` strings (e.g., `qwen2.5-coder:7b`). When Ollama updates a model in place (new GGUF revision, different quantization pulled from the same tag), the `modelId` is unchanged but the model's actual capabilities may have changed. The cached scores are not invalidated.
+
+**Risks:**
+- A model update that degrades quality (smaller quantization, different merge) continues to receive high scores from old benchmarks.
+- A model update that improves quality (better base model, new fine-tune) is penalized by old low scores.
+- `CapabilityDetector`'s empirical layer makes wrong routing decisions based on stale data.
+
+**Mitigation approach (requires design):** Store a content hash or `modified_at` timestamp from the Ollama/LM Studio model manifest alongside each benchmark record. At startup, compare the stored hash against the live provider's manifest. If they diverge, mark the model's benchmark summary as stale and re-run. **Low-moderate effort, but requires provider interface to expose model manifest metadata.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 23 — OpenRouter free-model catalog staleness; models change tiers without notice
+
+**Concern:** The OpenRouter free model list (fetched and cached locally) can become stale between cache refreshes. OpenRouter moves models between free and paid tiers, retires models, and adds new free models — sometimes without advance notice. The current cache is invalidated on a time basis only, not on a change-detection basis.
+
+**Risks:**
+- A model cached as free starts returning paid-tier errors (`402 Payment Required`) for every request.
+- New high-quality free models are not discovered until the next cache refresh.
+- Issue #16 (free-model health gating) partially addresses repeated failures, but doesn't address tier changes — a 402 is not a transient failure.
+
+**Required research:** Whether OpenRouter exposes a change feed or ETag-based cache invalidation for its model catalog. If not, a 402-response handler that immediately removes the model from the free catalog and triggers a re-fetch is the fallback. **Low effort once Issue 16 health gating is in place.**
+
+**Status:** ⏳ Not started. Dependent on Issue 16 being resolved first.
+
+---
+
+### Issue 24 — No circuit breaker for repeatedly failing providers
+
+**Concern:** Issue #16 addresses OpenRouter free-model health gating (quarantining specific models). The broader gap is that there is no circuit breaker at the provider level. If Ollama crashes, LM Studio becomes unresponsive, or OpenRouter returns 5xx errors, every subsequent tool call attempts and fails against the same broken provider with no backoff and no state tracking.
+
+**Risks:**
+- MCP clients receive errors on every call until the provider recovers, with no indication of whether the failure is transient or permanent.
+- Repeated failed calls consume wall-clock time (connection timeouts add up).
+- No automatic re-enablement when a provider recovers.
+
+**Mitigation approach:** A circuit breaker per `LLMProvider` instance: CLOSED (normal) → OPEN (failure threshold exceeded; reject immediately) → HALF-OPEN (probe after delay). The `LLMProvider.isAvailable()` method is the natural probe. The `ProviderRegistry` is the right home for this state. **Moderate effort; the interface for `isAvailable()` already exists.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 25 — Context window overflow: prompt builder does not enforce token limits before dispatch
+
+**Concern:** `codeTaskCoordinator` builds prompts by concatenating system prompt + task description + context. There is no pre-dispatch check that the assembled prompt fits within the selected model's declared `contextWindow`. When the prompt exceeds the context window:
+- Ollama silently truncates the input from the beginning (losing system prompt context).
+- LM Studio returns a 400 or 413 error.
+- The error surfaces as a generic execution failure, not as a "context overflow" diagnostic.
+
+**Risks:**
+- Silent truncation in Ollama leads to incorrect outputs without any error signal.
+- Large tasks that should decompose into subtasks are instead sent to a model that can't fit them, producing garbage results.
+- The `caps.largeContext` flag (from Section 5) is checked for model selection but not enforced at prompt assembly time.
+
+**Required research:** Add a pre-flight token estimate (see Issue 20) against `ModelMetadata.contextWindow` before dispatching. If overflow is detected, either truncate with a logged warning, trigger task decomposition, or return an actionable error. This requires resolving Issue 20 first. **Moderate effort, depends on Issue 20.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 26 — No periodic provider health probing; dead providers discovered only at call time
+
+**Concern:** Provider availability is checked at startup (`registry.initAll()`) and then only at the moment a task is dispatched. If Ollama stops between startup and a `route_task` call, the router selects the Ollama model based on stale "available" state, the task dispatches, and fails at execution — burning latency and potentially falling back to a paid provider unnecessarily.
+
+**Risks:**
+- Users on flaky hardware (laptop suspending, Ollama crashing due to OOM) see silent fallback to paid routing without understanding why.
+- The `preemptive_route_task` response may claim a local model is available when it is not.
+
+**Mitigation approach:** A background health-probe loop that pings each provider's health endpoint (Ollama: `GET /api/tags`, LM Studio: `GET /v1/models`) every N seconds and updates `ProviderRegistry`'s availability state. The loop must not interfere with in-flight requests. N should be configurable (`PROVIDER_HEALTH_INTERVAL_MS`, default 30s). **Low-moderate effort; does not change public interfaces.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 27 — Job queue is in-memory; server restart loses all in-flight jobs
+
+**Concern:** `JobTracker` holds job state in memory. If the server restarts (crash, update, manual restart), all in-flight jobs are lost. MCP clients that issued `route_task` calls and received a `jobId` have no way to recover the result.
+
+**Risks:**
+- During `update_server` (the self-update flow), the server restarts and abandons any running inference.
+- On hardware that OOM-kills the server process, partial results are unrecoverable.
+- No retry or resume mechanism exists.
+
+**Required research:** Whether the MCP spec or any MCP client provides a job-recovery protocol. If not, the simplest mitigation is persisting job state to SQLite (alongside the benchmark DB) so a restarted server can report `failed` with a reason instead of having the job simply vanish. **Moderate effort; requires schema design.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 28 — Server requires full restart to pick up config changes
+
+**Concern:** Changes to `models.json`, `strategies.json`, `.env` variables (`OLLAMA_TIMEOUT`, `LOCALLAMA_PROFILE`, provider endpoints), or `OPENROUTER_API_KEY` require a full server restart and MCP client reconnect. There is no hot-reload mechanism. During development, this slows iteration significantly.
+
+**Risks:**
+- Operators adding a new model or adjusting timeouts in production must disconnect all MCP clients, restart, and reconnect — disrupting active sessions.
+- Config errors are only discovered at restart time, not at edit time.
+
+**Mitigation approach:** A `reload_config` MCP tool (or a signal handler for `SIGHUP` on Unix) that re-reads `models.json` and `strategies.json` without restarting the process. Provider endpoints and API keys would still require restart (they affect authenticated HTTP clients). **Low effort for the file-reload subset; higher for credential-bearing config.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 29 — No authentication on MCP server; any stdio client can call paid tools
+
+**Concern:** The MCP server accepts all tool calls from any connected client with no authentication. Because it uses stdio transport, the client must be a trusted local process — but this assumption may not hold:
+- A compromised MCP client (malicious plugin, supply-chain attack on a coding agent) can call `route_task` with `complexity: 0.9` to trigger paid OpenRouter calls without user awareness.
+- `OPENROUTER_API_KEY` is passed through the environment; any code with access to the server process can exfiltrate it.
+- There is no per-tool permission model (e.g., "allow routing decisions but not paid execution without confirmation").
+
+**Required research:** The MCP spec does not yet define a standard authorization layer for stdio transports. Options include: (a) require a shared secret token in every tool call's arguments, (b) a `confirm_paid_action` tool that must be called before any paid execution, (c) rely entirely on OS process isolation and document the trust model explicitly. This is a **security-sensitive design decision requiring dedicated research and threat modeling before implementation.** Do not implement without a written threat model.
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 30 — Prompt injection risk in user-supplied task strings
+
+**Concern:** The `task` argument in `route_task` and `benchmark_task` is a free-form string that is embedded directly into prompts sent to local models. There is no sanitization layer. A crafted task string could:
+- Attempt to override system-prompt instructions in the local model (jailbreak attempts).
+- Inject `</system>` or similar delimiters that some models treat as special tokens.
+- For benchmarking: skew benchmark scores by including prompt text that reveals expected outputs.
+
+**Risks:**
+- Local model outputs a harmful or policy-violating response that the MCP client surfaces to the user.
+- Benchmark results are poisoned, leading to incorrect model selection.
+- For OpenRouter paid routing: prompt injection costs extra tokens and may trigger content moderation blocks.
+
+**Required research:** Whether the prompting strategy layer (`PromptingStrategyService`) is the correct place to add sanitization, or whether a separate input-validation stage is needed before prompt assembly. Sanitization must not break legitimate code tasks that include delimiter-like characters. **Low-moderate effort; high-priority for any publicly-accessible deployment.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 31 — No system memory pressure monitoring during inference
+
+**Concern:** On constrained hardware (16 GB RAM, 4 GB VRAM — System A), loading a model that exceeds available memory causes the process or the runtime (Ollama daemon) to be OOM-killed by the OS. The server has no awareness of system memory state before dispatching a task to a large model. It will dispatch `gemma4:26b` to Ollama on 4 GB VRAM hardware and succeed in the dispatch even though the inference will OOM.
+
+**Risks:**
+- Ollama daemon OOM-killed mid-inference corrupts the `ollama-models.json` cache if a write was in progress.
+- Server receives a connection reset instead of a graceful error, surfacing as `ERR_CANCELED` (Bug 5's pattern).
+- Repeated OOM-kill cycles destabilize the host system.
+
+**Mitigation approach:** Query system free RAM and VRAM (via `os.totalmem()` / `os.freemem()` for RAM; GPU memory requires platform-specific tooling) before dispatching to a local model. Compare against `ModelMetadata` declared footprint (if added to `models.json`). If insufficient, skip the model in selection rather than failing at execution. **Moderate effort; GPU memory query requires platform-specific code (Windows: `wmic`, Linux: `nvidia-smi`/`rocm-smi`).**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 32 — Multi-instance coordination undefined beyond single lock file
+
+**Concern:** The lock file prevents two server instances from running against the same data directory. But there is no designed story for legitimate multi-instance scenarios:
+- Development vs. installed copy (the dual-maintenance operational note already flags this).
+- A test suite that spawns the server as a subprocess while the dev server is also running.
+- Future: a cluster deployment where multiple server instances share a database.
+
+**Risks:**
+- Developers working in the source repo while the installed MCP server is active will hit lock contention and confusing errors.
+- `test-operational.mjs` spawns a server child process; if the installed server is running, the test server fails to acquire the lock and all tests fail with cryptic output.
+
+**Mitigation approach (near-term):** `LOCALLAMA_DATA_DIR` environment variable that redirects all file-based state (lock, DB, caches) to a non-default path. Test scripts set this to a temp directory. **Low effort; unblocks test isolation immediately.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 33 — Provider API version compatibility not detected at startup
+
+**Concern:** LM Studio and Ollama change their local REST API shapes between versions (endpoint paths, response field names, authentication requirements). The server has no version detection — it assumes the API shape it was written against is available. A user upgrading Ollama from 0.3.x to 0.4.x (for example) may see silent failures or wrong behavior without any diagnostic message.
+
+**Risks:**
+- LM Studio `POST /v1/chat/completions` is currently assumed; a future version might move to a different path or add required headers.
+- Ollama `/api/tags` response shape changes (already seen: the `/api` prefix issue in Bug 2) can break model discovery silently.
+- No version compatibility matrix is documented.
+
+**Mitigation approach:** At `provider.init()` time, detect the provider's version (Ollama: `GET /api/version`; LM Studio: `GET /v1/models` response headers or version field). Log a warning if the version is outside the tested range. Add a `docs/provider-compatibility.md` with the tested version matrix. **Low effort for detection and logging; ongoing maintenance required.**
+
+**Status:** ⏳ Not started.
+
+---
+
+### Issue 34 — Implicit POSIX assumptions remain in shell-dependent code paths
+
+**Concern:** Bug 4 fixed `process.cwd()` to use `import.meta.url`. However, other POSIX-style assumptions may remain:
+- Path separator usage: any `path.join` call that produces a path used in a shell command (e.g., spawning the BM25 engine or future sidecar processes) may use `\` on Windows where `/` is expected.
+- `test-operational.mjs` invokes shell commands (e.g., `curl`, `python3`) in the Session Continuity Checklist that do not exist on Windows without WSL.
+- Log rotation or file management using Unix signals (`SIGHUP`) does not apply on Windows.
+- Future sidecar processes or provider health-check scripts should be written to work on Windows natively or explicitly document Windows alternatives.
+
+**Risks:**
+- A developer following the Checklist on Windows (System A) hits `curl: command not found` or `python3: command not found` mid-diagnosis.
+- A future subprocess spawn fails on Windows with a path error that is non-obvious.
+
+**Mitigation approach:** Audit all shell invocations in `test-operational.mjs`, `docs/`, and any npm scripts for POSIX-only commands. Replace `curl` with `node`-based HTTP checks; replace `python3` with `node` or PowerShell equivalents in the Checklist. Document Windows-specific alternatives explicitly in `OPERATIONAL_TEST_PLAN.md`. **Low effort for documentation; moderate for tooling changes.**
+
+**Status:** ⏳ Not started.
+
+---
+
+## Interactive Testing Webapp — Planning Section
+
+> **Scope note:** This section captures requirements, architectural considerations, risks, and open research questions for a future human-facing MCP test client implemented as a web application. No implementation code is included here. Items marked **[MAJOR DESIGN REQUIRED]** must not be implemented without a dedicated design/research phase and explicit approval.
+
+### Purpose
+
+The interactive testing webapp is a developer-facing tool — not a production feature or end-user product. Its primary purpose is to allow developers, contributors, and QA to:
+
+1. Discover and inspect what the running MCP server exposes (tools, resources, registered models, routing state).
+2. Invoke MCP tools interactively with controlled inputs and observe structured responses.
+3. Run and visualize benchmarks, routing decisions, and capability assessments against selected models.
+4. Capture reproducible diagnostics, structured logs, and error reports for bug filing.
+5. Validate operational readiness across providers (Ollama, LM Studio, OpenRouter) without writing test scripts.
+
+### Guiding constraints
+
+- **No new backend logic.** The webapp must not introduce MCP tools, endpoints, or server behaviors that exist only to serve the webapp. All intelligence stays server-side. The webapp is a thin client.
+- **Reuse existing interfaces.** The MCP server's tool surface, `locallama://status` and `locallama://models` resources, benchmark DB queries, and job tracking are the APIs the webapp consumes.
+- **Localhost-only default.** The webapp must bind to `127.0.0.1` by default. It must not be inadvertently exposed to a network. Any deviation requires explicit configuration and a security review.
+- **No secrets in the browser.** `OPENROUTER_API_KEY` and other credentials must never be sent to or stored in the browser. All credentialed calls go through the existing server.
+
+---
+
+### Transport layer research requirement **[MAJOR DESIGN REQUIRED]**
+
+The existing MCP server speaks `StdioTransport` only — a browser cannot open a stdio pipe. Two architectural options exist:
+
+**Option A — HTTP/SSE bridge process**
+A thin Node.js bridge runs alongside the MCP server. The bridge spawns the MCP server via stdio (exactly as `test-operational.mjs` does), proxies tool calls received over HTTP/SSE from the browser to the stdio pipe, and streams responses back. The browser communicates with the bridge, not the MCP server directly.
+
+Risks:
+- Adds a second process to manage, increasing operational complexity.
+- The bridge becomes a bottleneck; long-running tool calls (benchmarks) require SSE keep-alive or WebSocket upgrade.
+- The bridge must be co-located with the MCP server (same machine); remote webapp use is not a supported scenario.
+- MCP tool schemas must be re-exposed by the bridge (or fetched from the server's `list_tools` response) so the browser can construct valid call payloads.
+
+**Option B — MCP SDK SSETransport**
+The MCP SDK includes an `SSEServerTransport` (for Express/Node HTTP servers). The MCP server could be modified to optionally listen on an HTTP port (configurable, off by default) using `SSETransport` instead of (or in addition to) stdio. The browser connects directly to this SSE endpoint.
+
+Risks:
+- Modifying the server to support a second transport requires careful design to avoid breaking the stdio path.
+- `SSETransport` in the MCP SDK is currently lower-maturity than `StdioTransport`; its behavior under slow connections and long-running tool calls must be validated.
+- A listening HTTP port widens the attack surface; the default-off requirement must be enforced at the config layer.
+- Streaming responses (Issue 18) become more natural with SSE but still require MCP protocol-level support for incremental tool results.
+
+**Research required before choosing:** Review the MCP SDK's current SSETransport implementation for production readiness, streaming support, and authentication hooks. Evaluate whether the bridge pattern (Option A) is simpler to implement without touching the server. Choose one option and document it in a dedicated design note. **Do not implement before the design note is approved.**
+
+---
+
+### Frontend technology
+
+The webapp should use established, low-dependency tooling appropriate for a developer utility:
+
+- **Rendering:** A lightweight framework (React, Preact, or vanilla JS/HTML) sufficient for forms, tables, and real-time log streaming. No heavy SPA framework required.
+- **Styling:** Minimal CSS; a utility framework (Tailwind) or plain CSS. No design system dependency.
+- **Build:** If a build step is needed (TypeScript, JSX), it must be integrated into the existing `npm run build` pipeline or be entirely optional (vanilla JS preferred to avoid build overhead).
+- **State:** Browser-local only. No backend state store for the webapp. Tool call history and log buffers are session-scoped and lost on page refresh (acceptable for a dev tool).
+
+**Open question:** Whether to colocate the webapp source in this repository (under `web/` or `src/web/`) or keep it as a separate repository. Colocating simplifies development but couples the webapp release to the MCP server release. **Decision required before any implementation begins.**
+
+---
+
+### Feature requirements
+
+#### Model discovery and selection
+
+- Fetch and display the `locallama://models` resource on load.
+- Show each model's provider, cost class, capability flags (from `ModelMetadata`), and last benchmark summary if available.
+- Allow the user to select one or more models as the target for benchmarking or routing tests.
+- Show real-time availability state (using Issue 26's health probe data if implemented; otherwise show last-known state with a staleness timestamp).
+- Support filtering by provider (Ollama, LM Studio, OpenRouter free, OpenRouter paid), cost class, and capability.
+
+**Risk:** If Issue 26 (periodic health probing) is not implemented, availability data will be stale. The webapp must clearly communicate data freshness to avoid misleading the user.
+
+#### Tool invocation panel
+
+- List all registered MCP tools (from the server's `list_tools` response).
+- For each tool, render a form generated from the tool's JSON schema — inputs for each required and optional argument.
+- Submit the form as a tool call; display the raw JSON response and a parsed/highlighted view.
+- Preserve call history in the session (list of calls with timestamps, inputs, and responses).
+- Allow re-running a previous call with the same or modified inputs (for reproducibility).
+- Copy-to-clipboard for the full call payload (for filing bug reports).
+
+**Risk:** Tool schemas use JSON Schema; generating accurate forms from arbitrary JSON Schema is non-trivial (handling `oneOf`, `anyOf`, array items, nested objects). Scope to the concrete schemas in use rather than building a general JSON Schema form renderer.
+
+#### Routing test panel
+
+- A dedicated view for `preemptive_route_task` and `route_task` that surfaces the routing decision in a readable format: selected model, provider, cost class, reason string, estimated cost.
+- Allow sweeping across complexity values (0.1 → 1.0) and priorities (`cost`, `quality`) and displaying the routing decision for each combination in a table.
+- Show which models were considered and why they were or were not selected (requires the routing response to include a `considered_models` debug field — **this field does not currently exist and would need to be added to the routing response schema as an optional debug field**).
+- Diff two routing decisions side-by-side (e.g., before and after a benchmark run or config change).
+
+**Risk:** The `considered_models` debug field requires a server-side change to routing output. This is additive and non-breaking, but must be designed carefully to avoid exposing internal scoring details that could be misinterpreted.
+
+#### Benchmark runner
+
+- UI for `benchmark_task` and `benchmark_tasks` — select task category, choose target model(s), set run count and timeout.
+- Display results in a structured table: task name, success rate, latency (p50/p95), score.
+- Persist benchmark results to the existing `data/benchmarks.db` via the existing server-side benchmark tools — the webapp does not write directly to the DB.
+- Show historical benchmark trends for a model (previous runs) by querying the server for stored benchmark summaries (via a new read-only MCP tool or by extending `locallama://models` to include benchmark history — **design required**).
+- Allow exporting benchmark results as JSON for offline analysis.
+
+**Risk:** Benchmark runs can take minutes per model. The webapp must handle long-running tool calls without timing out or losing the connection. This is directly coupled to Issue 18 (streaming) and Issue 19 (backpressure). **The benchmark runner UI must not be built until the transport layer design (above) is resolved, because synchronous HTTP is insufficient for benchmark workloads.**
+
+#### Diagnostics and structured logging
+
+- A real-time log panel that streams server-side log output (currently written to `locallama-test.log`) to the browser.
+- Log streaming requires either: (a) the bridge process tails the log file and pushes lines over SSE/WebSocket, or (b) the server emits log lines as MCP notifications (if the MCP SDK supports server-initiated notifications — **research required**).
+- Log level filter controls (debug / info / warn / error).
+- Structured error display: when a tool call returns an error, parse known error shapes (provider errors, timeout errors, model-not-found errors) and display actionable next steps alongside the raw error.
+- A "reproducible report" button that packages: server version, selected model, tool call payload, raw response, and the last N log lines into a JSON blob for copy-paste into a GitHub issue.
+
+**Risk:** Log streaming via SSE/WebSocket requires the transport layer to be in place. Without streaming, the best fallback is a manual "fetch last N lines" button that calls a dedicated log-fetch endpoint — but this requires a new backend endpoint, which violates the "no new backend logic" constraint unless a log-reader MCP tool is added. **Resolve transport design first.**
+
+#### Telemetry dashboard
+
+- Display aggregate metrics derived from the benchmark DB and routing history:
+  - Per-model success rate over time.
+  - Routing decision distribution (local vs. free vs. paid) over the last N calls.
+  - Average inference latency per model and provider.
+  - Estimated cumulative cost (from OpenRouter calls tracked by `cost-monitor`).
+- All data sourced from the server via MCP tools or resource reads — no webapp-side computation of metrics.
+- Auto-refresh on a configurable interval.
+
+**Risk:** The current MCP surface does not expose aggregate routing history or cost tracking metrics. Either new read-only MCP resources must be added (e.g., `locallama://telemetry`, `locallama://routing-history`), or the webapp must maintain its own session-scoped accumulation of tool call results. The latter approach produces incomplete history (only what happened in the current session). Adding server-side telemetry resources is the correct long-term approach but **requires design and is out of scope for an initial webapp MVP.**
+
+---
+
+### Operational risks
+
+1. **Transport layer is the critical path.** All other features depend on the webapp being able to call MCP tools. Until Option A or Option B is designed and prototyped, no other feature work should begin.
+
+2. **Benchmark UI requires Issue 18 resolution.** Long-running benchmark calls will time out over plain HTTP. Do not build the benchmark UI until the async job model or streaming path is in place.
+
+3. **Log streaming requires new infrastructure.** The "no new backend logic" constraint is in tension with the log streaming requirement. A careful design is needed to either relax the constraint for a minimal log-relay endpoint or find an alternative (MCP notifications, periodic polling).
+
+4. **Security surface increases with HTTP port.** Option B (SSETransport) exposes the MCP server on a TCP port. A misconfigured bind address (`0.0.0.0` instead of `127.0.0.1`) exposes all MCP tools — including paid routing and credential-adjacent operations — to the local network. This must be prevented at the config layer, not left to the user.
+
+5. **Webapp divergence from server.** If the webapp lives in a separate repository, schema changes to MCP tools (argument names, response shapes) may not be discovered until the webapp is exercised against a newer server version. Consider embedding the webapp in this repository to share the tool schema types.
+
+6. **No auth within the webapp session.** The webapp is a dev tool and does not need user accounts. But if two developers share a machine and the webapp is running, both can see each other's call history and trigger paid tool calls. Document this limitation explicitly. Do not add session auth to the initial version — it is out of scope for a developer utility.
+
+7. **Accessibility and UX scope.** The webapp is a developer tool, not a consumer product. Accessibility is still required (keyboard navigation, screen reader labels for form fields) but visual polish is not. Scope UX effort accordingly.
+
+---
+
+### Scalability concerns
+
+The webapp is explicitly single-developer-at-a-time, localhost-only. Scalability concerns are therefore minimal and should not drive design decisions. The one exception: the log streaming buffer. If the server emits high-volume debug logs (e.g., during a large benchmark run), the browser's log panel must cap the in-memory buffer (e.g., last 5000 lines) and discard older entries to avoid unbounded memory growth in the browser tab.
+
+---
+
+### Missing dependencies to resolve before any implementation begins
+
+| Dependency | Status | Blocks |
+|---|---|---|
+| Transport layer design (Option A vs. B) | ⏳ Research required | Everything |
+| MCP SDK SSETransport production readiness | ⏳ Research required | Option B path |
+| Streaming/async job model (Issue 18) | ⏳ Not started | Benchmark runner UI |
+| Log streaming mechanism | ⏳ Design required | Diagnostics panel |
+| Server-side telemetry resources | ⏳ Design required | Telemetry dashboard |
+| `considered_models` debug field in routing response | ⏳ Design required | Routing test panel (full) |
+| Benchmark history read API | ⏳ Design required | Benchmark runner (historical view) |
+| Webapp repository location decision | ⏳ Decision required | All implementation |
+
+---
+
+### Validation and testing strategy for the webapp
+
+- **Unit tests:** Form generation from JSON Schema, log line parsing, error shape detection.
+- **Integration tests:** Tool call round-trips using the bridge/SSETransport, with the MCP server spawned as a subprocess (same pattern as `test-operational.mjs`).
+- **Manual smoke matrix:** A checked-in `docs/webapp-smoke-checklist.md` with one row per major feature (model discovery, tool invocation, routing test, benchmark run). Run manually before each release.
+- **No end-to-end browser automation initially.** The dev-tool audience means Playwright/Cypress automation is a nice-to-have, not a requirement for an initial release.
+
+---
+
+### UX and workflow gaps to address during design
+
+- How does the user know which tool to invoke for a given test goal? A "quick start" panel with common testing scenarios (test routing, run a benchmark, check model availability) is more useful than an alphabetical tool list.
+- How are errors distinguished from expected "routing decided local" responses? The UI must differentiate tool-level errors (MCP error codes) from application-level decisions (model selected, cost estimated).
+- Benchmark results are opaque numbers without context. A "compare to baseline" feature (pin a result, then re-run to see delta) would make benchmarks actionable.
+- The webapp should surface the OPERATIONAL_TEST_PLAN.md's suite structure (smoke / routing / LLM) as pre-built test sequences, not just raw tool invocations. Users unfamiliar with the server's tool surface should be able to run a smoke check with one click.
+
 

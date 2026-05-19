@@ -283,22 +283,163 @@ Models available on this system:
 
 ---
 
+## Testing Gaps and Coverage Debt (added 2026-05-19)
+
+The following operational test scenarios are not covered by any existing suite. Add them to the appropriate suite when the underlying feature or fix is ready.
+
+### Gap 1 — Timeout boundary tests (Issue 18 / Bug 6 / Bug 7)
+
+No test verifies what happens at the MCP tool-call timeout boundary. Currently, the suite relies on tool calls completing within the MCP client's default timeout. A dedicated timeout-boundary suite is needed:
+
+- Invoke `route_task` against a model that is known to be too large for available hardware and assert that the response is a structured error (not a hang or a connection reset).
+- Verify that `ERR_CANCELED` from Ollama maps to a user-readable error message, not `"Error executing task: unknown"`.
+- Assert that `OLLAMA_TIMEOUT` is respected: a task that would take longer than the configured timeout returns a timeout error within `OLLAMA_TIMEOUT + 5s`.
+
+**Blocker:** Requires a controllable slow-model fixture. On System A, `gemma4:26b` can serve this role for slow-inference tests, but it must be used in isolation (not in the standard suite) to avoid slowing every CI run.
+
+---
+
+### Gap 2 — Provider health failure injection (Issue 24 / Issue 26)
+
+No test verifies server behavior when a provider becomes unavailable after startup:
+
+- Start the server with Ollama running, then stop Ollama, then call `route_task`. Assert that the response either falls back gracefully to another provider or returns a clear "no local provider available" error — not a hang or a crash.
+- Start the server with Ollama unavailable. Assert that `preemptive_route_task` does not claim local models are available.
+- Verify that the periodic health probe (Issue 26, when implemented) updates provider availability state and that subsequent `preemptive_route_task` calls reflect the updated state.
+
+**Blocker:** Issue 26 (periodic health probe) must be implemented before the last bullet. The first two bullets can be added now.
+
+---
+
+### Gap 3 — Rate limiting and concurrent call behavior (Issue 19)
+
+No test verifies server behavior under concurrent tool calls:
+
+- Send 3–5 simultaneous `preemptive_route_task` calls and assert that all return well-formed responses (not partial responses or crashes from shared mutable state in the routing engine).
+- Send 2 simultaneous `route_task` calls that both select the same Ollama model. Assert that both eventually complete or one gracefully queues/fails with a clear error, and that neither leaves the server in a broken state.
+
+**Blocker:** Issue 19 (rate limiting/backpressure) must be designed before a concurrency test can assert correct behavior. Currently, the expected behavior is undefined.
+
+---
+
+### Gap 4 — Benchmark DB integrity after restart (Issue 21)
+
+No test verifies that benchmark results written in one server session are correctly read in the next:
+
+- Run `benchmark_task` against a model. Stop the server. Restart the server. Call `preemptive_route_task` and assert that the newly started server's routing decision reflects the benchmark data from the previous session (i.e., the DB was read correctly at startup).
+- Add a test that writes a row in the old benchmark schema (if schema is ever migrated) and verifies the migration runs without data loss.
+
+**Blocker:** Issue 21 (schema migration framework) must be in place before the migration test. The restart/persistence test can be added now.
+
+---
+
+### Gap 5 — Windows path correctness (Issue 34 / Bug 4)
+
+No test verifies path resolution on Windows. The Session Continuity Checklist uses `curl` and `python3`, which are not guaranteed on Windows. Additionally:
+
+- Add a check that `rootDir` (from `src/config/index.ts`) resolves to the project root, not `C:\Program Files\nodejs` or any other host-process CWD.
+- Replace the `curl` and `python3` commands in the Checklist below with PowerShell/Node equivalents that work on Windows natively.
+- Add a smoke test assertion that `locallama.lock`, `ollama-models.json`, and `data/benchmarks.db` are created in the expected directory (project root or `LOCALLAMA_ROOT_DIR` if set), not in the host CWD.
+
+**Blocker:** None. These can be added immediately.
+
+---
+
+### Gap 6 — Cross-provider failover (Issue 17)
+
+Issue 17 (cross-provider local model lifecycle) has no test coverage:
+
+- Simulate a task flow where the initial local decision is Ollama, but Ollama becomes unavailable at execution time. Assert that the server either retries with LM Studio or returns a clear error — not a crash.
+- Assert that after a cross-provider switch, the previously loaded model in the prior provider is explicitly unloaded (when Issue 17's unload hook is implemented).
+- Assert that VRAM/RAM usage does not accumulate across multiple provider switches (requires the memory monitoring from Issue 31 to be in place for a quantitative assertion).
+
+**Blocker:** Issue 17 (unload hook) and Issue 31 (memory monitoring) must be implemented. Failover assertion can be added now (asserts error shape, not resource cleanup).
+
+---
+
+### Gap 7 — OpenRouter free-model health gating (Issue 16)
+
+Issue 16 (free-model health gating) has no test coverage beyond the live observation that currently-failing models are re-selected:
+
+- Mock an OpenRouter free model to return `invalid_request` on every call. Assert that after N failures (configurable threshold), the model is quarantined and no longer selected by `route_task`.
+- Assert that after the quarantine window expires, the model becomes eligible again.
+- Assert that a quarantined model appears in diagnostic output (tool response or log) so the developer knows why routing avoided it.
+
+**Blocker:** Issue 16 must be implemented before these tests are meaningful.
+
+---
+
+### Gap 8 — Token overflow detection (Issue 25)
+
+No test verifies that a prompt exceeding a model's context window is handled gracefully:
+
+- Construct a task string that is provably longer than `contextWindow` for the selected model.
+- Assert that the server returns a `context_overflow` error (or similar structured error) rather than dispatching and receiving a silent truncation.
+- Assert that the error message includes the estimated token count and the model's declared context window, so the developer can act on it.
+
+**Blocker:** Issues 20 (token counting) and 25 (context-window enforcement) must be implemented.
+
+---
+
+### Gap 9 — Config change detection (Issue 28)
+
+No test verifies that config changes are (or are not) picked up at runtime:
+
+- Change `models.json` to add a new model entry. Assert that the model does NOT appear in `locallama://models` without a restart (documenting current behavior: restart required).
+- Once Issue 28's `reload_config` tool is implemented: trigger `reload_config`, then assert the new model appears without a restart.
+
+**Blocker:** Issue 28 must be implemented for the second assertion.
+
+---
+
+### Gap 10 — Multi-instance lock contention (Issue 32)
+
+No test verifies server behavior when two instances attempt to start against the same data directory:
+
+- Start one server instance. Attempt to start a second instance pointing at the same root directory. Assert that the second instance either exits with a clear "lock file held" error or (if `REMOVE_STALE_LOCK_FILES=true`) detects the other instance is live and refuses to steal the lock.
+- Assert that `LOCALLAMA_DATA_DIR` correctly redirects all file-based state, allowing two instances with different data dirs to run simultaneously without conflict.
+
+**Blocker:** Issue 32 (`LOCALLAMA_DATA_DIR` env var) must be implemented for the second assertion. The first assertion can be added now.
+
+---
+
+## Interactive Webapp Test Client — Planning Reference
+
+See the **Interactive Testing Webapp — Planning Section** added to `PLAN.md` (2026-05-19) for the full requirements, architectural options, risks, and dependency chain.
+
+**Key operational testing implications for the webapp:**
+
+- The webapp's test client must be validated against the same test suites defined in this document (smoke, routing, LLM). The webapp is not a replacement for `test-operational.mjs` — it is an interactive companion.
+- A `docs/webapp-smoke-checklist.md` manual test matrix must be created when the webapp reaches initial implementation. It should mirror the structure of Suite 1 (Smoke) and Suite 2 (Routing) above.
+- Any tool invoked via the webapp must produce identical responses to the same tool invoked via `test-operational.mjs`. If they differ, the transport layer (bridge or SSETransport) has a bug.
+- The webapp's log panel must be validated against the log output from `locallama-test.log` — spot-check that the same lines appear in both, in the same order.
+- Benchmark results triggered via the webapp must be queryable via `test-operational.mjs` in the same session (verifying DB write-through, not webapp-local state).
+
+---
+
 ## Session Continuity Checklist
 
 If you are an AI agent picking this up in a new session, run these checks first:
 
+> **Windows note (Issue 34):** The commands below use `curl` and `python3`, which may not be available on Windows without WSL. Use the PowerShell equivalents listed in parentheses where noted. See Gap 5 in the Testing Gaps section above for the tracking item.
+
 ```bash
 # 1. Verify Ollama is running
+# Unix:
 curl -s http://localhost:11434/api/tags | python3 -c "import sys,json; [print(m['name']) for m in json.load(sys.stdin)['models']]"
+# Windows PowerShell equivalent:
+# (Invoke-RestMethod http://localhost:11434/api/tags).models | ForEach-Object { $_.name }
 
 # 2. Verify the build is current
 npm run build 2>&1 | tail -5
+# Windows PowerShell: npm run build | Select-Object -Last 5
 
 # 3. Quick smoke test
 node test-operational.mjs --suite smoke --verbose
 
 # 4. Check for lock file remnants
 ls locallama.lock 2>/dev/null && echo "LOCK EXISTS — delete if no server running"
+# Windows PowerShell: if (Test-Path locallama.lock) { Write-Host "LOCK EXISTS — delete if no server running" }
 ```
 
 If smoke passes, continue from the "Known Issues" section above or extend the suite
