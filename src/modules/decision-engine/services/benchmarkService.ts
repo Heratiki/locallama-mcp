@@ -11,7 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { speculativeDecodingService } from '../services/speculativeDecoding.js';
 import { Model } from '../../../types/index.js';
-import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
+import { getProviderRegistry, isProviderId, isProviderLocal } from '../../core/provider/index.js';
 
 // Add this interface at the top of the file with other types
 /**
@@ -817,13 +817,25 @@ export const benchmarkService = {
                 isProviderId(draftModel?.provider, 'ollama') ? draftModel?.id : undefined
               );
             } else {
-              // Default to OpenRouter for other providers
-              logger.info(`Calling OpenRouter API for model ${model.id}`);
-              result = await openRouterModule.callOpenRouterApi(
-                model.id,
-                task.task,
-                Math.round(dynamicTimeout) // Use dynamic timeout
-              );
+              // Use provider execution path so OpenRouter rate-limit and quarantine gates are enforced.
+              const provider = getProviderRegistry().get('openrouter');
+              if (!provider) {
+                throw new Error('OpenRouter provider is not registered');
+              }
+
+              logger.info(`Calling OpenRouter provider for model ${model.id}`);
+              const execResult = await provider.executeTask(model.id, task.task, {
+                timeoutMs: Math.round(dynamicTimeout),
+              });
+
+              result = {
+                success: true,
+                text: execResult.content,
+                usage: {
+                  prompt_tokens: execResult.promptTokens ?? Math.ceil(task.task.length / 4),
+                  completion_tokens: execResult.completionTokens ?? Math.ceil(execResult.content.length / 4),
+                },
+              };
             }
             
             const endTime = Date.now();

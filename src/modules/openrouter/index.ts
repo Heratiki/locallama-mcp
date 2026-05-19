@@ -10,6 +10,7 @@ import {
   OpenRouterModelsResponse,
   OpenRouterErrorResponse,
   OpenRouterModelTracking,
+  OpenRouterFreeModelHealth,
   PromptingStrategy,
   OpenRouterErrorType
 } from './types.js';
@@ -52,6 +53,8 @@ interface OpenRouterChatCompletion {
 
 // File path for storing OpenRouter model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'openrouter-models.json');
+const FREE_MODEL_FAILURE_THRESHOLD = 2;
+const FREE_MODEL_QUARANTINE_MS = 30 * 60 * 1000;
 
 // Default prompting strategies for different model families
 const DEFAULT_PROMPTING_STRATEGIES: Record<string, Partial<PromptingStrategy>> = {
@@ -91,7 +94,8 @@ export const openRouterModule = {
   modelTracking: {
     models: {},
     lastUpdated: '',
-    freeModels: []
+    freeModels: [],
+    freeModelHealth: {}
   } as OpenRouterModelTracking,
 
   // In-memory cache of prompting strategies
@@ -124,13 +128,15 @@ export const openRouterModule = {
       try {
         const data = await fs.readFile(TRACKING_FILE_PATH, 'utf8');
         this.modelTracking = JSON.parse(data) as OpenRouterModelTracking;
+        this.modelTracking.freeModelHealth = this.modelTracking.freeModelHealth || {};
         logger.debug(`Loaded OpenRouter tracking data with ${Object.keys(this.modelTracking.models).length} models and ${this.modelTracking.freeModels.length} free models`);
       } catch {
         logger.debug('No existing OpenRouter tracking data found, will create new tracking data');
         this.modelTracking = {
           models: {},
           lastUpdated: new Date().toISOString(),
-          freeModels: []
+          freeModels: [],
+          freeModelHealth: {}
         };
       }
       
@@ -244,10 +250,19 @@ export const openRouterModule = {
         }
         
         // Update the tracking data
+        const existingHealth = this.modelTracking.freeModelHealth || {};
+        const nextHealth: Record<string, OpenRouterFreeModelHealth> = {};
+        for (const freeModelId of freeModels) {
+          if (existingHealth[freeModelId]) {
+            nextHealth[freeModelId] = existingHealth[freeModelId];
+          }
+        }
+
         this.modelTracking = {
           models: updatedModels,
           lastUpdated: new Date().toISOString(),
-          freeModels
+          freeModels,
+          freeModelHealth: nextHealth
         };
         
         // Save the tracking data to disk
@@ -438,10 +453,14 @@ export const openRouterModule = {
       
       // Filter for free models
       const freeModels = allModels.filter(model => {
-        return this.modelTracking.freeModels.includes(model.id);
+        return this.modelTracking.freeModels.includes(model.id) && !this.isModelQuarantined(model.id);
       });
-      
-      logger.info(`Found ${freeModels.length} free models out of ${allModels.length} total models from OpenRouter`);
+
+      const quarantinedFreeModels = this.modelTracking.freeModels.filter((modelId) => this.isModelQuarantined(modelId));
+      logger.info(`Found ${freeModels.length} healthy free models out of ${allModels.length} total models from OpenRouter`);
+      if (quarantinedFreeModels.length > 0) {
+        logger.warn(`Excluded ${quarantinedFreeModels.length} quarantined free model(s): ${quarantinedFreeModels.join(', ')}`);
+      }
       
       // If still no free models, try one more time with a forced update
       if (freeModels.length === 0 && !forceUpdate) {
@@ -528,6 +547,71 @@ export const openRouterModule = {
    */
   getPromptingStrategy(modelId: string): PromptingStrategy | undefined {
     return this.promptingStrategies[modelId];
+  },
+
+  normalizeModelId(modelId: string): string {
+    return modelId.startsWith('openrouter:') ? modelId.substring('openrouter:'.length) : modelId;
+  },
+
+  isModelQuarantined(modelId: string): boolean {
+    const normalizedModelId = this.normalizeModelId(modelId);
+    const state = this.modelTracking.freeModelHealth?.[normalizedModelId];
+    if (!state?.quarantinedUntil) {
+      return false;
+    }
+
+    return new Date(state.quarantinedUntil).getTime() > Date.now();
+  },
+
+  async recordFreeModelSuccess(modelId: string): Promise<void> {
+    const normalizedModelId = this.normalizeModelId(modelId);
+    if (!this.modelTracking.freeModels.includes(normalizedModelId)) {
+      return;
+    }
+
+    const state = this.modelTracking.freeModelHealth?.[normalizedModelId] || { consecutiveFailures: 0 };
+    this.modelTracking.freeModelHealth = this.modelTracking.freeModelHealth || {};
+    this.modelTracking.freeModelHealth[normalizedModelId] = {
+      ...state,
+      consecutiveFailures: 0,
+      quarantinedUntil: undefined,
+      lastSuccessAt: new Date().toISOString(),
+    };
+
+    await this.saveTrackingData();
+  },
+
+  async recordFreeModelFailure(modelId: string, errorType: OpenRouterErrorType): Promise<void> {
+    const normalizedModelId = this.normalizeModelId(modelId);
+    if (!this.modelTracking.freeModels.includes(normalizedModelId)) {
+      return;
+    }
+
+    this.modelTracking.freeModelHealth = this.modelTracking.freeModelHealth || {};
+    const previous = this.modelTracking.freeModelHealth[normalizedModelId] || { consecutiveFailures: 0 };
+    const consecutiveFailures = previous.consecutiveFailures + 1;
+
+    const nextState: OpenRouterFreeModelHealth = {
+      ...previous,
+      consecutiveFailures,
+      lastErrorType: errorType,
+      lastFailureAt: new Date().toISOString(),
+    };
+
+    if (
+      consecutiveFailures >= FREE_MODEL_FAILURE_THRESHOLD &&
+      (errorType === OpenRouterErrorType.INVALID_REQUEST ||
+        errorType === OpenRouterErrorType.MODEL_NOT_FOUND ||
+        errorType === OpenRouterErrorType.SERVER_ERROR)
+    ) {
+      nextState.quarantinedUntil = new Date(Date.now() + FREE_MODEL_QUARANTINE_MS).toISOString();
+      logger.warn(
+        `Quarantining OpenRouter free model ${normalizedModelId} after ${consecutiveFailures} consecutive ${errorType} failures until ${nextState.quarantinedUntil}`,
+      );
+    }
+
+    this.modelTracking.freeModelHealth[normalizedModelId] = nextState;
+    await this.saveTrackingData();
   },
 
   /**
@@ -1120,7 +1204,8 @@ export const openRouterModule = {
     this.modelTracking = {
       models: {},
       lastUpdated: '',
-      freeModels: []
+      freeModels: [],
+      freeModelHealth: {}
     };
     
     try {
@@ -1165,6 +1250,11 @@ export const openRouterModule = {
       if (!config.openRouterApiKey) {
         throw new Error('OpenRouter API key not configured');
       }
+
+      const normalizedModelId = this.normalizeModelId(modelId);
+      if (this.modelTracking.freeModels.includes(normalizedModelId) && this.isModelQuarantined(normalizedModelId)) {
+        throw new Error(`Model ${normalizedModelId} is temporarily quarantined due to recent failures. Please retry later or select another model.`);
+      }
       
       // Determine the execution timeout (default to 3 minutes)
       const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 180000;
@@ -1178,6 +1268,9 @@ export const openRouterModule = {
       const result = await this.callOpenRouterApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
+        if (result.error) {
+          await this.recordFreeModelFailure(normalizedModelId, result.error);
+        }
         if (result.error) {
           switch (result.error) {
             case OpenRouterErrorType.RATE_LIMIT:
@@ -1201,6 +1294,8 @@ export const openRouterModule = {
       if (result.usage) {
         logger.debug(`OpenRouter usage: ${result.usage.prompt_tokens} prompt tokens, ${result.usage.completion_tokens} completion tokens`);
       }
+
+      await this.recordFreeModelSuccess(normalizedModelId);
       
       return result.text;
     } catch (error) {
