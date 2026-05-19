@@ -14,6 +14,7 @@ import type { OpenRouterBenchmarkConfig } from './modules/api-integration/openro
 import { createLockFile, isLockFilePresent, removeLockFile, getLockFileInfo } from './utils/lock-file.js';
 import type { LockFileInfo } from './utils/lock-file.js';
 import { setClientHints } from './modules/core/client/hints.js';
+import { checkForUpdates, runUpdate, runStartupCheck } from './modules/updater/index.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -308,6 +309,14 @@ export class LocalLamaMcpServer {
                   const integration = new RetrivIntegration();
                   return await integration.search(query, limit);
                 }
+                case 'check_for_updates': {
+                  const updateCheck = await checkForUpdates();
+                  return JSON.stringify(updateCheck);
+                }
+                case 'update_server': {
+                  const updateResult = await runUpdate();
+                  return JSON.stringify(updateResult);
+                }
                 default:
                   logger.error(`Unknown tool: ${name}`);
                   throw new Error(`Unknown tool: ${name}`);
@@ -478,6 +487,8 @@ export class LocalLamaMcpServer {
       }
 
       logger.info(`${connectionInfo} (PID: ${process.pid})`);
+      // Fire-and-forget startup update check — never blocks startup
+      runStartupCheck().catch(() => undefined);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Server initialization failed:', errorMessage);

@@ -546,7 +546,28 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         }
       );
     }
-    
+
+    tools.push(
+      {
+        name: 'check_for_updates',
+        description: 'Check whether the running locallama-mcp server is up to date with the latest commit on the future-testing branch on GitHub. Returns upToDate status, local SHA, remote SHA, and any error.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'update_server',
+        description: 'Pull the latest changes from GitHub and rebuild the server. Runs git pull, npm install, and npm run build in sequence. IMPORTANT: The server must be manually restarted after this completes for changes to take effect.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }
+    );
+
     return tools;
   }
 }
