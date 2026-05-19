@@ -9,8 +9,12 @@ import { getModelRegistry } from '../core/model/registry.js';
 
 // Define response types
 interface OpenRouterCreditsResponse {
-  used: number;
-  remaining: number;
+  data?: {
+    total_credits?: number;
+    total_usage?: number;
+  };
+  used?: number;
+  remaining?: number;
 }
 
 interface LMStudioModel {
@@ -56,7 +60,7 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
   try {
     // Query OpenRouter for usage statistics
     const response = await axios.get<OpenRouterCreditsResponse>(
-      'https://openrouter.ai/api/v1/auth/credits',
+      'https://openrouter.ai/api/v1/credits',
       {
         headers: {
           Authorization: `Bearer ${config.openRouterApiKey}`,
@@ -69,8 +73,12 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
     if (response.data) {
       logger.debug('Successfully retrieved OpenRouter usage data');
 
-      const creditsUsed = response.data.used || 0;
-      const creditsRemaining = response.data.remaining || 0;
+      const totalCredits = response.data.data?.total_credits;
+      const totalUsage = response.data.data?.total_usage;
+      const creditsUsed = totalUsage ?? response.data.used ?? 0;
+      const creditsRemaining = totalCredits !== undefined && totalUsage !== undefined
+        ? Math.max(totalCredits - totalUsage, 0)
+        : response.data.remaining ?? 0;
 
       // Fix: Use the correct parameter structure for calculateTokenEstimates
       const tokenEstimate = calculateTokenEstimates(

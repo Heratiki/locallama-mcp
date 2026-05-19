@@ -789,6 +789,18 @@ To enable OpenRouter: set `OPENROUTER_API_KEY` in the environment before startin
 
 ---
 
+### Bug 9 — Full `route_task` high-complexity paid routing falls back to local after OpenRouter attempt (confirmed 2026-05-19)
+
+**Symptom:** With `OPENROUTER_API_KEY` configured and `complexity: 0.9`, `preemptive_route_task` correctly selects `gpt-4o` with `costClass: "paid"`. A full `route_task` with a tiny high-complexity prompt does not return a paid/OpenRouter final result. It logs an OpenRouter execution error for `openrouter/pareto-code`, then returns a local `qwen2.5-coder:7b` final result.
+
+**Cost guard used during test:** OpenRouter credits were checked through `GET https://openrouter.ai/api/v1/credits` before and after the run. Remaining balance stayed at `$1.644186`; no credits were consumed by the failed OpenRouter attempt. The project cost estimator reported `$0.0084` for the 120-token input / 80-token output preflight, below `COST_THRESHOLD=0.02`.
+
+**Likely root cause:** `route_task` computes an initial decision, but then the full execution path delegates to `codeTaskCoordinator`, which decomposes the task and performs its own per-subtask model selection. That second selector can choose OpenRouter free/remote models or local models independently of the initial paid decision. The observed OpenRouter model failure is also opaque (`Error executing task with OpenRouter model openrouter/pareto-code: [{}]`), so the actual provider/API rejection needs clearer surfacing.
+
+**Status:** ⏳ Not started — needs investigation. Do not rerun paid attempts repeatedly; first inspect `codeTaskCoordinator` / `codeModelSelector` routing alignment and improve OpenRouter error reporting.
+
+---
+
 ## End-to-End Functional Test Status (2026-05-19)
 
 Tested from Claude Code desktop on System A. OpenRouter not configured.
@@ -803,7 +815,7 @@ Tested from Claude Code desktop on System A. OpenRouter not configured.
 | `route_task` — local execution, `qwen2.5-coder:3b` | ✅ Works | Router selects 3b for all local tasks; multiple tasks confirmed 2026-05-19 |
 | `route_task` — local execution, `qwen3:4b` | ⚠️ Not independently confirmed | Router never selects `qwen3:4b`; see Bug 8 |
 | `route_task` — local execution, `gemma4:26b` | ❌ Too slow | Bug 7 — 26B model exceeds timeout on 4GB VRAM hardware |
-| `route_task` — paid/OpenRouter routing | ⚪ Untested | Requires `OPENROUTER_API_KEY`; not configured on System A |
+| `route_task` — paid/OpenRouter routing | ⚠️ Partially verified | `preemptive_route_task` selects `gpt-4o` for complexity 0.9. Full `route_task` attempted OpenRouter (`openrouter/pareto-code`) but fell back to local `qwen2.5-coder:7b`; no OpenRouter credits were consumed. |
 | `benchmark_task` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call ran `qwen2.5-coder:3b` once in ~9.4s |
 | `benchmark_tasks` | ✅ Works | Dispatch fixed 2026-05-19; live MCP call returned a two-task summary |
 | `retriv_init` | ⚪ Untested | No blocking dependencies; needs dedicated test session |
@@ -839,7 +851,7 @@ After running 5 additional tasks, the router consistently selects `qwen2.5-coder
 **Next test targets:**
 1. ~~`route_task` with a simple TypeScript task~~ ✅ Done
 2. ~~Test `qwen2.5-coder:3b` via `route_task`~~ ✅ Done — consistently selected, confirmed working
-3. `route_task` with complexity 0.9 → expect paid routing (fails gracefully without OpenRouter key)
+3. `route_task` with complexity 0.9 → expect paid routing (fails gracefully without OpenRouter key) — ⚠️ Partial 2026-05-19: preemptive route selects paid `gpt-4o`; full route attempted OpenRouter then returned local `qwen2.5-coder:7b`
 4. ~~`benchmark_task` after Bug 3 is fixed~~ ✅ Done — one live MCP call confirmed
 5. Re-test `qwen2.5-coder:7b` and `qwen3:4b` selection after benchmarks populate performance history
 6. Full smoke test with all tools documented in `docs/client-compatibility.md`

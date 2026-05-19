@@ -37,6 +37,22 @@ Follow-ups:
 - Run bounded `benchmark_task` coverage across `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, and `qwen3:4b`, then re-test route selection.
 - `npm run lint` still fails because `eslint-plugin-import` is referenced by `eslint.config.js` but not installed.
 
+## 2026-05-19 — OpenRouter Paid-Routing Target Check
+
+Summary:
+- Verified `OPENROUTER_API_KEY` is present without exposing it.
+- Fixed OpenRouter credit usage lookup from stale `/api/v1/auth/credits` to current `/api/v1/credits`.
+- Ran target #3 preflight with a small high-complexity prompt: `get_cost_estimate` reported `$0.0084`; `preemptive_route_task` selected paid `gpt-4o`.
+- Ran one full `route_task` attempt only. It attempted OpenRouter model `openrouter/pareto-code`, logged an execution error, and returned a local `qwen2.5-coder:7b` final result.
+
+Verification:
+- OpenRouter credits before and after the run: `$1.644186` remaining; no credits consumed.
+- Focused cost-monitor API test passes.
+
+Follow-ups:
+- Investigate why full `route_task` does not preserve the initial paid routing decision and why `openrouter/pareto-code` fails with an opaque `{}` error.
+- Avoid repeated paid-route execution attempts until that code path is inspected.
+
 ## 2026-04-24 Revival Work
 
 ### Completed
