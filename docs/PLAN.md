@@ -864,7 +864,9 @@ After running 5 additional tasks, the router consistently selects `qwen2.5-coder
   - Local-only `preemptive_route_task` checks (OpenRouter key unset) selected `qwen2.5-coder:7b` for medium-complexity cost-oriented input.
   - Previously, full local-only `route_task` for comparable complexity still executed on `qwen2.5-coder:3b`.
   - After the single-subtask preservation fix in `routing/index.ts`, targeted live run now returns `providerId: "ollama"`, `modelId: "qwen2.5-coder:7b"` for the same debounce task path.
-  - Remaining open area: verify behavior for multi-subtask decompositions where deliberate reselection may still occur.
+  - Multi-subtask preservation fix now lands in `routing/index.ts`: when the initial decision is local, key decomposed subtasks (highest-complexity + final execution-order subtask) are pinned to the decision model if available locally.
+  - Unit coverage added in `test/modules/api-integration/routing/index.test.ts` for a 2-subtask decomposition where initial assignments were 3b and decision model was 7b; assertions verify assignments and final result model are preserved at 7b.
+  - Remaining open area: collect live traces for a naturally multi-subtask task in this environment (current live complex probe still decomposed to 1 subtask).
 
 **Next test targets:**
 1. ~~`route_task` with a simple TypeScript task~~ ✅ Done
@@ -875,7 +877,8 @@ After running 5 additional tasks, the router consistently selects `qwen2.5-coder
   - ✅ `qwen2.5-coder:7b` benchmark completed and appears in local preemptive selection.
   - ⚠️ `qwen3:4b` benchmark timed out (`-32001`) and did not provide usable scoring data.
   - ✅ Full `route_task` now preserves `qwen2.5-coder:7b` for single-subtask local executions when the initial decision chose 7b.
-  - ⚠️ Multi-subtask consistency still needs dedicated verification.
+  - ✅ Multi-subtask consistency is enforced by routing assignment pinning for key subtasks; unit test added.
+  - ⚠️ Live multi-subtask decomposition still needs a reproducible task in this runtime to capture production logs.
 6. ✅ Full smoke test with all tools documented in `docs/client-compatibility.md` (registration + core execution coverage via operational smoke/routing/llm suites)
 
 

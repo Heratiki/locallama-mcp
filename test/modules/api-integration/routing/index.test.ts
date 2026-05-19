@@ -222,4 +222,111 @@ describe('api-integration routing', () => {
       resultCode: 'final-synthesized-output',
     });
   });
+
+  it('preserves local decision model for key subtasks in multi-subtask decomposition', async () => {
+    mockRouteTaskDecision.mockResolvedValueOnce({
+      provider: 'local',
+      model: 'qwen2.5-coder:7b',
+      confidence: 0.61,
+      explanation: 'Local decision for decomposed task.',
+    });
+
+    const subtaskA = {
+      id: 'subtask-a',
+      description: 'Implement retry core',
+      complexity: 0.82,
+      estimatedTokens: 180,
+      dependencies: [],
+      codeType: 'function' as const,
+      recommendedModelSize: 'medium' as const,
+    };
+    const subtaskB = {
+      id: 'subtask-b',
+      description: 'Implement adapter wrapper',
+      complexity: 0.35,
+      estimatedTokens: 110,
+      dependencies: ['subtask-a'],
+      codeType: 'function' as const,
+      recommendedModelSize: 'small' as const,
+    };
+
+    const assignments = new Map([
+      ['subtask-a', {
+        id: 'qwen2.5-coder:3b',
+        name: 'Qwen 3B',
+        provider: 'ollama',
+        capabilities: { chat: true, completion: true },
+        costPerToken: { prompt: 0, completion: 0 },
+      }],
+      ['subtask-b', {
+        id: 'qwen2.5-coder:3b',
+        name: 'Qwen 3B',
+        provider: 'ollama',
+        capabilities: { chat: true, completion: true },
+        costPerToken: { prompt: 0, completion: 0 },
+      }],
+    ]);
+
+    mockProcessCodeTask.mockResolvedValueOnce({
+      decomposedTask: {
+        originalTask: 'Build retry helper and wrapper',
+        subtasks: [subtaskA, subtaskB],
+        totalEstimatedTokens: 290,
+        dependencyMap: { 'subtask-b': ['subtask-a'] },
+      },
+      modelAssignments: assignments,
+      executionOrder: [subtaskA, subtaskB],
+      criticalPath: [subtaskA, subtaskB],
+      dependencyVisualization: '',
+      estimatedCost: 0,
+    });
+
+    mockGetAvailableModels.mockResolvedValueOnce([
+      {
+        id: 'qwen2.5-coder:7b',
+        name: 'Qwen 7B',
+        provider: 'ollama',
+        capabilities: { chat: true, completion: true },
+        costPerToken: { prompt: 0, completion: 0 },
+      },
+      {
+        id: 'qwen2.5-coder:3b',
+        name: 'Qwen 3B',
+        provider: 'ollama',
+        capabilities: { chat: true, completion: true },
+        costPerToken: { prompt: 0, completion: 0 },
+      },
+    ]);
+
+    mockExecuteAllSubtasks.mockImplementation(async (_task, currentAssignments) => {
+      const aModel = currentAssignments.get('subtask-a')?.id || 'unknown';
+      const bModel = currentAssignments.get('subtask-b')?.id || 'unknown';
+      return new Map([
+        ['subtask-a', `executed-with-${aModel}`],
+        ['subtask-b', `executed-with-${bModel}`],
+      ]);
+    });
+    mockSynthesizeFinalResult.mockResolvedValueOnce('multi-subtask-final-output');
+
+    const result = await routeTask({
+      task: 'Build a retry helper and adapter wrapper in TypeScript.',
+      contextLength: 140,
+      expectedOutputLength: 260,
+      complexity: 0.65,
+      priority: 'cost',
+    });
+
+    expect(mockExecuteAllSubtasks).toHaveBeenCalledTimes(1);
+    const executeCall = mockExecuteAllSubtasks.mock.calls[0];
+    const finalAssignments = executeCall[1] as Map<string, { id: string }>;
+    expect(finalAssignments.get('subtask-a')?.id).toBe('qwen2.5-coder:7b');
+    expect(finalAssignments.get('subtask-b')?.id).toBe('qwen2.5-coder:7b');
+
+    expect(result).toMatchObject({
+      providerId: 'ollama',
+      costClass: 'local',
+      model: 'qwen2.5-coder:7b',
+      resultCode: 'multi-subtask-final-output',
+    });
+  });
 });

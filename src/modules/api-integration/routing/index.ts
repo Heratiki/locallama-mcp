@@ -24,25 +24,16 @@ export class Router implements IRouter {
     return false;
   }
 
-  private async preserveSingleSubtaskLocalDecisionModel(
+  private async preserveLocalDecisionModelAssignments(
     decision: { provider: string; model: string },
-    decomposedTask: { subtasks: Array<{ id: string }> },
+    decomposedTask: { subtasks: Array<{ id: string; complexity: number }> },
     modelAssignments: Map<string, Model>,
+    executionOrder: Array<{ id: string }>,
     routeTraceId: string,
   ): Promise<void> {
     if (decision.provider !== 'local') return;
-    if (decomposedTask.subtasks.length !== 1) return;
 
-    const subtaskId = decomposedTask.subtasks[0].id;
-    const assignedModel = modelAssignments.get(subtaskId);
-    if (assignedModel && this.modelIdMatches(decision.model, assignedModel.id)) {
-      logger.debug(`[${routeTraceId}] single-subtask local decision already matches assignment`, {
-        subtaskId,
-        decisionModel: decision.model,
-        assignedModel: assignedModel.id,
-      });
-      return;
-    }
+    if (decomposedTask.subtasks.length === 0) return;
 
     const availableModels = await costMonitor.getAvailableModels();
     const preferredModel = availableModels.find(
@@ -50,20 +41,54 @@ export class Router implements IRouter {
     );
 
     if (!preferredModel) {
-      logger.warn(`[${routeTraceId}] unable to preserve local decision model for single-subtask task`, {
-        subtaskId,
+      logger.warn(`[${routeTraceId}] unable to preserve local decision model for decomposed task`, {
         decisionModel: decision.model,
-        assignedModel: assignedModel?.id || 'unassigned',
+        assignedModelCount: modelAssignments.size,
       });
       return;
     }
 
-    modelAssignments.set(subtaskId, preferredModel);
-    logger.info(`[${routeTraceId}] preserved single-subtask local decision model`, {
-      subtaskId,
+    const targetSubtaskIds = new Set<string>();
+
+    if (decomposedTask.subtasks.length === 1) {
+      targetSubtaskIds.add(decomposedTask.subtasks[0].id);
+    } else {
+      const finalSubtaskId = executionOrder[executionOrder.length - 1]?.id;
+      if (finalSubtaskId) targetSubtaskIds.add(finalSubtaskId);
+
+      const mostComplexSubtask = decomposedTask.subtasks.reduce((max, subtask) => {
+        if (!max || subtask.complexity > max.complexity) return subtask;
+        return max;
+      }, undefined as { id: string; complexity: number } | undefined);
+      if (mostComplexSubtask) targetSubtaskIds.add(mostComplexSubtask.id);
+    }
+
+    const changedAssignments: Array<{ subtaskId: string; previousModel: string }> = [];
+    for (const subtaskId of targetSubtaskIds) {
+      const assignedModel = modelAssignments.get(subtaskId);
+      if (assignedModel && this.modelIdMatches(decision.model, assignedModel.id)) {
+        continue;
+      }
+      changedAssignments.push({
+        subtaskId,
+        previousModel: assignedModel?.id || 'unassigned',
+      });
+      modelAssignments.set(subtaskId, preferredModel);
+    }
+
+    if (changedAssignments.length === 0) {
+      logger.debug(`[${routeTraceId}] local decision model already preserved for target subtasks`, {
+        decisionModel: decision.model,
+        targetSubtaskIds: Array.from(targetSubtaskIds),
+      });
+      return;
+    }
+
+    logger.info(`[${routeTraceId}] preserved local decision model assignments`, {
       decisionModel: decision.model,
-      previousAssignedModel: assignedModel?.id || 'unassigned',
       finalAssignedModel: preferredModel.id,
+      targetSubtaskIds: Array.from(targetSubtaskIds),
+      changedAssignments,
     });
   }
 
@@ -241,10 +266,11 @@ export class Router implements IRouter {
 
       const { decomposedTask, modelAssignments, executionOrder } = processingResult;
 
-      await this.preserveSingleSubtaskLocalDecisionModel(
+      await this.preserveLocalDecisionModelAssignments(
         { provider: decision.provider, model: decision.model },
         decomposedTask,
         modelAssignments,
+        executionOrder,
         routeTraceId,
       );
 
