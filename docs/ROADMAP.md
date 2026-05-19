@@ -119,7 +119,7 @@ Status: pending
 - Rewrite README into a current quickstart plus architecture overview.
 - Add `docs/CONFIGURATION.md`, `docs/MCP_CLIENTS.md`, and `docs/BENCHMARKING.md` if the README grows too large.
 - Update `.env.example` with current provider and benchmark settings.
-- Add troubleshooting for local model servers, OpenRouter failures, Python/Retriv setup, and lock-file issues.
+- Add troubleshooting for local model servers, OpenRouter failures, BM25 code-search setup, and lock-file issues.
 - Decide whether old Roo-specific files should remain, be archived, or be removed.
 
 Exit criteria:

@@ -104,10 +104,6 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             bm25_options: {
               type: 'object',
               description: 'Options for the BM25 algorithm'
-            },
-            install_dependencies: {
-              type: 'boolean',
-              description: 'Whether to automatically install required Python dependencies'
             }
           },
           required: ['directories']
@@ -350,10 +346,6 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
               bm25_options: {
                 type: 'object',
                 description: 'Options for the BM25 algorithm'
-              },
-              install_dependencies: {
-                type: 'boolean',
-                description: 'Whether to automatically install required Python dependencies'
               }
             },
             required: ['directories']

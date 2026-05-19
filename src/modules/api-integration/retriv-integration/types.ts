@@ -49,11 +49,6 @@ export interface RetrivInitParams {
    * Options for the BM25 algorithm
    */
   bm25Options?: BM25Options;
-  
-  /**
-   * Whether to automatically install required Python dependencies
-   */
-  installDependencies?: boolean;
 }
 
 export interface BM25Options {

@@ -1,7 +1,5 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import fs from 'fs';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // Load environment variables from .env file
@@ -12,70 +10,6 @@ dotenv.config();
 // LOCALLAMA_ROOT_DIR overrides for tests or custom deployments.
 const rootDir = process.env.LOCALLAMA_ROOT_DIR ||
   path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
-
-/**
- * Helper function to detect python executable with retriv installed
- */
-function detectPythonWithRetriv(): string | undefined {
-  // Explicitly defined path has highest priority
-  if (process.env.RETRIV_PYTHON_PATH) {
-    const pythonPath = process.env.RETRIV_PYTHON_PATH.trim();
-    try {
-      execSync(`${pythonPath} -c "import retriv"`, { stdio: 'pipe' });
-      return pythonPath;
-    } catch {
-      // Python path set but retriv module not found
-    }
-  }
-
-  if (process.env.PYTHON_PATH) {
-    const pythonPath = process.env.PYTHON_PATH.trim();
-    try {
-      execSync(`${pythonPath} -c "import retriv"`, { stdio: 'pipe' });
-      return pythonPath;
-    } catch {
-      // Python path set but retriv module not found
-    }
-  }
-
-  // Look for virtual environments
-  const possibleVenvPaths = [
-    // Absolute paths relative to the resolved app root
-    path.resolve(rootDir, '.venv/bin/python'),
-    path.resolve(rootDir, 'venv/bin/python'),
-    path.resolve(rootDir, 'env/bin/python'),
-    // For Windows
-    path.resolve(rootDir, '.venv/Scripts/python.exe'),
-    path.resolve(rootDir, 'venv/Scripts/python.exe'),
-    path.resolve(rootDir, 'env/Scripts/python.exe'),
-  ];
-
-  for (const venvPath of possibleVenvPaths) {
-    if (fs.existsSync(venvPath)) {
-      try {
-        execSync(`${venvPath} -c "import retriv"`, { stdio: 'pipe' });
-        return venvPath;
-      } catch {
-        // Continue to next path, no need to log every failure
-      }
-    }
-  }
-
-  // Try common Python commands as last resort
-  for (const cmd of ['python3', 'python', 'py']) {
-    try {
-      execSync(`${cmd} -c "import retriv"`, { stdio: 'pipe' });
-      return cmd;
-    } catch {
-      // Continue to next command, no need to log every failure
-    }
-  }
-
-  return undefined;
-}
-
-// Find best Python executable before config initialization
-const detectedPythonPath = detectPythonWithRetriv();
 
 /**
  * Type definitions for the configuration
@@ -99,11 +33,6 @@ interface ModelConfig {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
-}
-interface PythonConfig {
-  path?: string;
-  virtualEnv?: string;
-  detectVirtualEnv?: boolean;
 }
 export interface Config {
   // Server configuration
@@ -150,9 +79,6 @@ export interface Config {
   // Paths
   rootDir: string;
   
-  // Python configuration
-  python?: PythonConfig;
-
   // Startup benchmark targets
   startupBenchmarkTargets: string[];
 
@@ -236,13 +162,6 @@ export const config: Config = {
   cacheDir: process.env.CACHE_DIR || path.join(rootDir, '.cache'),
   maxCacheSize: parseInt(process.env.MAX_CACHE_SIZE || '1073741824', 10), // 1GB default
   
-  // Python configuration
-  python: {
-    path: process.env.PYTHON_PATH || process.env.RETRIV_PYTHON_PATH || detectedPythonPath || 'python3',
-    virtualEnv: process.env.PYTHON_VENV_PATH || path.join(rootDir, '.venv'),
-    detectVirtualEnv: parseBool(process.env.PYTHON_DETECT_VENV, true),
-  },
-
   // Startup benchmark targets
   startupBenchmarkTargets: (() => {
     const envVar = process.env.STARTUP_BENCHMARK_TARGETS;
@@ -332,27 +251,6 @@ export function validateConfig(): void {
       }
     }
   }
-  // Validate Python path if provided
-  if (config.python?.path && typeof config.python.path === 'string') {
-    try {
-      const pythonPath = path.resolve(config.python.path);
-      if (!fs.existsSync(pythonPath)) {
-        errors.push(`Python executable not found at configured path: ${pythonPath}`);
-      } else {
-        try {
-          // Verify Python can import retriv
-          execSync(`${pythonPath} -c "import retriv"`, { stdio: 'pipe' });
-        } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          errors.push(`Python at ${pythonPath} cannot import retriv: ${errorMessage}`);
-        }
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      errors.push(`Invalid Python path configuration: ${errorMessage}`);
-    }
-  }
-
   if (errors.length > 0) {
     throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);
   }

@@ -29,22 +29,6 @@ export interface ITaskExecutor {
 
 export interface IRetrivIntegration {
   /**
-   * Check if Python is available on the system
-   */
-  isPythonAvailable(): boolean;
-
-  /**
-   * Check if a specific Python module is installed
-   * @param moduleName The name of the module to check
-   */
-  isPythonModuleInstalled(moduleName: string): boolean;
-
-  /**
-   * Generate a requirements.txt file for Retriv dependencies
-   */
-  generateRequirementsTxt(): string;
-
-  /**
    * Initialize Retriv with the given arguments
    * @param args Configuration arguments for Retriv
    */
@@ -54,7 +38,6 @@ export interface IRetrivIntegration {
 export interface RetrivInitArgs {
   directories: string[];
   exclude_patterns?: string[];
-  install_dependencies?: boolean;
   force_reindex?: boolean;
   retriever_type?: 'sparse' | 'dense' | 'hybrid';
   text_preprocessing?: {

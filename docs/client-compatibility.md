@@ -14,7 +14,7 @@ This document tracks which MCP clients can successfully call the LocaLLama MCP t
 | `benchmark_task` / `benchmark_tasks` | Ad-hoc task benchmarking | provider-specific result objects |
 | `get_free_models` | List free OpenRouter models (requires API key) | array of model descriptors |
 | `benchmark_free_models` | Benchmark free OpenRouter models | benchmark result array |
-| `retriv_init` / `retriv_search` | Code search (requires Python + retriv) | init status / search results |
+| `retriv_init` / `retriv_search` | Code search (native TypeScript BM25) | init status / search results |
 
 All tool results are returned as MCP `content[0].text` (type `"text"`) containing JSON-serialized output.  Schema-aware clients can parse `content[0].text` as JSON; plain-text clients receive readable output.
 

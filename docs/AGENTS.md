@@ -94,6 +94,6 @@ The project is a TypeScript ESM MCP server built around these areas:
 - Do not commit API keys, local model inventories with secrets, logs containing tokens, or private benchmark outputs.
 - Be careful with `docs/history/memory-bank/`: it is historical project context, not a scratchpad for secrets.
 
-## Python Dependencies
+## Code Search Dependencies
 
-Retriv code search requires Python 3.8+ and dependencies from `requirements.txt`, including `retriv`, `numpy`, `scikit-learn`, and `scipy`. Prefer a virtual environment and configure `PYTHON_PATH`/`RETRIV_PYTHON_PATH` in `.env`.
+Retriv code search is implemented with the native TypeScript BM25 engine and has no Python runtime dependency.
