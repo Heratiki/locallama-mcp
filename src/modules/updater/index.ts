@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, execFile } from 'child_process';
 import https from 'https';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -89,21 +89,36 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   }
 }
 
+function execAsync(cmd: string, args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { cwd }, (err, _stdout, stderr) => {
+      if (err) {
+        const message = stderr.trim() || err.message;
+        const error = new Error(message) as Error & { stderr: string };
+        error.stderr = stderr.trim();
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
 export async function runUpdate(): Promise<UpdateResult> {
   const completedSteps: string[] = [];
-  const steps: Array<{ name: string; cmd: string }> = [
-    { name: 'git pull', cmd: 'git pull origin future-testing' },
-    { name: 'npm install', cmd: 'npm install' },
-    { name: 'npm run build', cmd: 'npm run build' },
+  const steps: Array<{ name: string; cmd: string; args: string[] }> = [
+    { name: 'git pull', cmd: 'git', args: ['pull', 'origin', 'future-testing'] },
+    { name: 'npm install', cmd: 'npm', args: ['install'] },
+    { name: 'npm run build', cmd: 'npm', args: ['run', 'build'] },
   ];
 
   for (const step of steps) {
     try {
-      execSync(step.cmd, { cwd: INSTALL_ROOT, stdio: 'pipe' });
+      await execAsync(step.cmd, step.args, INSTALL_ROOT);
       completedSteps.push(step.name);
     } catch (err) {
       const errMessage = err instanceof Error
-        ? ((err as NodeJS.ErrnoException & { stderr?: Buffer }).stderr?.toString().trim() ?? err.message)
+        ? ((err as Error & { stderr?: string }).stderr ?? err.message)
         : String(err);
       return {
         success: false,
