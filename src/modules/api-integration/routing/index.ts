@@ -4,10 +4,11 @@ import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
 import { IRouter, RouteTaskParams, RouteTaskResult, CancelJobResult } from './types.js';
-import { getProviderRegistry, providerCostClass } from '../../core/provider/index.js';
+import { getProviderRegistry, providerCostClass, isProviderLocal } from '../../core/provider/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
 import { costEstimator } from '../cost-estimation/index.js';
+import { costMonitor } from '../../cost-monitor/index.js';
 import { getCodeSearchEngine } from '../../cost-monitor/codeSearchEngine.js';
 import type { RetrivSearchResult } from '../retriv-integration/types.js';
 import { codeTaskCoordinator } from '../../decision-engine/services/codeTaskCoordinator.js'; // Import coordinator
@@ -16,6 +17,56 @@ import { Model } from '../../../types/index.js'; // Import Model type
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
 export class Router implements IRouter {
+  private modelIdMatches(target: string, candidate: string): boolean {
+    if (target === candidate) return true;
+    if (candidate.endsWith(`:${target}`)) return true;
+    if (target.endsWith(`:${candidate}`)) return true;
+    return false;
+  }
+
+  private async preserveSingleSubtaskLocalDecisionModel(
+    decision: { provider: string; model: string },
+    decomposedTask: { subtasks: Array<{ id: string }> },
+    modelAssignments: Map<string, Model>,
+    routeTraceId: string,
+  ): Promise<void> {
+    if (decision.provider !== 'local') return;
+    if (decomposedTask.subtasks.length !== 1) return;
+
+    const subtaskId = decomposedTask.subtasks[0].id;
+    const assignedModel = modelAssignments.get(subtaskId);
+    if (assignedModel && this.modelIdMatches(decision.model, assignedModel.id)) {
+      logger.debug(`[${routeTraceId}] single-subtask local decision already matches assignment`, {
+        subtaskId,
+        decisionModel: decision.model,
+        assignedModel: assignedModel.id,
+      });
+      return;
+    }
+
+    const availableModels = await costMonitor.getAvailableModels();
+    const preferredModel = availableModels.find(
+      (model) => isProviderLocal(model.provider) && this.modelIdMatches(decision.model, model.id),
+    );
+
+    if (!preferredModel) {
+      logger.warn(`[${routeTraceId}] unable to preserve local decision model for single-subtask task`, {
+        subtaskId,
+        decisionModel: decision.model,
+        assignedModel: assignedModel?.id || 'unassigned',
+      });
+      return;
+    }
+
+    modelAssignments.set(subtaskId, preferredModel);
+    logger.info(`[${routeTraceId}] preserved single-subtask local decision model`, {
+      subtaskId,
+      decisionModel: decision.model,
+      previousAssignedModel: assignedModel?.id || 'unassigned',
+      finalAssignedModel: preferredModel.id,
+    });
+  }
+
   private async resolveProviderIdForModel(modelId: string, fallbackProviderId: string): Promise<string> {
     const registry = getProviderRegistry();
 
@@ -189,6 +240,13 @@ export class Router implements IRouter {
       );
 
       const { decomposedTask, modelAssignments, executionOrder } = processingResult;
+
+      await this.preserveSingleSubtaskLocalDecisionModel(
+        { provider: decision.provider, model: decision.model },
+        decomposedTask,
+        modelAssignments,
+        routeTraceId,
+      );
 
       const assignmentSummary = executionOrder.map((subtask) => {
         const assignedModel = modelAssignments.get(subtask.id);
