@@ -111,3 +111,14 @@ Default five-role label vocabulary (needs-triage, needs-info, ready-for-agent, r
 ### Domain docs
 
 Single-context layout — one `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
+
+### CLI Tool: chat.ts
+
+The `chat.ts` script is a command-line interface for interacting with the LocalLlama MCP server. It provides advanced users and developers with direct access to server functionalities, such as task routing and resource management.
+
+#### Key Commands
+- `route-task <task> <contextLength>`: Routes a task with specific parameters.
+- `list-resources`: Lists available resources from the server.
+- `exit`: Gracefully exits the CLI tool.
+
+Refer to the [README.md](../README.md) for detailed usage instructions.
