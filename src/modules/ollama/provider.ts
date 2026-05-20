@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
+import axios from 'axios';
 import {
   LLMProvider,
   ProviderModel,
@@ -94,6 +95,20 @@ class OllamaProvider implements LLMProvider {
 
   getCost(_modelId: string): { prompt: number; completion: number } {
     return { prompt: 0, completion: 0 };
+  }
+
+  async getVersion(): Promise<string | null> {
+    if (!config.ollamaEndpoint) return null;
+    try {
+      const response = await axios.get<{ version: string }>(`${config.ollamaEndpoint}/version`, {
+        timeout: 5000,
+        headers: { Accept: 'application/json' }
+      });
+      return response.data?.version || null;
+    } catch (error) {
+      logger.debug(`Failed to fetch Ollama version: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
   }
 }
 

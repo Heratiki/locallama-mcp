@@ -9,6 +9,7 @@ import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { config } from '../../../config/index.js';
 import { isProviderId, isProviderLocal, getProviderRegistry } from '../../core/provider/index.js';
 import { getModelRegistry } from '../../core/model/index.js';
+import { getCapabilityDetector } from '../../core/capability-detector.js';
 
 /**
  * Interface for the model performance tracker methods
@@ -57,45 +58,79 @@ export const codeModelSelector = {
         return this.getFallbackModel(subtask);
       }
       
-      // Filter models that can handle the token requirements and satisfy code score threshold
-      const threshold = config.codeScoreThreshold;
+      // Filter models that can handle the token requirements.
+      // For large prompts (≥ 32 768 tokens) prefer the largeContext capability
+      // flag from CapabilityDetector (which applies empirical corrections) and
+      // fall back to raw contextWindow only when no capability data is available.
+      const needsLargeContext = subtask.estimatedTokens >= 32768;
       const suitableModels = allModels.filter(model => {
-        // Check token requirements
-        if (model.contextWindow && model.contextWindow < subtask.estimatedTokens) {
-          return false;
+        if (needsLargeContext) {
+          let caps;
+          try {
+            caps = getCapabilityDetector().detectCapabilities(model.id);
+          } catch {
+            caps = getModelRegistry().getModel(model.id)?.capabilities;
+          }
+          if (caps !== undefined) {
+            return caps.largeContext;
+          }
+          // Fall back to raw contextWindow when no capability data available
+          return !model.contextWindow || model.contextWindow >= subtask.estimatedTokens;
         }
-
-        // Check code score capability if present
-        const caps = getModelRegistry().getModel(model.id)?.capabilities;
-        if (caps?.scores?.code !== undefined) {
-          return caps.scores.code > threshold;
-        }
-        return true;
+        return !model.contextWindow || model.contextWindow >= subtask.estimatedTokens;
       });
-      
+
       if (suitableModels.length === 0) {
         logger.warn(`No models found that can handle subtask with ${subtask.estimatedTokens} tokens`);
         return this.getFallbackModel(subtask);
       }
-      
+
+      // Filter by empirical code-benchmark score. Models that have been
+      // benchmarked and scored below the threshold are excluded; models with
+      // no benchmark data pass through unchanged (not yet measured ≠ bad).
+      const scoreThreshold = config.codeScoreThreshold;
+      const passingScoreModels = suitableModels.filter(model => {
+        let caps;
+        try {
+          caps = getCapabilityDetector().detectCapabilities(model.id);
+        } catch {
+          caps = getModelRegistry().getModel(model.id)?.capabilities;
+        }
+        const codeScore = caps?.scores?.code;
+        if (codeScore !== undefined) {
+          if (codeScore < scoreThreshold) {
+            logger.debug(`Excluding ${model.id} from code routing: score ${codeScore.toFixed(2)} < threshold ${scoreThreshold}`);
+            return false;
+          }
+        }
+        return true;
+      });
+
+      // If score filtering removed every candidate, fall back to unfiltered list
+      // so a low-benchmark-score model is always preferable to no model at all.
+      const filteredModels = passingScoreModels.length > 0 ? passingScoreModels : suitableModels;
+      if (passingScoreModels.length === 0 && suitableModels.length > 0) {
+        logger.warn('All models failed code-score threshold; using unfiltered candidate list as fallback');
+      }
+
       // Log model counts by provider for debugging
-      const modelsByProvider = suitableModels.reduce((acc, model) => {
+      const modelsByProvider = filteredModels.reduce((acc, model) => {
         acc[model.provider] = (acc[model.provider] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
-      
+
       logger.debug(`Models by provider: ${JSON.stringify(modelsByProvider)}`);
-      
+
       // Get performance analysis for this complexity range
       // Use the injected reference to avoid circular dependency
       const perfAnalysis = this._modelPerformanceTracker.analyzePerformanceByComplexity(
         Math.max(0, subtask.complexity - 0.1),
         Math.min(1, subtask.complexity + 0.1)
       );
-      
-      // Score all suitable models
+
+      // Score all filtered models
       const scoredModels = await Promise.all(
-        suitableModels.map(async model => {
+        filteredModels.map(async model => {
           const score = await this.scoreModelForSubtask(model, subtask, perfAnalysis, originalTask);
           return { model, score };
         })

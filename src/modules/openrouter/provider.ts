@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
+import axios from 'axios';
 import {
   LLMProvider,
   ProviderModel,
@@ -142,6 +143,26 @@ class OpenRouterProvider implements LLMProvider {
 
   getCost(modelId: string): { prompt: number; completion: number } {
     return this.cachedCosts.get(modelId) ?? { prompt: 0, completion: 0 };
+  }
+
+  async getVersion(): Promise<string | null> {
+    if (!config.openRouterApiKey) return null;
+    try {
+      const response = await axios.get('https://openrouter.ai/api/v1/models', {
+        timeout: 5000,
+        headers: { Accept: 'application/json' }
+      });
+      const headers = response.headers;
+      const versionHeader = 
+        headers['x-openrouter-version'] || 
+        headers['x-api-version'] || 
+        headers['server'];
+      
+      return versionHeader ? String(versionHeader) : '1.0.0';
+    } catch (error) {
+      logger.debug(`Failed to fetch OpenRouter version: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
   }
 }
 

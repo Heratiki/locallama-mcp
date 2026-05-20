@@ -22,7 +22,6 @@ const {
   PromptingStrategyService,
   getPromptingStrategyService,
   _setPromptingStrategyServiceForTests,
-  USER_STRATEGIES_PATH,
 } = await import('../../../../dist/modules/core/prompting/service.js');
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
+import axios from 'axios';
 import {
   LLMProvider,
   ProviderModel,
@@ -104,6 +105,27 @@ class LMStudioProvider implements LLMProvider {
 
   getCost(_modelId: string): { prompt: number; completion: number } {
     return { prompt: 0, completion: 0 };
+  }
+
+  async getVersion(): Promise<string | null> {
+    if (!config.lmStudioEndpoint) return null;
+    try {
+      const response = await axios.get(`${config.lmStudioEndpoint}/models`, {
+        timeout: 5000,
+        headers: { Accept: 'application/json' }
+      });
+      const headers = response.headers;
+      const versionHeader = 
+        headers['x-lmstudio-version'] || 
+        headers['x-version'] || 
+        headers['server'];
+      
+      if (!versionHeader) return null;
+      return String(versionHeader);
+    } catch (error) {
+      logger.debug(`Failed to fetch LM Studio version: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
   }
 }
 
