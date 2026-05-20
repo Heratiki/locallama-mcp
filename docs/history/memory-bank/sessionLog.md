@@ -122,3 +122,20 @@ Verification:
 
 Follow-ups:
 - Live LLM poll-to-completion acceptance is still blocked in this environment because the configured Ollama endpoint is unavailable.
+
+## 2026-05-20 - Issue #51 Modular Free Benchmarking
+
+Author: Codex
+
+Summary:
+- Moved the MCP `benchmark_free_models` path from the legacy decision-engine benchmark service to the modular benchmark engine.
+- Added `benchmarkModule.benchmarkFreeModels`, which enumerates healthy OpenRouter free models, runs provider-backed benchmarks, and persists results through `benchmarkDb`.
+- Added `BenchmarkProviderError` so rate limits and provider failures propagate as structured MCP error payloads instead of being silently swallowed.
+- Marked the legacy `benchmarkService.benchmarkFreeModels()` method deprecated for remaining internal callers.
+
+Verification:
+- `npm run build` passes.
+- Focused Jest run passes: `test/modules/benchmark/index.test.ts`, `test/modules/benchmark/free-models.test.ts`, `test/modules/api-integration/openrouter-integration.test.ts`, and `test/dispatcher.test.ts`.
+
+Follow-ups:
+- Full live OpenRouter benchmarking was not run in this pass to avoid paid/free-provider side effects; use an explicit operational run when provider credentials and rate budget are available.

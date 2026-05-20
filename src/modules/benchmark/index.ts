@@ -2,7 +2,7 @@ import { config } from '../../config/index.js';
 import { BenchmarkConfig, BenchmarkTaskParams } from '../../types/index.js';
 
 // Import core functionality
-import { benchmarkTask } from './core/runner.js';
+import { benchmarkTask, benchmarkFreeModels } from './core/runner.js';
 import { generateSummary } from './core/summary.js';
 
 // Import API integrations
@@ -71,6 +71,7 @@ export const benchmarkModule = {
   defaultConfig,
   benchmarkTask,
   benchmarkTasks,
+  benchmarkFreeModels,
   generateSummary,
   
   // API integrations

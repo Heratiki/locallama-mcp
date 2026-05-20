@@ -177,6 +177,11 @@ const mockBenchmarkTasks = jest.fn<() => Promise<{ taskCount: number; local: { a
     local: { avgSuccessRate: 0.76 },
     paid: { avgSuccessRate: 0 },
   });
+const mockBenchmarkFreeModels = jest.fn<() => Promise<{ results: Record<string, unknown>; summary: { modelsCount: number } }>>()
+  .mockResolvedValue({
+    results: {},
+    summary: { modelsCount: 0 },
+  });
 
 const mockDefaultBenchmarkConfig = {
   runsPerTask: 1,
@@ -193,6 +198,12 @@ jest.unstable_mockModule('../dist/modules/benchmark/index.js', () => ({
     benchmarkTask: mockBenchmarkTask,
     benchmarkTasks: mockBenchmarkTasks,
   },
+}));
+
+jest.unstable_mockModule('../dist/modules/api-integration/openrouter-integration/index.js', () => ({
+  benchmarkFreeModels: mockBenchmarkFreeModels,
+  getFreeModels: jest.fn().mockResolvedValue([]),
+  updatePromptingStrategy: jest.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -255,6 +266,21 @@ jest.unstable_mockModule('../dist/modules/api-integration/task-execution/index.j
   },
 }));
 
+jest.unstable_mockModule('../dist/modules/benchmark/core/runner.js', () => ({
+  BenchmarkProviderError: class BenchmarkProviderError extends Error {
+    constructor(
+      public code: string,
+      public providerId: string,
+      public modelId: string,
+      message: string,
+      public retryAfterMs?: number,
+    ) {
+      super(message);
+      this.name = 'BenchmarkProviderError';
+    }
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Module under test
 // ---------------------------------------------------------------------------
@@ -301,6 +327,7 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     mockReloadConfig.mockClear();
     mockBenchmarkTask.mockClear();
     mockBenchmarkTasks.mockClear();
+    mockBenchmarkFreeModels.mockClear();
     mockGetMonitoringInfo.mockClear();
     mockIsAlertActive.mockReturnValue(false);
     mockBuildQueueAlert.mockResolvedValue(null);
@@ -675,6 +702,92 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
       maxParallelTasks: 2,
       taskTimeout: 480000,
       saveResults: true,
+    });
+  });
+
+  it('routes benchmark_free_models to the OpenRouter integration', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    await capturedHandler(
+      {
+        params: {
+          name: 'benchmark_free_models',
+          arguments: {
+            tasks: [
+              {
+                task_id: 'benchmark-free-models',
+                task: 'Write a small TypeScript memoization helper.',
+                context_length: 300,
+                expected_output_length: 120,
+                complexity: 0.4,
+              },
+            ],
+            runs_per_task: 1,
+            parallel: false,
+            max_parallel_tasks: 1,
+          },
+        },
+      },
+      {},
+    );
+
+    expect(mockBenchmarkFreeModels).toHaveBeenCalledWith({
+      tasks: [
+        {
+          taskId: 'benchmark-free-models',
+          task: 'Write a small TypeScript memoization helper.',
+          contextLength: 300,
+          expectedOutputLength: 120,
+          complexity: 0.4,
+          localModel: undefined,
+          paidModel: undefined,
+        },
+      ],
+      runsPerTask: 1,
+      parallel: false,
+      maxParallelTasks: 1,
+    });
+  });
+
+  it('returns a structured benchmark_rate_limited body from benchmark_free_models', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    const { BenchmarkProviderError } = await import('../dist/modules/benchmark/core/runner.js');
+    mockBenchmarkFreeModels.mockRejectedValueOnce(
+      new BenchmarkProviderError(
+        'benchmark_rate_limited',
+        'openrouter',
+        'openrouter/free-code',
+        'OpenRouter rate limit reached (10 calls/min). Retry after 60s.',
+        60000,
+      ),
+    );
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'benchmark_free_models',
+          arguments: {
+            tasks: [
+              {
+                task_id: 'rate-limit-case',
+                task: 'Write a JavaScript add function.',
+                context_length: 80,
+              },
+            ],
+          },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[]; isError?: boolean };
+    expect(typed.isError).toBe(true);
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed).toMatchObject({
+      error: 'benchmark_rate_limited',
+      providerId: 'openrouter',
+      modelId: 'openrouter/free-code',
+      retryAfterMs: 60000,
     });
   });
 

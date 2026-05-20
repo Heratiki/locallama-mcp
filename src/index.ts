@@ -19,6 +19,7 @@ import { checkForUpdates, runUpdate, runStartupCheck } from './modules/updater/i
 import { getJobTrackerSync } from './modules/decision-engine/services/jobTracker.js';
 import { ContextWindowError } from './modules/api-integration/task-execution/index.js';
 import { InferenceTimeoutError } from './modules/utils/inferenceTimeout.js';
+import { BenchmarkProviderError } from './modules/benchmark/core/runner.js';
 import { reloadConfig } from './config/index.js';
 
 // Get the current file's directory path in ES modules
@@ -495,6 +496,21 @@ export class LocalLamaMcpServer {
                     message: error.message,
                     providerId: error.providerId,
                     timeoutMs: error.timeoutMs,
+                  }),
+                }],
+                isError: true,
+              };
+            }
+            if (error instanceof BenchmarkProviderError) {
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: JSON.stringify({
+                    error: error.code,
+                    message: error.message,
+                    providerId: error.providerId,
+                    modelId: error.modelId,
+                    retryAfterMs: error.retryAfterMs,
                   }),
                 }],
                 isError: true,

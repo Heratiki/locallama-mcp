@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const benchmarkTaskMock = jest.fn();
+const benchmarkFreeModelsMock = jest.fn();
 const generateSummaryMock = jest.fn();
 const initBenchmarkDbMock = jest.fn();
 const cleanupOldResultsMock = jest.fn();
 
 jest.unstable_mockModule('../../../dist/modules/benchmark/core/runner.js', () => ({
-  benchmarkTask: benchmarkTaskMock
+  benchmarkTask: benchmarkTaskMock,
+  benchmarkFreeModels: benchmarkFreeModelsMock
 }));
 
 jest.unstable_mockModule('../../../dist/modules/benchmark/core/summary.js', () => ({
@@ -43,6 +45,7 @@ describe('benchmarkModule', () => {
   it('should have the expected structure', () => {
     expect(benchmarkModule).toHaveProperty('defaultConfig');
     expect(benchmarkModule).toHaveProperty('benchmarkTask');
+    expect(benchmarkModule).toHaveProperty('benchmarkFreeModels');
     expect(benchmarkModule).toHaveProperty('benchmarkTasks');
     expect(benchmarkModule).toHaveProperty('generateSummary');
     expect(benchmarkModule).toHaveProperty('api');
@@ -76,4 +79,5 @@ describe('benchmarkModule', () => {
     expect(cleanupOldResultsMock).toHaveBeenCalledTimes(1);
     expect(summary).toEqual(mockSummary);
   });
+
 });

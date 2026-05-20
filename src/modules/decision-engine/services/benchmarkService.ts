@@ -557,6 +557,10 @@ export const benchmarkService = {
    * Benchmark all available free models
    * This helps us gather performance data for all free models
    * to make better decisions in the future
+   *
+   * @deprecated MCP `benchmark_free_models` now uses
+   * `src/modules/benchmark/core/runner.ts#benchmarkFreeModels`, which writes to
+   * benchmarkDb and propagates structured provider errors.
    */
   async benchmarkFreeModels(): Promise<void> {
     if (benchmarkState.isRateLimited) {
