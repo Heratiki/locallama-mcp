@@ -1,5 +1,6 @@
 import { CostClass } from './types.js';
 import { getProviderRegistry } from './registry.js';
+import type { TaskExecutionOptions, TaskExecutionResult } from './types.js';
 
 /**
  * Fallback set of provider ids known to be local. Consulted only when the
@@ -52,4 +53,37 @@ export function isProviderId(
   const provider = getProviderRegistry().get(modelProvider);
   if (provider) return provider.id === expectedId;
   return modelProvider === expectedId;
+}
+
+/**
+ * Execute a task through the provider registry so all callers inherit
+ * circuit-breaker and concurrency-limit protections.
+ */
+export async function executeProviderTask(
+  providerId: string,
+  modelId: string,
+  task: string,
+  options?: TaskExecutionOptions,
+): Promise<TaskExecutionResult> {
+  const registry = getProviderRegistry();
+  const provider = registry.get(providerId);
+  if (!provider) {
+    throw new Error(`Provider '${providerId}' is not registered`);
+  }
+
+  if (!registry.isAvailable(provider.id)) {
+    throw new Error(`Provider '${provider.id}' is temporarily unavailable (circuit open)`);
+  }
+
+  try {
+    const result = await registry.executeWithConcurrencyLimit(
+      provider,
+      async () => await provider.executeTask(modelId, task, options),
+    );
+    registry.recordProviderSuccess(provider.id);
+    return result;
+  } catch (error) {
+    registry.recordProviderFailure(provider.id);
+    throw error;
+  }
 }

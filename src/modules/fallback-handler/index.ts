@@ -1,7 +1,7 @@
 /* Required dependencies - used throughout the module */
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
-import { getProviderRegistry } from '../core/provider/index.js';
+import { executeProviderTask, getProviderRegistry } from '../core/provider/index.js';
 import { openRouterModule } from '../openrouter/index.js';
 
 interface FallbackResult {
@@ -55,36 +55,34 @@ export const fallbackHandler = {
       if (task && timeout) {
         if (costClass === 'local' && fallbackOption === 'paid-api') {
           if (modelId) {
-            const openRouterResult = await openRouterModule.callOpenRouterApi(modelId, task, timeout);
+            const openRouterResult = await executeProviderTask('openrouter', modelId, task, { timeoutMs: timeout });
 
-            if (openRouterResult.success) {
+            if (openRouterResult.content) {
               fallbackResult = {
                 costClass: 'paid' as const,
                 success: true,
-                text: openRouterResult.text,
-                usage: openRouterResult.usage,
+                text: openRouterResult.content,
                 message: 'Fallback to OpenRouter API successful',
               };
             } else {
-              throw new Error(`OpenRouter API fallback failed: ${openRouterResult.error}`);
+              throw new Error('OpenRouter API fallback failed: empty response content');
             }
           } else {
             const freeModels = await openRouterModule.getFreeModels();
             if (freeModels.length > 0) {
               const bestModel = freeModels[0];
-              const openRouterResult = await openRouterModule.callOpenRouterApi(bestModel.id, task, timeout);
+              const openRouterResult = await executeProviderTask('openrouter', bestModel.id, task, { timeoutMs: timeout });
 
-              if (openRouterResult.success) {
+              if (openRouterResult.content) {
                 fallbackResult = {
                   costClass: 'paid' as const,
                   model: bestModel.id,
                   success: true,
-                  text: openRouterResult.text,
-                  usage: openRouterResult.usage,
+                  text: openRouterResult.content,
                   message: `Fallback to OpenRouter API (model: ${bestModel.id}) successful`,
                 };
               } else {
-                throw new Error(`OpenRouter API fallback failed: ${openRouterResult.error}`);
+                throw new Error('OpenRouter API fallback failed: empty response content');
               }
             } else {
               throw new Error('No free models available for fallback');
@@ -97,7 +95,7 @@ export const fallbackHandler = {
           }
           const models = await provider.listModels();
           const fallbackModelId = models.length > 0 ? models[0].id : config.defaultLocalModel;
-          const result = await provider.executeTask(fallbackModelId, task, { timeoutMs: timeout });
+          const result = await executeProviderTask(fallbackOption, fallbackModelId, task, { timeoutMs: timeout });
           fallbackResult = {
             costClass: 'local' as const,
             model: fallbackModelId,

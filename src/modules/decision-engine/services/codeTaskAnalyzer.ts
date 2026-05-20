@@ -1,5 +1,4 @@
 import { logger } from '../../../utils/logger.js';
-import { openRouterModule } from '../../openrouter/index.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { 
   CodeTaskAnalysisOptions, 
@@ -14,6 +13,7 @@ import { config } from '../../../config/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { Model } from '../../../types/index.js';
 import { lmStudioModule } from '../../lm-studio/index.js';
+import { executeProviderTask } from '../../core/provider/index.js';
 
 // Define a type for the raw subtask data parsed from the model response
 type RawSubtask = {
@@ -134,8 +134,8 @@ export const codeTaskAnalyzer = {
       const prompt = DECOMPOSE_TASK_PROMPT.replace('{task}', task);
       
       // Try using OpenRouter first
-      let response = null;
-      let errorDetails = null;
+      let response: string | null = null;
+      let errorDetails: { message: string } | null = null;
 
       try {
         // For more complex tasks, use a model to decompose the task
@@ -161,31 +161,19 @@ export const codeTaskAnalyzer = {
         }
         
         logger.debug(`Attempting decomposition API call with model: ${modelId}`);
-        const decompositionResult = await openRouterModule.callOpenRouterApi(
+        const decompositionResult = await executeProviderTask(
+          'openrouter',
           modelId,
           prompt,
-          60000 // 60 seconds timeout
+          { timeoutMs: 60000 },
         );
-        logger.debug(`Decomposition API call completed. Success: ${decompositionResult.success}, Text available: ${!!decompositionResult.text}`);
-        
-        if (!decompositionResult.success || !decompositionResult.text) {
-          // Capture detailed error information for later logging
-          const errorType = decompositionResult.error || 'unknown';
-          const errorInstance = decompositionResult.errorInstance;
-          const errorMessage = errorInstance ? errorInstance.message : 'Unknown error';
-          errorDetails = {
-            type: errorType,
-            message: errorMessage,
-            instance: errorInstance
-          };
-          
-          logger.warn(`OpenRouter API failed for task decomposition: ${errorType} - ${errorMessage}`);
-          throw new Error(`OpenRouter API failed: ${errorType}`);
-        }
-        
-        response = decompositionResult.text;
+        logger.debug(`Decomposition API call completed. Text available: ${!!decompositionResult.content}`);
+        response = decompositionResult.content;
         
       } catch (openRouterError) {
+        const errorMessage = openRouterError instanceof Error ? openRouterError.message : String(openRouterError);
+        errorDetails = { message: errorMessage };
+        logger.warn(`OpenRouter provider execution failed for task decomposition: ${errorMessage}`);
         // If OpenRouter failed, try LM-Studio as a fallback
         logger.info('OpenRouter decomposition failed, trying LM-Studio as fallback');
         
@@ -215,26 +203,23 @@ export const codeTaskAnalyzer = {
                 const selectedModel = preferredModels.length > 0 ? preferredModels[0] : lmModels[0];
                 logger.info(`Using LM-Studio model ${selectedModel.id} for task decomposition`);
                 
-                // Call LM-Studio API using the callLMStudioApi method on the module
-                const result = await lmStudioModule.callLMStudioApi(
+                const result = await executeProviderTask(
+                  'lm-studio',
                   selectedModel.id,
                   prompt,
-                  60000 // 60 seconds timeout
+                  { timeoutMs: 60000 },
                 );
-                
-                if (result.success && result.text) {
+
+                if (result.content) {
                   logger.info('Successfully used LM-Studio for task decomposition');
-                  response = result.text;
+                  response = result.content;
                 } else {
                   // Log specific LM-Studio error
-                  logger.error('LM-Studio fallback failed:', result.error || 'Unknown error');
+                  logger.error('LM-Studio fallback failed: empty response content');
                   
                   // If we have detailed error info from OpenRouter, log it for diagnostics
                   if (errorDetails) {
                     logger.error('Original OpenRouter error details:', errorDetails);
-                    if (errorDetails.instance && errorDetails.instance.stack) {
-                      logger.debug('OpenRouter error stack:', errorDetails.instance.stack);
-                    }
                   }
                   
                   // Both OpenRouter and LM-Studio failed, throw combined error
@@ -258,10 +243,7 @@ export const codeTaskAnalyzer = {
           
           // Log OpenRouter error details
           if (errorDetails) {
-            logger.error(`OpenRouter error: ${errorDetails.type} - ${errorDetails.message}`);
-            if (errorDetails.instance && errorDetails.instance.stack) {
-              logger.debug('OpenRouter error stack:', errorDetails.instance.stack);
-            }
+            logger.error(`OpenRouter error: ${errorDetails.message}`);
           } else {
             logger.error('OpenRouter error:', openRouterError);
           }
@@ -421,48 +403,15 @@ export const codeTaskAnalyzer = {
         try {
           logger.debug(`Attempt ${retryCount + 1}/${maxRetries + 1} to call model API for complexity analysis`);
           
-          const result = await openRouterModule.callOpenRouterApi(
+          const result = await executeProviderTask(
+            'openrouter',
             modelId,
             prompt,
-            30000 // 30 seconds timeout
+            { timeoutMs: 30000 },
           );
 
-          if (!result.success || !result.text) {
-            // Check for specific error types to determine if retry is appropriate
-            if (result.error && ['rate_limit', 'server_error'].includes(result.error)) {
-              // These errors are retryable
-              lastError = result.errorInstance || new Error(`API error: ${result.error}`);
-              retryCount++;
-              
-              if (retryCount <= maxRetries) {
-                // Try a different model if available on subsequent attempts
-                if (freeModels.length > retryCount) {
-                  modelId = freeModels[retryCount].id;
-                  logger.debug(`Retrying with different model ${modelId}`);
-                }
-                
-                // Wait before retrying (exponential backoff)
-                const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 8000);
-                logger.debug(`Waiting ${backoffTime}ms before retry`);
-                await new Promise(resolve => setTimeout(resolve, backoffTime));
-                continue;
-              }
-            }
-            
-            // Non-retryable error or max retries exceeded
-            // Log detailed error before throwing
-            const errorType = result.error || 'Unknown error';
-            const errorInstance = result.errorInstance;
-            const errorMessage = errorInstance ? errorInstance.message : 'API returned unsuccessful result';
-            logger.warn(`Model API failed for complexity analysis using model ${modelId}: Type=${errorType}, Message=${errorMessage}`);
-            if (errorInstance && errorInstance.stack) {
-              logger.debug(`Complexity analysis error stack trace: ${errorInstance.stack}`);
-            }
-            throw new Error(`API error: ${errorType} - ${errorMessage}`);
-          }
-
           // Successful response, parse it
-          llmAnalysis = this.parseComplexityFromResponse(result.text);
+          llmAnalysis = this.parseComplexityFromResponse(result.content);
           break; // Exit the retry loop on success
           
         } catch (apiError) {

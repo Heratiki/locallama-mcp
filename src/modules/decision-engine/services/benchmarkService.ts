@@ -11,7 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { speculativeDecodingService } from '../services/speculativeDecoding.js';
 import { Model } from '../../../types/index.js';
-import { getProviderRegistry, isProviderId, isProviderLocal } from '../../core/provider/index.js';
+import { executeProviderTask, getProviderRegistry, isProviderId, isProviderLocal } from '../../core/provider/index.js';
 import { config } from '../../../config/index.js';
 
 // Add this interface at the top of the file with other types
@@ -477,30 +477,26 @@ export const benchmarkService = {
       const dynamicTimeout = 120000 * (contextWindow >= 16384 ? 3 : contextWindow >= 8192 ? 2 : 1.5) * 
                             (1 + complexity) * (modelId.includes('32b') || modelId.includes('70b') ? 1.5 : 1.0);
       
-      let result;
-      // Call the appropriate API
-      if (isProviderId(provider, 'lm-studio')) {
-        logger.info(`Calling LM Studio API for model ${modelId}`);
-        result = await callLmStudioApi(
+      let result: { success: boolean; text?: string; error?: string };
+      try {
+        const targetProviderId = isProviderId(provider, 'lm-studio')
+          ? 'lm-studio'
+          : isProviderId(provider, 'ollama')
+            ? 'ollama'
+            : 'openrouter';
+        logger.info(`Calling provider ${targetProviderId} for model ${modelId}`);
+        const executionResult = await executeProviderTask(
+          targetProviderId,
           modelId,
           task,
-          Math.round(dynamicTimeout) // Use dynamic timeout
+          { timeoutMs: Math.round(dynamicTimeout) },
         );
-      } else if (isProviderId(provider, 'ollama')) {
-        logger.info(`Calling Ollama API for model ${modelId}`);
-        result = await callOllamaApi(
-          modelId,
-          task,
-          Math.round(dynamicTimeout) // Use dynamic timeout
-        );
-      } else {
-        // Default to OpenRouter for other providers
-        logger.info(`Calling OpenRouter API for model ${modelId}`);
-        result = await openRouterModule.callOpenRouterApi(
-          modelId,
-          task,
-          Math.round(dynamicTimeout) // Use dynamic timeout
-        );
+        result = { success: true, text: executionResult.content };
+      } catch (error) {
+        result = {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
       }
       
       // Measure end time
