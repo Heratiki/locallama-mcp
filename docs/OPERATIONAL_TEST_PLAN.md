@@ -429,6 +429,18 @@ No test verifies server behavior when two instances attempt to start against the
 
 ---
 
+### Gap 11 — Provider API Version Compatibility (Issue 29 / F-10)
+
+Issue 29 (version compatibility checks at startup) has unit tests, but lacks operational validation:
+
+- Start the server with a configured provider having a version lower than the minimum declared in `src/config/provider-compat.json`. Assert that a structured warning containing the provider name, detected version, and minimum version is printed in the server logs.
+- Start the server with the provider having a version equal to or above the minimum. Assert that no compatibility warnings are logged for that provider.
+- Start the server with the provider endpoint unreachable. Assert that the server logs a warning about inability to check version and completes startup without crashing.
+
+**Blocker:** Requires a mock or controllable provider version endpoint during execution.
+
+---
+
 ## Interactive Webapp Test Client — Planning Reference
 
 See the **Interactive Testing Webapp — Planning Section** added to `PLAN.md` (2026-05-19) for the full requirements, architectural options, risks, and dependency chain.

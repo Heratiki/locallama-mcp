@@ -3,6 +3,8 @@ import { CostClass, LLMProvider } from './types.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { ProviderRateLimiter } from './rate-limiter.js';
 import { config } from '../../../config/index.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 /**
  * Central registry of `LLMProvider` implementations. Lookups are by provider
@@ -71,6 +73,17 @@ export class ProviderRegistry {
    */
   async initAll(): Promise<string[]> {
     const successes: string[] = [];
+
+    // Load compatibility matrix
+    let compatMatrix: Record<string, string> = {};
+    try {
+      const filePath = path.join(config.rootDir, 'src', 'config', 'provider-compat.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      compatMatrix = JSON.parse(raw) as Record<string, string>;
+    } catch (err) {
+      logger.warn(`[Provider Compatibility] Failed to load provider-compat.json: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     for (const provider of this.list()) {
       if (this.initialized.has(provider.id)) {
         successes.push(provider.id);
@@ -81,6 +94,30 @@ export class ProviderRegistry {
         this.initialized.add(provider.id);
         successes.push(provider.id);
         logger.info(`Provider initialized: ${provider.id} (${provider.costClass})`);
+
+        if (provider.getVersion) {
+          try {
+            const detected = await provider.getVersion();
+            if (detected) {
+              const minVersion = compatMatrix[provider.id];
+              if (minVersion) {
+                if (compareVersions(detected, minVersion) < 0) {
+                  logger.warn(
+                    `[Provider Compatibility] Provider '${provider.id}' version '${detected}' is below the minimum required version '${minVersion}'.`
+                  );
+                }
+              }
+            } else {
+              logger.warn(`[Provider Compatibility] Could not determine version for provider '${provider.id}'.`);
+            }
+          } catch (versionError) {
+            logger.warn(
+              `[Provider Compatibility] Error checking version for provider '${provider.id}': ${
+                versionError instanceof Error ? versionError.message : String(versionError)
+              }`
+            );
+          }
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         logger.error(`Provider '${provider.id}' failed to initialize: ${msg}`);
@@ -207,4 +244,26 @@ export function getProviderRegistry(): ProviderRegistry {
  */
 export function _setProviderRegistryForTests(registry: ProviderRegistry | undefined): void {
   singleton = registry;
+}
+
+/**
+ * Helper to compare two version strings.
+ * Returns -1 if v1 < v2, 1 if v1 > v2, 0 if v1 === v2.
+ */
+function compareVersions(v1: string, v2: string): number {
+  const clean = (v: string) => {
+    const match = v.match(/(\d+\.\d+(?:\.\d+)?)/);
+    return match ? match[1] : '0.0.0';
+  };
+  
+  const parse = (v: string) => clean(v).split('.').map(Number);
+  const parts1 = parse(v1);
+  const parts2 = parse(v2);
+  const length = Math.max(parts1.length, parts2.length);
+  for (let i = 0; i < length; i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 !== p2) return p1 > p2 ? 1 : -1;
+  }
+  return 0;
 }
