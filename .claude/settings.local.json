@@ -23,7 +23,25 @@
       "Bash(gh pr *)",
       "Bash(git pull *)",
       "Bash(npx jest *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(python -c \"import sys,json; p=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in p.get\\('scripts',{}\\).items\\(\\)]\")",
+      "Bash(curl *)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 14508\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('jobs:', len\\(d.get\\('jobs',[]\\)\\), '| queue:', d.get\\('queue',{}\\)\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('tasks:', len\\(d.get\\('tasks',[]\\)\\)\\)\")",
+      "WebFetch(domain:localhost)",
+      "Bash(python -c ' *)",
+      "Bash(where.exe msedge *)",
+      "Bash(powershell *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(python -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\('version:', p['version']\\); print\\('name:', p['name']\\); print\\('main:', p.get\\('main','?'\\)\\); print\\('publishConfig:', p.get\\('publishConfig','none'\\)\\)\")",
+      "Bash(gh release *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(git log *)",
+      "Bash(git fetch *)",
+      "Bash(git tag *)",
+      "Bash(npm whoami *)"
     ]
   }
 }
