@@ -42,6 +42,7 @@ export interface Config {
   lmStudioEndpoint: string;
   ollamaEndpoint: string;
   ollamaTimeout: number;
+  providerTimeoutMs: number;
   providerMaxConcurrentLocal: number;
   providerMaxConcurrentRemote: number;
   localLlamaEndpoint: string; // Added local Llama endpoint
@@ -124,6 +125,7 @@ export const config: Config = {
   lmStudioEndpoint: process.env.LM_STUDIO_ENDPOINT || 'http://localhost:1234/v1',
   ollamaEndpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api',
   ollamaTimeout: parseInt(process.env.OLLAMA_TIMEOUT || '120000', 10),
+  providerTimeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '120000', 10),
   providerMaxConcurrentLocal: parseNumber(process.env.PROVIDER_MAX_CONCURRENT_LOCAL, 1, 1, 64),
   providerMaxConcurrentRemote: parseNumber(process.env.PROVIDER_MAX_CONCURRENT_REMOTE, 1, 1, 128),
   localLlamaEndpoint: process.env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api', // Added local Llama endpoint
@@ -253,6 +255,9 @@ export function validateConfig(): void {
   }
   if (config.ollamaTimeout <= 0) {
     errors.push(`Invalid ollamaTimeout: ${config.ollamaTimeout}`);
+  }
+  if (config.providerTimeoutMs <= 0) {
+    errors.push(`Invalid providerTimeoutMs: ${config.providerTimeoutMs}`);
   }
   // Validate cache config
   if (config.maxCacheSize <= 0) {

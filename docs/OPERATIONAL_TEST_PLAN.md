@@ -304,6 +304,7 @@ No test verifies what happens at the MCP tool-call timeout boundary. Currently, 
 - Invoke `route_task` against a model that is known to be too large for available hardware and assert that the response is a structured error (not a hang or a connection reset).
 - Verify that `ERR_CANCELED` from Ollama maps to a user-readable error message, not `"Error executing task: unknown"`.
 - Assert that `OLLAMA_TIMEOUT` is respected: a task that would take longer than the configured timeout returns a timeout error within `OLLAMA_TIMEOUT + 5s`.
+- Assert that `PROVIDER_TIMEOUT_MS` applies to providers without dedicated timeout vars (LM Studio/OpenRouter), and timeout failures surface as structured `inference_timeout` responses including `timeoutMs`.
 
 **Blocker:** Requires a controllable slow-model fixture. On System A, `gemma4:26b` can serve this role for slow-inference tests, but it must be used in isolation (not in the standard suite) to avoid slowing every CI run.
 

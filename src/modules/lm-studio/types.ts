@@ -27,6 +27,7 @@ export enum LMStudioErrorType {
   AUTHENTICATION = 'authentication',
   RATE_LIMIT = 'rate_limit',
   INVALID_REQUEST = 'invalid_request',
+  TIMEOUT = 'timeout',
   CONTENT_FILTER = 'content_filter',
   CONTEXT_LENGTH_EXCEEDED = 'context_length_exceeded',
   SERVER_ERROR = 'server_error',

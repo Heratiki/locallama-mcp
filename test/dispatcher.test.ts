@@ -345,6 +345,33 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     });
   });
 
+  it('returns a structured inference_timeout body from route_task', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    const { InferenceTimeoutError } = await import('../dist/modules/utils/inferenceTimeout.js');
+    mockRouteTask.mockRejectedValueOnce(
+      new InferenceTimeoutError('openrouter', 45000, 'OpenRouter inference timed out after 45000ms.'),
+    );
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'route_task',
+          arguments: { task: 'slow prompt', context_length: 1200 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[]; isError?: boolean };
+    expect(typed.isError).toBe(true);
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed).toMatchObject({
+      error: 'inference_timeout',
+      providerId: 'openrouter',
+      timeoutMs: 45000,
+    });
+  });
+
   it('routes preemptive_route_task to the routing module', async () => {
     if (!capturedHandler) throw new Error('handler not registered');
 

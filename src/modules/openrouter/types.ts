@@ -194,6 +194,9 @@ export enum OpenRouterErrorType {
   
   /** Invalid request */
   INVALID_REQUEST = 'invalid_request',
+
+  /** Request timed out */
+  TIMEOUT = 'timeout',
   
   /** Model not found */
   MODEL_NOT_FOUND = 'model_not_found',
