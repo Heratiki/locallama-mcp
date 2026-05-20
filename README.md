@@ -42,6 +42,7 @@ LocalLama MCP Server is designed to reduce token usage and costs without giving 
 - Defines rules that compare the cost of using the paid API against the cost (and potential quality trade-offs) of offloading to a local LLM
 - Includes configurable thresholds for when to offload
 - Uses preemptive routing based on benchmark data to make faster decisions without API calls
+- For preemptive local selection, task-category benchmark scores from ModelRegistry (for example `code`) are preferred over generic historical quality when available
 - New adaptive model selection system with performance history tracking
 - Enhanced code task decomposition with complexity analysis
 - **NEW** Smart task dependency mapping with critical path analysis
