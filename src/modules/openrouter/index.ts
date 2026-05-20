@@ -17,6 +17,7 @@ import {
 import { speculativeDecodingService } from '../decision-engine/services/speculativeDecoding.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
+import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 
 
 // Add a custom error class
@@ -669,6 +670,9 @@ export const openRouterModule = {
       } else if (axiosError.response && axiosError.response.status >= 500) {
         logger.error('OpenRouter server error');
         return OpenRouterErrorType.SERVER_ERROR;
+      } else if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ERR_CANCELED') {
+        logger.error('OpenRouter request timed out or was canceled');
+        return OpenRouterErrorType.TIMEOUT;
       }
     }
     
@@ -1266,8 +1270,10 @@ export const openRouterModule = {
         throw new Error(`Model ${normalizedModelId} is temporarily quarantined due to recent failures. Please retry later or select another model.`);
       }
       
-      // Determine the execution timeout (default to 3 minutes)
-      const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 180000;
+      // Use explicit timeout when provided; otherwise fall back to global provider timeout.
+      const timeout = options?.timeoutMs && options.timeoutMs > 0
+        ? options.timeoutMs
+        : config.providerTimeoutMs;
 
       const executionOptions = {
         ...buildCodeTaskExecutionOptions(task, 'openrouter'),
@@ -1291,6 +1297,12 @@ export const openRouterModule = {
               throw new Error('Context length exceeded. Please reduce the size of your task.');
             case OpenRouterErrorType.MODEL_NOT_FOUND:
               throw new Error(`Model ${modelId} not found in OpenRouter.`);
+            case OpenRouterErrorType.TIMEOUT:
+              throw new InferenceTimeoutError(
+                'openrouter',
+                timeout,
+                `OpenRouter inference timed out after ${timeout}ms.`,
+              );
             case OpenRouterErrorType.SERVER_ERROR:
               throw new Error('OpenRouter server error. Please try again later.');
             default:

@@ -50,4 +50,18 @@ describe('ollamaModule timeout handling', () => {
 
     expect(callSpy).toHaveBeenCalled();
   });
+
+  it('returns content when inference completes within timeout window', async () => {
+    const callSpy = jest.spyOn(ollamaModule, 'callOllamaApi').mockResolvedValue({
+      success: true,
+      text: 'function add(a, b) { return a + b; }',
+      usage: {
+        prompt_tokens: 12,
+        completion_tokens: 9,
+      },
+    });
+
+    await expect(ollamaModule.executeTask('gemma3n:e2b', 'Write an add function')).resolves.toContain('function add');
+    expect(callSpy).toHaveBeenCalled();
+  });
 });

@@ -16,6 +16,7 @@ import {
   SpeculativeInferenceConfig,
   PromptImprovementConfig
 } from './types.js';
+import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 
@@ -155,8 +156,11 @@ export const lmStudioModule = {
             logger.error('LM Studio server error');
             return LMStudioErrorType.SERVER_ERROR;
           }
-        } else if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ECONNABORTED') {
-          logger.error('LM Studio connection refused or timed out');
+        } else if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ERR_CANCELED') {
+          logger.error('LM Studio request timed out or was canceled');
+          return LMStudioErrorType.TIMEOUT;
+        } else if (axiosError.code === 'ECONNREFUSED') {
+          logger.error('LM Studio connection refused');
           return LMStudioErrorType.SERVER_ERROR;
         }
       } else if (error.message.includes('context length')) {
@@ -1256,8 +1260,10 @@ export const lmStudioModule = {
         throw new Error('LM Studio endpoint not configured');
       }
 
-      // Determine the execution timeout (default to 3 minutes)
-      const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 180000;
+      // Use explicit timeout when provided; otherwise fall back to global provider timeout.
+      const timeout = options?.timeoutMs && options.timeoutMs > 0
+        ? options.timeoutMs
+        : config.providerTimeoutMs;
 
       // Call the LM Studio API
       const result = await this.callLMStudioApi(
@@ -1289,6 +1295,12 @@ export const lmStudioModule = {
               throwWithDiagnostics('Context length exceeded. Please reduce the size of your task.');
             case LMStudioErrorType.MODEL_NOT_FOUND:
               throwWithDiagnostics(`Model ${modelId} not found in LM Studio.`);
+            case LMStudioErrorType.TIMEOUT:
+              throw new InferenceTimeoutError(
+                'lm-studio',
+                timeout,
+                `LM Studio inference timed out after ${timeout}ms.`,
+              );
             case LMStudioErrorType.SERVER_ERROR:
               throwWithDiagnostics('LM Studio server error. Please ensure LM Studio is running.');
             default:

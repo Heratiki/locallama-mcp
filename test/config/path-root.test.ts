@@ -10,6 +10,7 @@ const originalCwd = process.cwd();
 const originalRootDir = process.env.LOCALLAMA_ROOT_DIR;
 const originalProviderMaxConcurrentLocal = process.env.PROVIDER_MAX_CONCURRENT_LOCAL;
 const originalProviderMaxConcurrentRemote = process.env.PROVIDER_MAX_CONCURRENT_REMOTE;
+const originalProviderTimeoutMs = process.env.PROVIDER_TIMEOUT_MS;
 
 function importFreshModule(modulePath: string, cacheKey: string) {
   const moduleUrl = new URL(`${pathToFileURL(modulePath).href}?${cacheKey}`);
@@ -35,6 +36,12 @@ afterEach(() => {
     delete process.env.PROVIDER_MAX_CONCURRENT_REMOTE;
   } else {
     process.env.PROVIDER_MAX_CONCURRENT_REMOTE = originalProviderMaxConcurrentRemote;
+  }
+
+  if (originalProviderTimeoutMs === undefined) {
+    delete process.env.PROVIDER_TIMEOUT_MS;
+  } else {
+    process.env.PROVIDER_TIMEOUT_MS = originalProviderTimeoutMs;
   }
 });
 
@@ -97,6 +104,17 @@ describe('root path resolution', () => {
     expect(configModule.config.providerMaxConcurrentRemote).toBe(1);
   });
 
+  it('defaults provider timeout fallback to 120000ms', async () => {
+    delete process.env.PROVIDER_TIMEOUT_MS;
+
+    const configModule = await importFreshModule(
+      path.resolve(originalCwd, 'dist/config/index.js'),
+      `provider-timeout-default=${randomUUID()}`
+    );
+
+    expect(configModule.config.providerTimeoutMs).toBe(120000);
+  });
+
   it('allows provider concurrency caps to be configured with env vars', async () => {
     const script = [
       "import('./dist/config/index.js').then(({ config }) => {",
@@ -123,5 +141,35 @@ describe('root path resolution', () => {
 
     expect(parsed.local).toBe(2);
     expect(parsed.remote).toBe(3);
+  });
+
+  it('allows PROVIDER_TIMEOUT_MS to override the generic provider timeout fallback', async () => {
+    const script = [
+      "import('./dist/config/index.js').then(({ config }) => {",
+      "console.log(JSON.stringify({ providerTimeoutMs: config.providerTimeoutMs }));",
+      '});',
+    ].join('');
+    const output = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      {
+        cwd: originalCwd,
+        env: {
+          ...process.env,
+          PROVIDER_TIMEOUT_MS: '45000',
+        },
+        encoding: 'utf8',
+      },
+    );
+
+    const jsonLine = output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('{') && line.endsWith('}'))
+      .pop();
+
+    expect(jsonLine).toBeDefined();
+    const parsed = JSON.parse(jsonLine || '{}') as { providerTimeoutMs?: number };
+    expect(parsed.providerTimeoutMs).toBe(45000);
   });
 });
