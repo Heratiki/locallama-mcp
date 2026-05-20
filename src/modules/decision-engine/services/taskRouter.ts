@@ -7,6 +7,7 @@ import { CodeSubtask, Task } from '../types/codeTask.js';
 import TaskExecutor from './taskExecutor.js';
 import { isProviderLocal } from '../../core/provider/index.js';
 import { getModelRegistry } from '../../core/model/index.js';
+import { getCapabilityDetector } from '../../core/capability-detector.js';
 
 interface RoutingStrategy {
   name: string;
@@ -459,17 +460,24 @@ class TaskRouter {
         
         // Filter by token requirements and capability
         modelsToConsider = modelsToConsider.filter(m => {
-          const caps = getModelRegistry().getModel(m.id)?.capabilities;
+          // Use CapabilityDetector so empirical benchmark corrections (layer 3)
+          // are applied. Fall back to raw registry caps if detector unavailable.
+          let caps;
+          try {
+            caps = getCapabilityDetector().detectCapabilities(m.id);
+          } catch {
+            caps = getModelRegistry().getModel(m.id)?.capabilities;
+          }
 
-          // For tasks requiring ≥ 32 768 tokens, use the registry largeContext flag
-          // when available; fall back to raw contextWindow comparison otherwise.
+          // For tasks requiring ≥ 32 768 tokens, use the largeContext flag when
+          // available; fall back to raw contextWindow comparison otherwise.
           const needsLargeContext = maxIndividualTokens >= 32768;
           const meetsTokenReq = needsLargeContext
             ? (caps !== undefined ? caps.largeContext : (!m.contextWindow || m.contextWindow >= maxIndividualTokens))
             : (!m.contextWindow || m.contextWindow >= maxIndividualTokens);
 
-          // Check for specialized code capabilities using registry caps when
-          // available; fall back to heuristic model-name regex.
+          // Check for specialized code capabilities using empirically-corrected
+          // caps when available; fall back to heuristic model-name regex.
           if (requiresCodeCapability) {
             const hasCodeCap = caps !== undefined
               ? caps.code
