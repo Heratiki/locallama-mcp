@@ -2,14 +2,14 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Load environment variables from .env file
-dotenv.config();
 // Resolve project root from the compiled file location so the server works
 // regardless of what cwd the MCP host process uses when spawning us.
 // dist/config/index.js → dist/config/ → dist/ → project root (3 levels up).
 // LOCALLAMA_ROOT_DIR overrides for tests or custom deployments.
 const rootDir = process.env.LOCALLAMA_ROOT_DIR ||
   path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+// Load environment variables from a stable root path instead of caller cwd.
+dotenv.config({ path: path.join(rootDir, '.env') });
 
 /**
  * Type definitions for the configuration
