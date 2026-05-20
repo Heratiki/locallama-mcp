@@ -16,6 +16,7 @@ const {
   isProviderLocal,
   providerCostClass,
   isProviderId,
+  executeProviderTask,
 } = providerModule;
 
 function fakeProvider(id: string, costClass: 'local' | 'free' | 'paid', isLocal: boolean) {
@@ -100,6 +101,45 @@ describe('provider helpers', () => {
     it('handles null/undefined', () => {
       expect(isProviderId(undefined, 'lm-studio')).toBe(false);
       expect(isProviderId(null, 'lm-studio')).toBe(false);
+    });
+  });
+
+  describe('executeProviderTask', () => {
+    it('executes through provider and returns result content', async () => {
+      const registry = new ProviderRegistry();
+      const provider = fakeProvider('openrouter', 'paid', false);
+      registry.register(provider);
+      _setProviderRegistryForTests(registry);
+
+      const result = await executeProviderTask('openrouter', 'test-model', 'ping', { timeoutMs: 1234 });
+
+      expect(provider.executeTask).toHaveBeenCalledWith('test-model', 'ping', { timeoutMs: 1234 });
+      expect(result.content).toBe('');
+    });
+
+    it('fails fast when provider circuit is open', async () => {
+      const registry = new ProviderRegistry();
+      const provider = fakeProvider('openrouter', 'paid', false);
+      registry.register(provider);
+      jest.spyOn(registry, 'isAvailable').mockReturnValue(false);
+      _setProviderRegistryForTests(registry);
+
+      await expect(executeProviderTask('openrouter', 'test-model', 'ping')).rejects.toThrow(
+        /temporarily unavailable \(circuit open\)/,
+      );
+      expect(provider.executeTask).not.toHaveBeenCalled();
+    });
+
+    it('records provider failure when execution throws', async () => {
+      const registry = new ProviderRegistry();
+      const provider = fakeProvider('openrouter', 'paid', false);
+      provider.executeTask = jest.fn(() => Promise.reject(new Error('provider failed')));
+      registry.register(provider);
+      const recordFailureSpy = jest.spyOn(registry, 'recordProviderFailure');
+      _setProviderRegistryForTests(registry);
+
+      await expect(executeProviderTask('openrouter', 'test-model', 'ping')).rejects.toThrow('provider failed');
+      expect(recordFailureSpy).toHaveBeenCalledWith('openrouter');
     });
   });
 });

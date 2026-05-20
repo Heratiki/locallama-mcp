@@ -1,7 +1,7 @@
 import { logger } from '../../../utils/logger.js';
-import { openRouterModule } from '../../openrouter/index.js';
 import { costMonitor } from '../../cost-monitor/index.js';
 import { CodeEvaluationOptions, ModelCodeEvaluationResult } from '../types/index.js';
+import { executeProviderTask } from '../../core/provider/index.js';
 // import { Model } from '../../../types/index.js'; // Import Model type for proper typing
 
 interface ErrorResponse {
@@ -276,19 +276,18 @@ export const codeEvaluationService = {
     const detailedAnalysis = options?.detailedAnalysis ?? false;
     const evaluationPrompt = this.constructCodeEvaluationPrompt(task, response, taskType, detailedAnalysis);
 
-    const result = await openRouterModule.callOpenRouterApi(
-      modelId,
-      evaluationPrompt,
-      timeout
-    );
-
-    if (!result.success || !result.text) {
-      throw new Error(`Model evaluation failed: ${result.error}`);
+    let resultText: string;
+    try {
+      const result = await executeProviderTask('openrouter', modelId, evaluationPrompt, { timeoutMs: timeout });
+      resultText = result.content;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Model evaluation failed: ${errorMessage}`);
     }
 
     try {
-      const jsonMatch = result.text.match(/```json\n([\s\S]*?)\n```/) ||
-                        result.text.match(/\{[\\s\S]*"qualityScore"[\s\S]*\}/);
+      const jsonMatch = resultText.match(/```json\n([\s\S]*?)\n```/) ||
+            resultText.match(/\{[\\s\S]*"qualityScore"[\s\S]*\}/);
 
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];

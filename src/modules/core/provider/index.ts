@@ -4,7 +4,12 @@ export {
   getProviderRegistry,
   _setProviderRegistryForTests,
 } from './registry.js';
-export { isProviderLocal, providerCostClass, isProviderId } from './helpers.js';
+export {
+  isProviderLocal,
+  providerCostClass,
+  isProviderId,
+  executeProviderTask,
+} from './helpers.js';
 export {
   localProviderLifecycle,
   _resetLocalProviderLifecycleForTests,
