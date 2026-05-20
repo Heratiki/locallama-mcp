@@ -11,6 +11,7 @@
  *   all       (default) Run every test
  *   smoke     Startup, tool list, resource reads only (no LLM calls)
  *   routing   preemptive_route_task + get_cost_estimate (no LLM calls)
+ *   storage   DB persistence, lock contention, data-dir isolation (no LLM calls)
  *   llm       route_task with Ollama (makes real LLM calls, slower)
  */
 
@@ -158,6 +159,7 @@ function isPathUnderRoot(targetPath, rootPath) {
 async function runSuite(client, serverEnv) {
   const runSmoke   = ['all', 'smoke'].includes(SUITE);
   const runRouting = ['all', 'routing'].includes(SUITE);
+  const runStorage = ['all', 'storage'].includes(SUITE);
   const runLLM     = ['all', 'llm'].includes(SUITE);
 
   // ── 1. Smoke: Tool & Resource Discovery ───────────────────────────────────
@@ -802,7 +804,158 @@ async function runSuite(client, serverEnv) {
 
   }
 
-  // ── 3. LLM: Real model calls via Ollama ───────────────────────────────────
+  // ── 3. Storage: DB persistence, lock contention, data-dir isolation ────────
+  if (runStorage) {
+    hdr('Storage: benchmark DB persistence, lock contention, data-dir isolation');
+
+    // [mock][F-3] Benchmark DB persistence across server restart
+    // Verifies the SQLite file is durable — data written before a server shutdown
+    // survives a restart (CREATE TABLE IF NOT EXISTS; no truncation on init).
+    await runTest('[mock][F-3] benchmark DB entry persists across DB close/reopen (restart-safe)', async () => {
+      const { open } = await import('sqlite');
+      const { default: sqlite3 } = await import('sqlite3');
+      const { mkdirSync } = await import('fs');
+      const { dirname: dn } = await import('path');
+
+      const dbPath = process.env.BENCHMARK_DB_PATH
+        ? resolve(process.env.BENCHMARK_DB_PATH)
+        : join(__dirname, 'data', 'benchmarks.db');
+
+      mkdirSync(dn(dbPath), { recursive: true });
+
+      // Write a sentinel row (simulates a benchmark run)
+      const db1 = await open({ filename: dbPath, driver: sqlite3.Database });
+      await db1.exec(`CREATE TABLE IF NOT EXISTS benchmark_tasks (
+        taskId TEXT PRIMARY KEY, task TEXT, contextLength INTEGER,
+        outputLength INTEGER, complexity REAL, timestamp TEXT
+      )`);
+      const testTaskId = `f3-persist-${Date.now()}`;
+      await db1.run(
+        'INSERT OR REPLACE INTO benchmark_tasks (taskId, task, contextLength, outputLength, complexity, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+        [testTaskId, 'F-3 persistence test', 10, 50, 0.5, new Date().toISOString()]
+      );
+      await db1.close(); // simulate server shutdown
+
+      assert(existsSync(dbPath), '[mock][F-3] benchmark DB file exists on disk after write');
+
+      // Re-open (simulates server restart reading existing DB — no truncation expected)
+      const db2 = await open({ filename: dbPath, driver: sqlite3.Database });
+      const row = await db2.get('SELECT taskId FROM benchmark_tasks WHERE taskId = ?', [testTaskId]);
+
+      // Cleanup sentinel row before asserting so failures don't leave debris
+      await db2.run('DELETE FROM benchmark_tasks WHERE taskId = ?', [testTaskId]);
+      await db2.close();
+
+      assert(row?.taskId === testTaskId, '[mock][F-3] benchmark entry survives DB close/reopen');
+    });
+
+    // [F-9a] Lock contention — second server instance defers to running instance
+    // The main server holds locallama.lock; a second instance detects the live
+    // process, logs a redirect message, and exits 0 (graceful redirect, not error).
+    // The lock file PID must remain unchanged — the second instance must NOT steal it.
+    await runTest('[F-9a] second server exits cleanly and does not steal the lock when one is held', async () => {
+      const { spawn } = await import('child_process');
+      const { readFileSync: rfs } = await import('fs');
+      const serverPath = join(__dirname, 'dist', 'index.js');
+
+      // Capture original lock holder PID before spawning competitor
+      const lockPath = join(__dirname, 'locallama.lock');
+      let originalPid = null;
+      try {
+        originalPid = JSON.parse(rfs(lockPath, 'utf8')).pid;
+      } catch {}
+
+      let exitCode = null;
+      let stderrBuf = '';
+
+      await new Promise((resolveP) => {
+        const proc = spawn('node', [serverPath], {
+          env: { ...serverEnv, NODE_ENV: 'test' },
+          cwd: __dirname,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        proc.stdout?.on('data', () => {}); // drain
+        proc.stderr?.on('data', (d) => { stderrBuf += d.toString(); });
+        proc.on('exit', (code) => { exitCode = code; resolveP(); });
+        // Safety timeout — should exit almost immediately
+        setTimeout(() => { try { proc.kill('SIGTERM'); } catch {} resolveP(); }, 8000);
+      });
+
+      dim(`Second-instance stderr (first 300 chars): ${stderrBuf.substring(0, 300)}`);
+      info(`Second-instance exit code: ${exitCode}`);
+
+      // Server exits 0 by design: it detects the running instance and defers
+      assert(exitCode === 0, '[F-9a] second server exits 0 (graceful redirect to existing instance)', `exit code: ${exitCode}`);
+
+      // Lock file must still belong to the original server (no PID theft)
+      let currentPid = null;
+      try { currentPid = JSON.parse(rfs(lockPath, 'utf8')).pid; } catch {}
+      assert(
+        originalPid !== null && currentPid === originalPid,
+        '[F-9a] lock file PID unchanged — second instance did not steal the lock',
+        `originalPid=${originalPid}, currentPid=${currentPid}`
+      );
+    });
+
+    // [F-9b] LOCALLAMA_ROOT_DIR isolation — lock file and artifacts under custom root
+    // Starts a second server with a temp dir as root. The main server holds its
+    // own lock in the default root, so there is no contention.
+    // Also verifies the lock file is NOT created in the default root (no cross-pollution).
+    await runTest('[F-9b] LOCALLAMA_ROOT_DIR isolates lock file to custom root, not project root', async () => {
+      const { mkdtempSync, rmSync, readFileSync: rfs } = await import('fs');
+      const { tmpdir } = await import('os');
+
+      const tempDir = mkdtempSync(join(tmpdir(), 'locallama-f9b-'));
+      const defaultLockPath = join(__dirname, 'locallama.lock');
+
+      // Capture main server PID so we can confirm the default lock wasn't touched
+      let mainPidBefore = null;
+      try { mainPidBefore = JSON.parse(rfs(defaultLockPath, 'utf8')).pid; } catch {}
+
+      try {
+        const transport2 = new StdioClientTransport({
+          command: 'node',
+          args: [join(__dirname, 'dist', 'index.js')],
+          env: { ...serverEnv, LOCALLAMA_ROOT_DIR: tempDir },
+          cwd: __dirname,
+        });
+        const client2 = new Client(
+          { name: 'locallama-f9b-test', version: '1.0.0' },
+          { capabilities: { roots: {}, sampling: {} } }
+        );
+
+        await client2.connect(transport2);
+
+        const lockPath = join(tempDir, 'locallama.lock');
+        assert(existsSync(lockPath), '[F-9b] lock file created under custom LOCALLAMA_ROOT_DIR');
+
+        // Confirm the lock file is not the same as the default root lock
+        let customPid = null;
+        try { customPid = JSON.parse(rfs(lockPath, 'utf8')).pid; } catch {}
+        assert(
+          customPid !== null && customPid !== mainPidBefore,
+          '[F-9b] custom root lock file belongs to isolated server instance, not main server'
+        );
+
+        // Default lock file PID must be unchanged (no cross-pollution)
+        let mainPidAfter = null;
+        try { mainPidAfter = JSON.parse(rfs(defaultLockPath, 'utf8')).pid; } catch {}
+        assert(
+          mainPidBefore !== null && mainPidAfter === mainPidBefore,
+          '[F-9b] default root lock file unaffected by custom-root server'
+        );
+
+        const statusResp = await client2.readResource({ uri: 'locallama://status' });
+        assert(!!statusResp.contents?.[0]?.text, '[F-9b] server starts and responds under custom LOCALLAMA_ROOT_DIR');
+
+        await client2.close();
+      } finally {
+        try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
+      }
+    });
+  }
+
+  // ── 4. LLM: Real model calls via Ollama ───────────────────────────────────
   if (runLLM) {
     hdr('LLM: Real model calls via Ollama (may be slow)');
     info('Using model: gemma3n:e2b (5.6GB — smallest available)');

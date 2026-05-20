@@ -134,6 +134,7 @@ REMOVE_STALE_LOCK_FILES=true
 | 2026-05-19 | smoke (Issue 34 / Gap 5) | 30 | 0 | 0 | Added Windows-native smoke assertions for `rootDir` equality and artifact-path placement under expected root (`locallama.lock`, `ollama-models.json`, `data/benchmarks.db`). Also aligned benchmark DB default path to root-scoped `data/benchmarks.db` to avoid host-CWD drift. |
 | 2026-05-19 | routing (Issues 24+26 / Gap 2) | 6 | 0 | 0 | Added provider-availability assertion in routing suite. With `EXPECT_LOCAL_PROVIDER_DOWN=true`, `preemptive_route_task` returned non-local recommendation (`costClass=paid`) and suite passed: `Passed: 6 Failed: 0`. |
 | 2026-05-19 | routing (Issues 20+25 / Gap 8) | 11 | 0 | 0 | Added oversized-prompt `route_task` operational assertion. The suite constructs a prompt longer than the largest declared model context window and verifies the MCP tool response contains `error: "context_overflow"`, `estimatedTokens`, and `modelContextWindow` with no silent dispatch. |
+| 2026-05-20 | storage (Issue 25 / Gaps 4+10) | 8 | 0 | 0 | Added `--suite storage` with F-3 (Gap 4), F-9a, and F-9b (Gap 10) assertions. F-3 [mock]: SQLite file is durable across DB close/reopen (restart-safe). F-9a [live]: second server exits 0 (graceful redirect) and does not steal the lock PID. F-9b [live]: `LOCALLAMA_ROOT_DIR` isolates lock file to custom root; default root unaffected. Full suite: 74 pass, 7 pre-existing failures unchanged. |
 
 **Full suite command used:**
 ```bash
@@ -343,12 +344,18 @@ No test verifies server behavior under concurrent tool calls:
 
 ### Gap 4 — Benchmark DB integrity after restart (Issue 21)
 
-No test verifies that benchmark results written in one server session are correctly read in the next:
+2026-05-20 update (Issue 25): Mock-based persistence assertion added to `--suite storage`. Closes the restart-persistence half of this gap.
 
-- Run `benchmark_task` against a model. Stop the server. Restart the server. Call `preemptive_route_task` and assert that the newly started server's routing decision reflects the benchmark data from the previous session (i.e., the DB was read correctly at startup).
-- Add a test that writes a row in the old benchmark schema (if schema is ever migrated) and verifies the migration runs without data loss.
+Completed checks:
 
-**Blocker:** Issue 21 (schema migration framework) must be in place before the migration test. The restart/persistence test can be added now.
+- `[mock][F-3]` SQLite file is durable across DB close/reopen: a sentinel row written before "shutdown" survives when the file is reopened in a fresh connection (no truncation on `CREATE TABLE IF NOT EXISTS`). Passes: 2026-05-20.
+
+Remaining:
+
+- The full lifecycle assertion (run `benchmark_task` via MCP → stop server → restart server → assert routing decision reflects DB) requires an Ollama model to be available and is not yet added to the suite.
+- Schema migration test requires Issue 21 (schema migration framework).
+
+**Blocker (remaining items):** Issue 21 for the migration test. Live restart test has no blocker but needs Ollama available at test time.
 
 ---
 
@@ -426,12 +433,18 @@ No test verifies that config changes are (or are not) picked up at runtime:
 
 ### Gap 10 — Multi-instance lock contention (Issue 32)
 
-No test verifies server behavior when two instances attempt to start against the same data directory:
+2026-05-20 update (Issue 25): F-9a and F-9b assertions added to `--suite storage`. Closes the observable-behavior half of this gap.
 
-- Start one server instance. Attempt to start a second instance pointing at the same root directory. Assert that the second instance either exits with a clear "lock file held" error or (if `REMOVE_STALE_LOCK_FILES=true`) detects the other instance is live and refuses to steal the lock.
-- Assert that `LOCALLAMA_DATA_DIR` correctly redirects all file-based state, allowing two instances with different data dirs to run simultaneously without conflict.
+Completed checks:
 
-**Blocker:** Issue 32 (`LOCALLAMA_DATA_DIR` env var) must be implemented for the second assertion. The first assertion can be added now.
+- `[F-9a]` Second server instance exits 0 (graceful redirect to existing instance, not a crash) and does not overwrite the lock file PID. Passes: 2026-05-20.
+- `[F-9b]` `LOCALLAMA_ROOT_DIR` (the implemented isolation mechanism) redirects the lock file to a custom temp directory; default root lock is unaffected. Passes: 2026-05-20.
+
+Remaining:
+
+- `LOCALLAMA_DATA_DIR` env var is not yet implemented (Issue 32). The F-9b test currently uses `LOCALLAMA_ROOT_DIR` as a proxy. Once Issue 32 lands, add a parallel assertion using `LOCALLAMA_DATA_DIR` to verify it isolates lock, cache, and DB independently of `rootDir`.
+
+**Blocker (remaining):** Issue 32 (`LOCALLAMA_DATA_DIR` env var).
 
 ---
 
