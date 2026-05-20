@@ -195,7 +195,7 @@ export const modelPerformanceTracker = {
       }
 
       // Save the updated database - use updateModelData instead of save
-      modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+      void modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
       logger.debug(`Updated performance data for ${modelId}: Success=${response.success}, Quality=${qualityScore.toFixed(2)}, Time=${response.timeTaken}ms, TokenEff=${tokenEfficiency.toFixed(3)}`);
     } catch (error) {
       logger.error('Error tracking model performance:', error);
@@ -249,7 +249,7 @@ export const modelPerformanceTracker = {
       modelData.systemResourceUsage = weightedResourceScore;
       
       // Save the updated database - use updateModelData instead of save
-      modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
+      void modelsDbService.updateModelData(modelId, modelsDb.models[modelId]);
       logger.debug(`Updated resource data for ${modelId}: System resource score=${weightedResourceScore.toFixed(3)}`);
     } catch (error) {
       logger.error('Error tracking model resource usage:', error);

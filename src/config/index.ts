@@ -92,6 +92,7 @@ export interface Config {
   //   preferred and paid APIs are only used for genuinely complex work.
   // 'default': standard thresholds from benchmark results.
   profile: 'default' | 'lightweight';
+
 }
 
 /**

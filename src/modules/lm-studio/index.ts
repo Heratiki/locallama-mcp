@@ -40,11 +40,6 @@ const DEFAULT_PROMPTING_STRATEGIES = promptingStrategies.strategies.reduce<Recor
   return acc;
 }, {});
 
-// Use DEFAULT_PROMPTING_STRATEGIES dynamically
-function getPromptingStrategy(modelId: string): PromptingDefaults {
-  return DEFAULT_PROMPTING_STRATEGIES[modelId] || DEFAULT_PROMPTING_STRATEGIES['default'];
-}
-
 // Default speculative inference configuration
 const DEFAULT_SPECULATIVE_INFERENCE_CONFIG: SpeculativeInferenceConfig = {
   enabled: true,
@@ -353,7 +348,7 @@ export const lmStudioModule = {
       try {
         await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
         logger.debug(`Ensured directory exists: ${path.dirname(TRACKING_FILE_PATH)}`);
-      } catch (error) {
+      } catch {
         logger.debug('Unknown error during directory check');
       }
 
@@ -365,7 +360,7 @@ export const lmStudioModule = {
         const data = await fs.readFile(TRACKING_FILE_PATH, 'utf8');
         this.modelTracking = JSON.parse(data) as LMStudioModelTracking;
         logger.debug(`Loaded LM Studio tracking data with ${Object.keys(this.modelTracking.models).length} models`);
-      } catch (error) {
+      } catch {
         logger.debug('No existing LM Studio tracking data found, will create new tracking data');
         this.modelTracking = {
           models: {},
@@ -380,7 +375,7 @@ export const lmStudioModule = {
         const userOverrides = await svc.readUserOverrides();
         this.promptingStrategies = userOverrides as Record<string, PromptingStrategy>;
         logger.debug(`Loaded LM Studio prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
-      } catch (error) {
+      } catch {
         logger.debug('No existing LM Studio prompting strategies found');
         this.promptingStrategies = {};
       }
@@ -556,7 +551,7 @@ export const lmStudioModule = {
       // Ensure the directory exists
       try {
         await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
-      } catch (error) {
+      } catch {
         logger.debug('Unknown error during directory check');
       }
 
@@ -1287,6 +1282,7 @@ export const lmStudioModule = {
         };
 
         if (result.error) {
+          /* eslint-disable no-fallthrough -- each case calls throwWithDiagnostics() which returns never */
           switch (result.error) {
             case LMStudioErrorType.RATE_LIMIT:
               throwWithDiagnostics('LM Studio rate limit exceeded. Please try again later.');
@@ -1307,6 +1303,7 @@ export const lmStudioModule = {
             default:
               throwWithDiagnostics(`Error executing task: ${result.error}`);
           }
+          /* eslint-enable no-fallthrough */
         }
         throwWithDiagnostics('Failed to execute task with LM Studio');
       }

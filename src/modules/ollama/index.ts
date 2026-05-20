@@ -103,7 +103,7 @@ export const ollamaModule = {
       try {
         await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
         logger.debug(`Ensured directory exists: ${path.dirname(TRACKING_FILE_PATH)}`);
-      } catch (error) {
+      } catch {
         logger.debug('Unknown error during directory check');
       }
       
@@ -112,7 +112,7 @@ export const ollamaModule = {
         const data = await fs.readFile(TRACKING_FILE_PATH, 'utf8');
         this.modelTracking = JSON.parse(data) as OllamaModelTracking;
         logger.debug(`Loaded Ollama tracking data with ${Object.keys(this.modelTracking.models).length} models`);
-      } catch (error) {
+      } catch {
         logger.debug('No existing Ollama tracking data found, will create new tracking data');
         // epoch-0 forces the 24-hour threshold to trigger on first run
         this.modelTracking = {
@@ -127,7 +127,7 @@ export const ollamaModule = {
         const userOverrides = await svc.readUserOverrides();
         this.promptingStrategies = userOverrides as Record<string, PromptingStrategy>;
         logger.debug(`Loaded Ollama prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
-      } catch (error) {
+      } catch {
         logger.debug('No existing Ollama prompting strategies found');
         this.promptingStrategies = {};
       }
@@ -408,7 +408,7 @@ export const ollamaModule = {
       // Ensure the directory exists
       try {
         await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
-      } catch (error) {
+      } catch {
         logger.debug('Unknown error during directory check');
       }
       
