@@ -126,7 +126,7 @@ export const config: Config = {
   // Local LLM endpoints
   lmStudioEndpoint: process.env.LM_STUDIO_ENDPOINT || 'http://localhost:1234/v1',
   ollamaEndpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api',
-  ollamaTimeout: parseInt(process.env.OLLAMA_TIMEOUT || '120000', 10),
+  ollamaTimeout: parseInt(process.env.OLLAMA_TIMEOUT || '120', 10) * 1000,
   providerTimeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '120000', 10),
   providerMaxConcurrentLocal: parseNumber(process.env.PROVIDER_MAX_CONCURRENT_LOCAL, 1, 1, 64),
   providerMaxConcurrentRemote: parseNumber(process.env.PROVIDER_MAX_CONCURRENT_REMOTE, 1, 1, 128),

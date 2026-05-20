@@ -311,6 +311,8 @@ No test verifies what happens at the MCP tool-call timeout boundary. Currently, 
 
 2026-05-20 update: Issue 18's transport strategy decision is documented in `docs/PLAN.md` and ADR-0001: async jobs and queue-backed progress are the primary path; streaming chunks remain optional future work. Timeout-boundary live coverage is still pending because it needs a deterministic slow-model fixture.
 
+2026-05-19 update (Issue #20): Per-provider inference timeout is now implemented. `OLLAMA_TIMEOUT` (seconds, default `120`) applies to Ollama provider requests. `PROVIDER_TIMEOUT_MS` (milliseconds, default `120000`) is the generic fallback for LM Studio and OpenRouter. On expiry all three providers throw `InferenceTimeoutError`; the MCP surface in `src/index.ts` converts this to a structured JSON tool response `{error:"inference_timeout", providerId, timeoutMs}` with `isError:true`. Unit coverage: `test/modules/ollama/timeout.test.ts` verifies timeout-expiry error shape and success-within-window. Live end-to-end timeout boundary tests remain blocked pending a deterministic slow-model fixture (see Gap 1 blocker above).
+
 ---
 
 ### Gap 2 — Provider health failure injection (Issue 24 / Issue 26)

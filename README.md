@@ -245,7 +245,7 @@ PYTHON_DETECT_VENV=true
 - **Local LLM Endpoints**
   - `LM_STUDIO_ENDPOINT`: URL where your LM Studio instance is running
   - `OLLAMA_ENDPOINT`: URL where your Ollama instance is running
-  - `OLLAMA_TIMEOUT`: Per-request Ollama timeout in milliseconds (default `120000`)
+  - `OLLAMA_TIMEOUT`: Per-request Ollama timeout in seconds (default `120`)
   - `PROVIDER_TIMEOUT_MS`: Generic per-request timeout in milliseconds for providers without a specific override (default `120000`)
 
 - **Configuration**
