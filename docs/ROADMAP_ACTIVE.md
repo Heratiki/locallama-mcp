@@ -1,11 +1,9 @@
-# ROADMAP_ACTIVE.md — LocalLama MCP Active Work Queue
+# ROADMAP_ACTIVE.md — LocalLama MCP Strategic Planning Context
 
-> **For any agent starting work on this project:**
-> 1. Read this file top to bottom (< 5 min).
-> 2. Find the first task whose status is `⏳ Not started` or `🚧 In progress`.
-> 3. Do **only** that task. Stop when its acceptance criteria all pass.
-> 4. Update this file: tick criteria, set status to `✅ Done`, add a Change Log entry, promote the next task, and check whether any Discovered Follow-ups belong in the queue.
-> 5. Do **not** touch source files for any other task while working.
+> [!IMPORTANT]
+> **This file is kept for strategic planning and historical context only.**
+> It is **not** the active execution queue. GitHub Issues are the authoritative source of truth for active work.
+> Refer to this document only when a GitHub Issue explicitly references a task or section from it.
 
 ---
 

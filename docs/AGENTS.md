@@ -6,16 +6,20 @@ This file is the shared operating guide for Codex, Claude Code, Claw Code, Curso
 
 LocalLama MCP is being revived as a local-first, provider-neutral MCP server for coding-agent workflows. The goal is no longer to target Cline or Roo Code specifically. The server should help modern agents route coding work across local models, free/low-cost remote models, and paid frontier models using measured cost, latency, quality, context capacity, and task fit.
 
-Use `docs/PLAN.md` for the `future-testing` implementation plan, `docs/OPERATIONAL_TEST_PLAN.md` for live verification, and `docs/PROJECT_STATE.md` for the current snapshot. Keep `docs/ROADMAP.md` as long-form background.
+Use targeted GitHub Issues for active work requirements, `docs/PROJECT_STATE.md` for the current snapshot, `docs/audits/ARCHITECTURAL_TRUTHS.md` for core design principles, and `docs/OPERATIONAL_TEST_PLAN.md` for live verification. Strategic documents like `docs/PLAN.md`, `docs/ROADMAP.md`, and `docs/ROADMAP_ACTIVE.md` provide background context unless explicitly referenced by a GitHub Issue.
 
-## Shared Memory
+## Reading Order
 
-This repo uses `docs/history/memory-bank/` as append-only historical project memory, not as the active source of truth. Before planning non-trivial work, read:
+Before planning or executing work, agents MUST read documents in the following order:
+1. `docs/AGENTS.md` (this file) - The shared operating guide.
+2. `docs/PROJECT_STATE.md` - The current status snapshot.
+3. The targeted GitHub Issue - The authoritative source for active work and requirements.
+4. `docs/audits/ARCHITECTURAL_TRUTHS.md` - Core system constraints and design philosophies.
+5. `docs/OPERATIONAL_TEST_PLAN.md` - The live verification plan and test records.
 
-- `docs/PROJECT_STATE.md`
-- `docs/PLAN.md`
-- `docs/OPERATIONAL_TEST_PLAN.md`
-- `docs/history/memory-bank/README.md` for historical context conventions
+Note on planning documents:
+- `docs/PLAN.md`, `docs/ROADMAP.md`, and `docs/ROADMAP_ACTIVE.md` serve as strategic, historical, or background planning context ONLY, unless a targeted GitHub Issue explicitly references them for specific implementation tasks.
+- `docs/history/memory-bank/` serves as append-only historical project memory, not as the active source of truth.
 
 After meaningful work, append or update memory with:
 
