@@ -164,6 +164,9 @@ describe('openRouterModule free-model health gating', () => {
           Authorization: 'Bearer test-key',
         },
       },
+      request: {
+        _header: 'Authorization: Bearer test-key\r\nX-Api-Key: hidden-key\r\n',
+      },
     });
 
     jest.spyOn(axios, 'post').mockRejectedValue(axiosError);
@@ -173,6 +176,7 @@ describe('openRouterModule free-model health gating', () => {
     expect(result.success).toBe(false);
     const logged = JSON.stringify(loggerMock.error.mock.calls);
     expect(logged).not.toContain('test-key');
-    expect(logged).not.toContain('Authorization');
+    expect(logged).not.toContain('hidden-key');
+    expect(logged).toContain('[REDACTED]');
   });
 });

@@ -493,6 +493,175 @@ async function runSuite(client, serverEnv) {
       assert(parsed.estimatedTokens > parsed.modelContextWindow, 'estimatedTokens exceeds modelContextWindow');
     });
 
+    await runTest('[mock][F-1] OpenRouter quarantined free model is skipped and healthy fallback remains selectable', async () => {
+      const previousApiKey = process.env.OPENROUTER_API_KEY;
+      process.env.OPENROUTER_API_KEY = previousApiKey || serverEnv.OPENROUTER_API_KEY || 'test-operational-key';
+
+      try {
+        const { openRouterModule } = await import('./dist/modules/openrouter/index.js');
+
+        const nowIso = new Date().toISOString();
+        const futureIso = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+        openRouterModule.modelTracking = {
+          lastUpdated: nowIso,
+          freeModels: ['bad/free-model', 'good/free-model'],
+          freeModelHealth: {
+            'bad/free-model': {
+              consecutiveFailures: 2,
+              lastErrorType: 'invalid_request',
+              lastFailureAt: nowIso,
+              quarantinedUntil: futureIso,
+            },
+          },
+          models: {
+            'bad/free-model': {
+              id: 'bad/free-model',
+              name: 'Bad Free Model',
+              provider: 'openrouter',
+              isFree: true,
+              contextWindow: 8192,
+              capabilities: { chat: true, completion: true, vision: false },
+              costPerToken: { prompt: 0, completion: 0 },
+              lastUpdated: nowIso,
+            },
+            'good/free-model': {
+              id: 'good/free-model',
+              name: 'Good Free Model',
+              provider: 'openrouter',
+              isFree: true,
+              contextWindow: 8192,
+              capabilities: { chat: true, completion: true, vision: false },
+              costPerToken: { prompt: 0, completion: 0 },
+              lastUpdated: nowIso,
+            },
+          },
+        };
+
+        const freeModels = await openRouterModule.getFreeModels(false);
+        const freeModelIds = freeModels.map((model) => model.id);
+
+        assert(!freeModelIds.includes('bad/free-model'), '[mock][F-1] quarantined free model is excluded from eligible OpenRouter models');
+        assert(freeModelIds[0] === 'good/free-model', '[mock][F-1] healthy free model remains the selected fallback candidate');
+      } finally {
+        if (previousApiKey === undefined) {
+          delete process.env.OPENROUTER_API_KEY;
+        } else {
+          process.env.OPENROUTER_API_KEY = previousApiKey;
+        }
+      }
+    });
+
+    await runTest('[mock][F-5] OpenRouter quarantine expiry re-admits the model', async () => {
+      const previousApiKey = process.env.OPENROUTER_API_KEY;
+      process.env.OPENROUTER_API_KEY = previousApiKey || serverEnv.OPENROUTER_API_KEY || 'test-operational-key';
+
+      try {
+        const { openRouterModule } = await import('./dist/modules/openrouter/index.js');
+
+        const nowIso = new Date().toISOString();
+        const expiredIso = new Date(Date.now() - 60_000).toISOString();
+        openRouterModule.modelTracking = {
+          lastUpdated: nowIso,
+          freeModels: ['expired/free-model', 'healthy/free-model'],
+          freeModelHealth: {
+            'expired/free-model': {
+              consecutiveFailures: 2,
+              lastErrorType: 'invalid_request',
+              lastFailureAt: nowIso,
+              quarantinedUntil: expiredIso,
+            },
+          },
+          models: {
+            'expired/free-model': {
+              id: 'expired/free-model',
+              name: 'Expired Free Model',
+              provider: 'openrouter',
+              isFree: true,
+              contextWindow: 8192,
+              capabilities: { chat: true, completion: true, vision: false },
+              costPerToken: { prompt: 0, completion: 0 },
+              lastUpdated: nowIso,
+            },
+            'healthy/free-model': {
+              id: 'healthy/free-model',
+              name: 'Healthy Free Model',
+              provider: 'openrouter',
+              isFree: true,
+              contextWindow: 8192,
+              capabilities: { chat: true, completion: true, vision: false },
+              costPerToken: { prompt: 0, completion: 0 },
+              lastUpdated: nowIso,
+            },
+          },
+        };
+
+        const freeModels = await openRouterModule.getFreeModels(false);
+        const freeModelIds = freeModels.map((model) => model.id);
+
+        assert(openRouterModule.isModelQuarantined('expired/free-model') === false, '[mock][F-5] quarantine-expired model is no longer flagged as quarantined');
+        assert(freeModelIds.includes('expired/free-model'), '[mock][F-5] quarantine-expired model re-enters the free-model pool');
+      } finally {
+        if (previousApiKey === undefined) {
+          delete process.env.OPENROUTER_API_KEY;
+        } else {
+          process.env.OPENROUTER_API_KEY = previousApiKey;
+        }
+      }
+    });
+
+    await runTest('[mock][F-4] circuit-open Ollama fallback routes to LM Studio', async () => {
+      const { ProviderRegistry, _setProviderRegistryForTests } = await import('./dist/modules/core/provider/index.js');
+      const { ModelRegistry, _setModelRegistryForTests } = await import('./dist/modules/core/model/index.js');
+      const { TaskExecutor } = await import('./dist/modules/api-integration/task-execution/index.js');
+
+      const makeProvider = (id, costClass, modelIds, content) => ({
+        id,
+        displayName: id,
+        costClass,
+        isLocal: costClass === 'local',
+        init: async () => {},
+        isAvailable: async () => true,
+        listModels: async () => modelIds.map((modelId) => ({ id: modelId })),
+        supportsModel: async (modelId) => modelIds.includes(modelId),
+        executeTask: async () => ({ content, model: id }),
+        getCost: () => ({ prompt: 0, completion: 0 }),
+      });
+
+      const registry = new ProviderRegistry();
+      const ollamaProvider = makeProvider('ollama', 'local', ['shared-local-model'], 'result-from-ollama');
+      const lmStudioProvider = makeProvider('lm-studio', 'local', ['shared-local-model'], 'result-from-lm-studio');
+
+      registry.register(ollamaProvider);
+      registry.register(lmStudioProvider);
+      registry.recordProviderFailure('ollama');
+      registry.recordProviderFailure('ollama');
+      registry.recordProviderFailure('ollama');
+      _setProviderRegistryForTests(registry);
+
+      const modelRegistry = new ModelRegistry();
+      modelRegistry.registerModel({
+        id: 'shared-local-model',
+        providerId: 'ollama',
+        displayName: 'Shared Local Model',
+        contextWindow: 8192,
+        capabilities: { chat: true, code: true, vision: false, toolUse: false, largeContext: false, maxContextTokens: 8192 },
+        cost: { prompt: 0, completion: 0 },
+        promptingStrategyId: 'default',
+      });
+      _setModelRegistryForTests(modelRegistry);
+
+      try {
+        const executor = new TaskExecutor();
+        const result = await executor.executeTask('shared-local-model', 'hello', 'job-routing-failover');
+
+        assert(result === 'result-from-lm-studio', '[mock][F-4] local fallback returns LM Studio result when Ollama circuit is open');
+        assert(registry.isAvailable('ollama') === false, '[mock][F-4] Ollama circuit is open during fallback probe');
+      } finally {
+        _setProviderRegistryForTests(undefined);
+        _setModelRegistryForTests(undefined);
+      }
+    });
+
   }
 
   // ── 3. LLM: Real model calls via Ollama ───────────────────────────────────

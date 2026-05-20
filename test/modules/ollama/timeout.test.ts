@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import axios from 'axios';
 
 jest.unstable_mockModule('../../../dist/config/index.js', () => ({
   config: {
@@ -15,13 +16,15 @@ jest.unstable_mockModule('../../../dist/config/index.js', () => ({
   },
 }));
 
+const loggerMock = {
+  error: jest.fn(),
+  warn: jest.fn(),
+  info: jest.fn(),
+  debug: jest.fn(),
+};
+
 jest.unstable_mockModule('../../../dist/utils/logger.js', () => ({
-  logger: {
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
-  },
+  logger: loggerMock,
 }));
 
 const { ollamaModule } = await import('../../../dist/modules/ollama/index.js');
@@ -31,6 +34,36 @@ const { InferenceTimeoutError } = await import('../../../dist/modules/utils/infe
 describe('ollamaModule timeout handling', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
+    loggerMock.error.mockClear();
+    loggerMock.warn.mockClear();
+    loggerMock.info.mockClear();
+    loggerMock.debug.mockClear();
+
+    ollamaModule.modelTracking = {
+      lastUpdated: new Date().toISOString(),
+      models: {
+        'gemma3n:e2b': {
+          id: 'gemma3n:e2b',
+          name: 'Gemma 3n E2B',
+          provider: 'ollama',
+          contextWindow: 8192,
+          family: 'gemma',
+          size: '3B',
+          capabilities: {
+            chat: true,
+            completion: true,
+            embedding: false,
+          },
+          promptingStrategy: {
+            systemPrompt: 'You are a helpful assistant.',
+            useChat: true,
+          },
+          lastUpdated: new Date().toISOString(),
+          version: '1.0',
+          isLocal: true,
+        },
+      },
+    };
   });
 
   it('throws InferenceTimeoutError when OLLAMA_TIMEOUT expires', async () => {
@@ -63,5 +96,35 @@ describe('ollamaModule timeout handling', () => {
 
     await expect(ollamaModule.executeTask('gemma3n:e2b', 'Write an add function')).resolves.toContain('function add');
     expect(callSpy).toHaveBeenCalled();
+  });
+
+  it('redacts authorization details when logging Ollama Axios errors', async () => {
+    const axiosError = Object.assign(new Error('Request failed with status code 401'), {
+      isAxiosError: true,
+      code: 'ERR_BAD_REQUEST',
+      response: {
+        status: 401,
+        data: { error: 'Unauthorized' },
+      },
+      config: {
+        headers: {
+          Authorization: 'Bearer test-key',
+          'X-Api-Key': 'secret-key',
+        },
+      },
+      request: {
+        _header: 'Authorization: Bearer test-key\r\nX-Api-Key: secret-key\r\n',
+      },
+    });
+
+    jest.spyOn(axios, 'post').mockRejectedValue(axiosError);
+
+    const result = await ollamaModule.callOllamaApi('gemma3n:e2b', 'hello', 1000);
+
+    expect(result.success).toBe(false);
+    const logged = JSON.stringify(loggerMock.error.mock.calls);
+    expect(logged).not.toContain('test-key');
+    expect(logged).not.toContain('secret-key');
+    expect(logged).toContain('[REDACTED]');
   });
 });

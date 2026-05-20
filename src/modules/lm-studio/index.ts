@@ -19,6 +19,7 @@ import {
 import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
+import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 
 // File path for storing LM Studio model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'lm-studio-models.json');
@@ -839,8 +840,8 @@ export const lmStudioModule = {
         };
       }
     } catch (error) {
-      logger.error(`Error calling LM Studio API for model ${modelId}:`, error);
       const normalizedError = error instanceof Error ? error : new Error('Unknown error');
+      logger.error(`Error calling LM Studio API for model ${modelId}:`, sanitizeErrorForLogging(normalizedError));
       const errorType = this.handleLMStudioError(normalizedError); // Use this.
       return {
         success: false,

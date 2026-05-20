@@ -18,6 +18,7 @@ import { speculativeDecodingService } from '../decision-engine/services/speculat
 import { getPromptingStrategyService } from '../core/prompting/service.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
+import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 
 
 // Add a custom error class
@@ -56,15 +57,6 @@ interface OpenRouterChatCompletion {
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'openrouter-models.json');
 const FREE_MODEL_FAILURE_THRESHOLD = 2;
 const FREE_MODEL_QUARANTINE_MS = 30 * 60 * 1000;
-
-function sanitizeErrorForLogging(error: Error, message: string): Error {
-  const sanitized = new Error(message);
-  sanitized.name = error.name;
-  if (error.stack) {
-    sanitized.stack = error.stack;
-  }
-  return sanitized;
-}
 
 // Default prompting strategies for different model families
 const DEFAULT_PROMPTING_STRATEGIES: Record<string, Partial<PromptingStrategy>> = {

@@ -16,6 +16,7 @@ import {
 import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
+import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 
 // File path for storing Ollama model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'ollama-models.json');
@@ -294,7 +295,7 @@ export const ollamaModule = {
         logger.warn('Invalid response from Ollama API:', response.data);
       }
     } catch (error) {
-      logger.error('Error updating Ollama models:', error);
+      logger.error('Error updating Ollama models:', sanitizeErrorForLogging(error));
       this.handleOllamaError(error instanceof Error ? error : new Error('Unknown error'));
     }
   },
@@ -716,8 +717,9 @@ export const ollamaModule = {
         return { success: false, error: OllamaErrorType.INVALID_REQUEST };
       }
     } catch (error) {
-      logger.error(`Error calling Ollama API for model ${modelId}:`, error);
-      const errorType = this.handleOllamaError(error instanceof Error ? error : new Error('Unknown error'));
+      const normalizedError = error instanceof Error ? error : new Error('Unknown error');
+      logger.error(`Error calling Ollama API for model ${modelId}:`, sanitizeErrorForLogging(normalizedError));
+      const errorType = this.handleOllamaError(normalizedError);
       return { success: false, error: errorType };
     }
   },

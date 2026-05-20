@@ -322,6 +322,8 @@ No test verifies server behavior when a provider becomes unavailable after start
 
 2026-05-19 update: Added routing-suite assertion path for provider-down preemptive behavior (`EXPECT_LOCAL_PROVIDER_DOWN=true`). Current evidence shows non-local preemptive suggestions under provider-down expectations (`costClass=paid`).
 
+2026-05-20 update: Added a mock-based routing-suite assertion in `test-operational.mjs` (`[mock][F-4] circuit-open Ollama fallback routes to LM Studio`) that verifies circuit-open local failover behavior through `TaskExecutor` with a real `ProviderRegistry`. Live post-startup provider-loss coverage is still pending.
+
 **Blocker:** Full live failure-injection sequence (start with provider up, stop provider mid-session, then assert `route_task` graceful fallback/error response) is still pending as a dedicated deterministic harness.
 
 ---
@@ -371,6 +373,8 @@ Issue 17 (cross-provider local model lifecycle) has no test coverage:
 - Assert that after a cross-provider switch, the previously loaded model in the prior provider is explicitly unloaded (when Issue 17's unload hook is implemented).
 - Assert that VRAM/RAM usage does not accumulate across multiple provider switches (requires the memory monitoring from Issue 31 to be in place for a quantitative assertion).
 
+2026-05-20 update: Added a mock-based routing-suite assertion in `test-operational.mjs` (`[mock][F-4] circuit-open Ollama fallback routes to LM Studio`) covering the core Ollama -> LM Studio failover path when Ollama's circuit is open. Explicit unload and quantitative memory assertions remain open.
+
 **Blocker:** Issue 17's unload hook is now implemented. The failover and explicit-unload assertions can be added now. Quantitative VRAM/RAM accumulation checks still depend on Issue 31 (memory monitoring).
 
 ---
@@ -382,6 +386,8 @@ Issue 16 (free-model health gating) has no test coverage beyond the live observa
 - Mock an OpenRouter free model to return `invalid_request` on every call. Assert that after N failures (configurable threshold), the model is quarantined and no longer selected by `route_task`.
 - Assert that after the quarantine window expires, the model becomes eligible again.
 - Assert that a quarantined model appears in diagnostic output (tool response or log) so the developer knows why routing avoided it.
+
+2026-05-20 update: Added mock-based routing-suite assertions in `test-operational.mjs` for quarantine skip (`[mock][F-1] OpenRouter quarantined free model is skipped and healthy fallback remains selectable`) and quarantine expiry (`[mock][F-5] OpenRouter quarantine expiry re-admits the model`). Diagnostic surfacing remains unverified in the operational suite.
 
 **Blocker:** Issue 16 is now implemented. Remaining work is operational coverage: add route-selection, quarantine-expiry, and quarantine-diagnostic assertions against the live routing path.
 
