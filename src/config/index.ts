@@ -95,6 +95,77 @@ export interface Config {
 
 }
 
+export const HOT_RELOADABLE_CONFIG_FIELDS = [
+  'defaultLocalModel',
+  'defaultModelConfig.temperature',
+  'defaultModelConfig.maxTokens',
+  'defaultModelConfig.topP',
+  'defaultModelConfig.frequencyPenalty',
+  'defaultModelConfig.presencePenalty',
+  'tokenThreshold',
+  'costThreshold',
+  'qualityThreshold',
+  'codeScoreThreshold',
+  'openRouterFreeOnly',
+  'openRouterRateLimitPerMinute',
+  'providerTimeoutMs',
+  'providerMaxConcurrentLocal',
+  'providerMaxConcurrentRemote',
+  'ollamaTimeout',
+  'providerHealthProbeIntervalMs',
+  'benchmark.runsPerTask',
+  'benchmark.parallel',
+  'benchmark.maxParallelTasks',
+  'benchmark.taskTimeout',
+  'benchmark.saveResults',
+  'startupBenchmarkTargets',
+  'logLevel',
+  'profile',
+] as const;
+
+export const RESTART_REQUIRED_CONFIG_FIELDS = [
+  'server.port',
+  'server.host',
+  'server.apiPrefix',
+  'lmStudioEndpoint',
+  'ollamaEndpoint',
+  'localLlamaEndpoint',
+  'openRouterApiKey',
+  'benchmark.resultsPath',
+  'cacheEnabled',
+  'cacheDir',
+  'maxCacheSize',
+  'logFile',
+  'rootDir',
+] as const;
+
+export interface ReloadConfigResult {
+  success: true;
+  message: string;
+  envPath: string;
+  appliedFields: readonly string[];
+  restartRequiredFields: readonly string[];
+  activeConfig: {
+    defaultLocalModel: string;
+    defaultModelConfig: ModelConfig;
+    tokenThreshold: number;
+    costThreshold: number;
+    qualityThreshold: number;
+    codeScoreThreshold: number;
+    openRouterFreeOnly: boolean;
+    openRouterRateLimitPerMinute: number;
+    providerTimeoutMs: number;
+    providerMaxConcurrentLocal: number;
+    providerMaxConcurrentRemote: number;
+    ollamaTimeout: number;
+    providerHealthProbeIntervalMs: number;
+    benchmark: Pick<BenchmarkConfig, 'runsPerTask' | 'parallel' | 'maxParallelTasks' | 'taskTimeout' | 'saveResults'>;
+    startupBenchmarkTargets: string[];
+    logLevel: Config['logLevel'];
+    profile: Config['profile'];
+  };
+}
+
 /**
  * Helper function to parse boolean environment variables
  */
@@ -113,124 +184,183 @@ function parseNumber(value: string | undefined, defaultValue: number, min?: numb
   if (max !== undefined && num > max) return max;
   return num;
 }
+
+function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
+  return {
+    // Server configuration
+    server: {
+      port: parseInt(env.PORT || '3000', 10),
+      host: env.HOST || '0.0.0.0',
+      apiPrefix: env.API_PREFIX || '/api',
+    },
+    // Local LLM endpoints
+    lmStudioEndpoint: env.LM_STUDIO_ENDPOINT || 'http://localhost:1234/v1',
+    ollamaEndpoint: env.OLLAMA_ENDPOINT || 'http://localhost:11434/api',
+    ollamaTimeout: parseInt(env.OLLAMA_TIMEOUT || '120', 10) * 1000,
+    providerTimeoutMs: parseInt(env.PROVIDER_TIMEOUT_MS || '120000', 10),
+    providerMaxConcurrentLocal: parseNumber(env.PROVIDER_MAX_CONCURRENT_LOCAL, 1, 1, 64),
+    providerMaxConcurrentRemote: parseNumber(env.PROVIDER_MAX_CONCURRENT_REMOTE, 1, 1, 128),
+    localLlamaEndpoint: env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api',
+
+    // Model configuration
+    defaultLocalModel: env.DEFAULT_LOCAL_MODEL || 'llama2',
+    defaultModelConfig: {
+      temperature: parseNumber(env.MODEL_TEMPERATURE, 0.7, 0, 2),
+      maxTokens: parseInt(env.MODEL_MAX_TOKENS || '2048', 10),
+      topP: parseNumber(env.MODEL_TOP_P, 0.95, 0, 1),
+      frequencyPenalty: parseNumber(env.MODEL_FREQUENCY_PENALTY, 0, -2, 2),
+      presencePenalty: parseNumber(env.MODEL_PRESENCE_PENALTY, 0, -2, 2),
+    },
+
+    // Decision thresholds
+    tokenThreshold: parseInt(env.TOKEN_THRESHOLD || '1000', 10),
+    costThreshold: parseFloat(env.COST_THRESHOLD || '0.02'),
+    qualityThreshold: parseFloat(env.QUALITY_THRESHOLD || '0.7'),
+    codeScoreThreshold: parseNumber(env.CODE_SCORE_THRESHOLD, 0.3),
+
+    // API Keys
+    openRouterApiKey: env.OPENROUTER_API_KEY,
+    openRouterFreeOnly: parseBool(env.OPENROUTER_FREE_ONLY, true),
+    openRouterRateLimitPerMinute: parseNumber(env.OPENROUTER_RATE_LIMIT_PER_MINUTE, 10, 0, 600),
+    providerHealthProbeIntervalMs: parseNumber(env.PROVIDER_HEALTH_PROBE_INTERVAL_MS, 60_000, 1_000),
+
+    // Benchmark configuration
+    benchmark: {
+      runsPerTask: parseInt(env.BENCHMARK_RUNS_PER_TASK || '3', 10),
+      parallel: parseBool(env.BENCHMARK_PARALLEL, false),
+      maxParallelTasks: parseInt(env.BENCHMARK_MAX_PARALLEL_TASKS || '2', 10),
+      taskTimeout: parseInt(env.BENCHMARK_TASK_TIMEOUT || '60000', 10),
+      saveResults: parseBool(env.BENCHMARK_SAVE_RESULTS, true),
+      resultsPath: env.BENCHMARK_RESULTS_PATH || path.join(rootDir, 'benchmark-results'),
+    },
+
+    // Logging configuration
+    logLevel: (env.LOG_LEVEL || 'info') as Config['logLevel'],
+    logFile: env.LOG_FILE,
+
+    // Cache settings
+    cacheEnabled: parseBool(env.CACHE_ENABLED, true),
+    cacheDir: env.CACHE_DIR || path.join(rootDir, '.cache'),
+    maxCacheSize: parseInt(env.MAX_CACHE_SIZE || '1073741824', 10),
+
+    // Startup benchmark targets
+    startupBenchmarkTargets: (() => {
+      const envVar = env.STARTUP_BENCHMARK_TARGETS;
+      const defaultTargets = env.OPENROUTER_API_KEY ? ['free'] : ['local'];
+      if (!envVar) {
+        return defaultTargets;
+      }
+      const targets = envVar.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
+      if (targets.includes('none')) {
+        return [];
+      }
+      if (targets.includes('all')) {
+        return ['local', 'free', 'paid'];
+      }
+      return [...new Set(targets)];
+    })(),
+
+    // Hardware profile
+    profile: (env.LOCALLAMA_PROFILE === 'lightweight' ? 'lightweight' : 'default') as 'default' | 'lightweight',
+
+    // Paths
+    rootDir,
+  };
+}
+
+function getActiveHotReloadSnapshot(cfg: Config): ReloadConfigResult['activeConfig'] {
+  return {
+    defaultLocalModel: cfg.defaultLocalModel,
+    defaultModelConfig: { ...cfg.defaultModelConfig },
+    tokenThreshold: cfg.tokenThreshold,
+    costThreshold: cfg.costThreshold,
+    qualityThreshold: cfg.qualityThreshold,
+    codeScoreThreshold: cfg.codeScoreThreshold,
+    openRouterFreeOnly: cfg.openRouterFreeOnly,
+    openRouterRateLimitPerMinute: cfg.openRouterRateLimitPerMinute,
+    providerTimeoutMs: cfg.providerTimeoutMs,
+    providerMaxConcurrentLocal: cfg.providerMaxConcurrentLocal,
+    providerMaxConcurrentRemote: cfg.providerMaxConcurrentRemote,
+    ollamaTimeout: cfg.ollamaTimeout,
+    providerHealthProbeIntervalMs: cfg.providerHealthProbeIntervalMs,
+    benchmark: {
+      runsPerTask: cfg.benchmark.runsPerTask,
+      parallel: cfg.benchmark.parallel,
+      maxParallelTasks: cfg.benchmark.maxParallelTasks,
+      taskTimeout: cfg.benchmark.taskTimeout,
+      saveResults: cfg.benchmark.saveResults,
+    },
+    startupBenchmarkTargets: [...cfg.startupBenchmarkTargets],
+    logLevel: cfg.logLevel,
+    profile: cfg.profile,
+  };
+}
+
+function applyHotReloadableFields(target: Config, source: Config): void {
+  target.defaultLocalModel = source.defaultLocalModel;
+  target.defaultModelConfig = { ...source.defaultModelConfig };
+  target.tokenThreshold = source.tokenThreshold;
+  target.costThreshold = source.costThreshold;
+  target.qualityThreshold = source.qualityThreshold;
+  target.codeScoreThreshold = source.codeScoreThreshold;
+  target.openRouterFreeOnly = source.openRouterFreeOnly;
+  target.openRouterRateLimitPerMinute = source.openRouterRateLimitPerMinute;
+  target.providerTimeoutMs = source.providerTimeoutMs;
+  target.providerMaxConcurrentLocal = source.providerMaxConcurrentLocal;
+  target.providerMaxConcurrentRemote = source.providerMaxConcurrentRemote;
+  target.ollamaTimeout = source.ollamaTimeout;
+  target.providerHealthProbeIntervalMs = source.providerHealthProbeIntervalMs;
+  target.benchmark.runsPerTask = source.benchmark.runsPerTask;
+  target.benchmark.parallel = source.benchmark.parallel;
+  target.benchmark.maxParallelTasks = source.benchmark.maxParallelTasks;
+  target.benchmark.taskTimeout = source.benchmark.taskTimeout;
+  target.benchmark.saveResults = source.benchmark.saveResults;
+  target.startupBenchmarkTargets = [...source.startupBenchmarkTargets];
+  target.logLevel = source.logLevel;
+  target.profile = source.profile;
+}
 /**
  * Configuration for the LocalLama MCP Server
  */
-export const config: Config = {
-  // Server configuration
-  server: {
-    port: parseInt(process.env.PORT || '3000', 10),
-    host: process.env.HOST || '0.0.0.0',
-    apiPrefix: process.env.API_PREFIX || '/api',
-  },
-  // Local LLM endpoints
-  lmStudioEndpoint: process.env.LM_STUDIO_ENDPOINT || 'http://localhost:1234/v1',
-  ollamaEndpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api',
-  ollamaTimeout: parseInt(process.env.OLLAMA_TIMEOUT || '120', 10) * 1000,
-  providerTimeoutMs: parseInt(process.env.PROVIDER_TIMEOUT_MS || '120000', 10),
-  providerMaxConcurrentLocal: parseNumber(process.env.PROVIDER_MAX_CONCURRENT_LOCAL, 1, 1, 64),
-  providerMaxConcurrentRemote: parseNumber(process.env.PROVIDER_MAX_CONCURRENT_REMOTE, 1, 1, 128),
-  localLlamaEndpoint: process.env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api', // Added local Llama endpoint
-  
-  // Model configuration
-  defaultLocalModel: process.env.DEFAULT_LOCAL_MODEL || 'llama2',
-  defaultModelConfig: {
-    temperature: parseNumber(process.env.MODEL_TEMPERATURE, 0.7, 0, 2),
-    maxTokens: parseInt(process.env.MODEL_MAX_TOKENS || '2048', 10),
-    topP: parseNumber(process.env.MODEL_TOP_P, 0.95, 0, 1),
-    frequencyPenalty: parseNumber(process.env.MODEL_FREQUENCY_PENALTY, 0, -2, 2),
-    presencePenalty: parseNumber(process.env.MODEL_PRESENCE_PENALTY, 0, -2, 2),
-  },
-  
-  // Decision thresholds
-  tokenThreshold: parseInt(process.env.TOKEN_THRESHOLD || '1000', 10),
-  costThreshold: parseFloat(process.env.COST_THRESHOLD || '0.02'),
-  qualityThreshold: parseFloat(process.env.QUALITY_THRESHOLD || '0.7'),
-  codeScoreThreshold: parseNumber(process.env.CODE_SCORE_THRESHOLD, 0.3),
-  
-  // API Keys
-  openRouterApiKey: process.env.OPENROUTER_API_KEY,
-  openRouterFreeOnly: parseBool(process.env.OPENROUTER_FREE_ONLY, true),
-  openRouterRateLimitPerMinute: parseNumber(process.env.OPENROUTER_RATE_LIMIT_PER_MINUTE, 10, 0, 600),
-  providerHealthProbeIntervalMs: parseNumber(process.env.PROVIDER_HEALTH_PROBE_INTERVAL_MS, 60_000, 1_000),
-  
-  // Benchmark configuration
-  benchmark: {
-    runsPerTask: parseInt(process.env.BENCHMARK_RUNS_PER_TASK || '3', 10),
-    parallel: parseBool(process.env.BENCHMARK_PARALLEL, false),
-    maxParallelTasks: parseInt(process.env.BENCHMARK_MAX_PARALLEL_TASKS || '2', 10),
-    taskTimeout: parseInt(process.env.BENCHMARK_TASK_TIMEOUT || '60000', 10),
-    saveResults: parseBool(process.env.BENCHMARK_SAVE_RESULTS, true),
-    resultsPath: process.env.BENCHMARK_RESULTS_PATH || path.join(rootDir, 'benchmark-results'),
-  },
-  
-  // Logging configuration
-  logLevel: (process.env.LOG_LEVEL || 'info') as Config['logLevel'],
-  logFile: process.env.LOG_FILE,
-  
-  // Cache settings
-  cacheEnabled: parseBool(process.env.CACHE_ENABLED, true),
-  cacheDir: process.env.CACHE_DIR || path.join(rootDir, '.cache'),
-  maxCacheSize: parseInt(process.env.MAX_CACHE_SIZE || '1073741824', 10), // 1GB default
-  
-  // Startup benchmark targets
-  startupBenchmarkTargets: (() => {
-    const envVar = process.env.STARTUP_BENCHMARK_TARGETS;
-    const defaultTargets = process.env.OPENROUTER_API_KEY ? ['free'] : ['local'];
-    if (!envVar) {
-      return defaultTargets;
-    }
-    const targets = envVar.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
-    if (targets.includes('none')) {
-      return [];
-    }
-    if (targets.includes('all')) {
-      return ['local', 'free', 'paid'];
-    }
-    // Remove duplicates
-    return [...new Set(targets)];
-  })(),
-  
-  // Hardware profile
-  profile: (process.env.LOCALLAMA_PROFILE === 'lightweight' ? 'lightweight' : 'default') as 'default' | 'lightweight',
-
-  // Paths
-  rootDir,
-};
+export const config: Config = buildConfigFromEnv(process.env);
 /**
  * Validate that the configuration is valid
  * @throws {Error} If the configuration is invalid
  */
 export function validateConfig(): void {
+  validateConfigValues(config);
+}
+
+function validateConfigValues(cfg: Config): void {
   const errors: string[] = [];
   // Validate server config
-  if (config.server.port < 0 || config.server.port > 65535) {
-    errors.push(`Invalid port number: ${config.server.port}`);
+  if (cfg.server.port < 0 || cfg.server.port > 65535) {
+    errors.push(`Invalid port number: ${cfg.server.port}`);
   }
   // Validate URLs
   try {
-    new URL(config.lmStudioEndpoint);
-    new URL(config.ollamaEndpoint);
-    new URL(config.localLlamaEndpoint); // Added local Llama endpoint validation
+    new URL(cfg.lmStudioEndpoint);
+    new URL(cfg.ollamaEndpoint);
+    new URL(cfg.localLlamaEndpoint); // Added local Llama endpoint validation
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     errors.push(`Invalid endpoint URL in configuration: ${errorMessage}`);
   }
   // Validate thresholds
-  if (config.tokenThreshold <= 0) {
-    errors.push(`Invalid token threshold: ${config.tokenThreshold}`);
+  if (cfg.tokenThreshold <= 0) {
+    errors.push(`Invalid token threshold: ${cfg.tokenThreshold}`);
   }
-  if (config.costThreshold <= 0) {
-    errors.push(`Invalid cost threshold: ${config.costThreshold}`);
+  if (cfg.costThreshold <= 0) {
+    errors.push(`Invalid cost threshold: ${cfg.costThreshold}`);
   }
-  if (config.qualityThreshold <= 0 || config.qualityThreshold > 1) {
-    errors.push(`Invalid quality threshold: ${config.qualityThreshold}`);
+  if (cfg.qualityThreshold <= 0 || cfg.qualityThreshold > 1) {
+    errors.push(`Invalid quality threshold: ${cfg.qualityThreshold}`);
   }
-  if (config.codeScoreThreshold < 0 || config.codeScoreThreshold > 1) {
-    errors.push(`Invalid codeScoreThreshold: ${config.codeScoreThreshold}`);
+  if (cfg.codeScoreThreshold < 0 || cfg.codeScoreThreshold > 1) {
+    errors.push(`Invalid codeScoreThreshold: ${cfg.codeScoreThreshold}`);
   }
   // Validate model config
-  const { temperature, topP, maxTokens } = config.defaultModelConfig;
+  const { temperature, topP, maxTokens } = cfg.defaultModelConfig;
   if (temperature < 0 || temperature > 2) {
     errors.push(`Invalid temperature: ${temperature}`);
   }
@@ -241,40 +371,40 @@ export function validateConfig(): void {
     errors.push(`Invalid maxTokens: ${maxTokens}`);
   }
   // Validate benchmark config
-  if (config.benchmark.runsPerTask <= 0) {
-    errors.push(`Invalid runsPerTask: ${config.benchmark.runsPerTask}`);
+  if (cfg.benchmark.runsPerTask <= 0) {
+    errors.push(`Invalid runsPerTask: ${cfg.benchmark.runsPerTask}`);
   }
-  if (config.benchmark.maxParallelTasks <= 0) {
-    errors.push(`Invalid maxParallelTasks: ${config.benchmark.maxParallelTasks}`);
+  if (cfg.benchmark.maxParallelTasks <= 0) {
+    errors.push(`Invalid maxParallelTasks: ${cfg.benchmark.maxParallelTasks}`);
   }
-  if (config.benchmark.taskTimeout <= 0) {
-    errors.push(`Invalid taskTimeout: ${config.benchmark.taskTimeout}`);
+  if (cfg.benchmark.taskTimeout <= 0) {
+    errors.push(`Invalid taskTimeout: ${cfg.benchmark.taskTimeout}`);
   }
-  if (config.providerHealthProbeIntervalMs <= 0) {
-    errors.push(`Invalid providerHealthProbeIntervalMs: ${config.providerHealthProbeIntervalMs}`);
+  if (cfg.providerHealthProbeIntervalMs <= 0) {
+    errors.push(`Invalid providerHealthProbeIntervalMs: ${cfg.providerHealthProbeIntervalMs}`);
   }
-  if (config.providerMaxConcurrentLocal <= 0) {
-    errors.push(`Invalid providerMaxConcurrentLocal: ${config.providerMaxConcurrentLocal}`);
+  if (cfg.providerMaxConcurrentLocal <= 0) {
+    errors.push(`Invalid providerMaxConcurrentLocal: ${cfg.providerMaxConcurrentLocal}`);
   }
-  if (config.providerMaxConcurrentRemote <= 0) {
-    errors.push(`Invalid providerMaxConcurrentRemote: ${config.providerMaxConcurrentRemote}`);
+  if (cfg.providerMaxConcurrentRemote <= 0) {
+    errors.push(`Invalid providerMaxConcurrentRemote: ${cfg.providerMaxConcurrentRemote}`);
   }
-  if (config.ollamaTimeout <= 0) {
-    errors.push(`Invalid ollamaTimeout: ${config.ollamaTimeout}`);
+  if (cfg.ollamaTimeout <= 0) {
+    errors.push(`Invalid ollamaTimeout: ${cfg.ollamaTimeout}`);
   }
-  if (config.providerTimeoutMs <= 0) {
-    errors.push(`Invalid providerTimeoutMs: ${config.providerTimeoutMs}`);
+  if (cfg.providerTimeoutMs <= 0) {
+    errors.push(`Invalid providerTimeoutMs: ${cfg.providerTimeoutMs}`);
   }
   // Validate cache config
-  if (config.maxCacheSize <= 0) {
-    errors.push(`Invalid maxCacheSize: ${config.maxCacheSize}`);
+  if (cfg.maxCacheSize <= 0) {
+    errors.push(`Invalid maxCacheSize: ${cfg.maxCacheSize}`);
   }
   // Validate startup benchmark targets
   const validTargets = ['local', 'free', 'paid'];
-  if (!Array.isArray(config.startupBenchmarkTargets)) {
+  if (!Array.isArray(cfg.startupBenchmarkTargets)) {
     errors.push('Invalid startupBenchmarkTargets: Must be an array.');
   } else {
-    for (const target of config.startupBenchmarkTargets) {
+    for (const target of cfg.startupBenchmarkTargets) {
       if (!validTargets.includes(target)) {
         errors.push(`Invalid startupBenchmarkTarget: ${target}. Must be one of ${validTargets.join(', ')}.`);
       }
@@ -283,4 +413,33 @@ export function validateConfig(): void {
   if (errors.length > 0) {
     throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);
   }
+}
+
+/**
+ * Reload configuration from the root .env file and atomically apply hot-reloadable fields.
+ * If validation fails, the active runtime config remains unchanged.
+ */
+export function reloadConfig(): ReloadConfigResult {
+  const envPath = path.join(rootDir, '.env');
+  const dotenvResult = dotenv.config({ path: envPath, override: true });
+  if (dotenvResult.error) {
+    const err = dotenvResult.error as NodeJS.ErrnoException;
+    if (err.code !== 'ENOENT') {
+      throw dotenvResult.error;
+    }
+  }
+
+  const candidate = buildConfigFromEnv(process.env);
+  validateConfigValues(candidate);
+  applyHotReloadableFields(config, candidate);
+
+  return {
+    success: true,
+    message:
+      'Configuration reloaded from .env. Hot-reloadable fields were applied; restart-required fields were left unchanged.',
+    envPath,
+    appliedFields: HOT_RELOADABLE_CONFIG_FIELDS,
+    restartRequiredFields: RESTART_REQUIRED_CONFIG_FIELDS,
+    activeConfig: getActiveHotReloadSnapshot(config),
+  };
 }

@@ -49,6 +49,26 @@ jest.unstable_mockModule('../dist/modules/api-integration/resources.js', () => (
   setupResourceHandlers: jest.fn(),
 }));
 
+const mockReloadConfig = jest.fn<() => {
+  success: boolean;
+  message: string;
+  activeConfig: { openRouterFreeOnly: boolean; tokenThreshold: number };
+}>(() => ({
+  success: true,
+  message: 'reloaded',
+  activeConfig: {
+    openRouterFreeOnly: false,
+    tokenThreshold: 2222,
+  },
+}));
+
+jest.unstable_mockModule('../dist/config/index.js', () => ({
+  reloadConfig: mockReloadConfig,
+  config: {
+    openRouterApiKey: undefined,
+  },
+}));
+
 const mockIsAlertActive = jest.fn(() => false);
 const mockBuildQueueAlert = jest.fn().mockResolvedValue(null);
 
@@ -278,6 +298,7 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     mockGetTaskStatus.mockClear();
     mockCancelTask.mockClear();
     mockEstimateCost.mockClear();
+    mockReloadConfig.mockClear();
     mockBenchmarkTask.mockClear();
     mockBenchmarkTasks.mockClear();
     mockGetMonitoringInfo.mockClear();
@@ -410,6 +431,31 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     expect(typed.content[0].type).toBe('text');
     const parsed = JSON.parse(typed.content[0].text);
     expect(parsed.monitoring).toBeUndefined();
+  });
+
+  it('routes reload_config to the config module', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'reload_config',
+          arguments: {},
+        },
+      },
+      {},
+    );
+
+    expect(mockReloadConfig).toHaveBeenCalledTimes(1);
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed).toMatchObject({
+      success: true,
+      activeConfig: {
+        openRouterFreeOnly: false,
+        tokenThreshold: 2222,
+      },
+    });
   });
 
   it('routes cancel_job to the routing module', async () => {

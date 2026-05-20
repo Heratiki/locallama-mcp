@@ -19,6 +19,7 @@ import { checkForUpdates, runUpdate, runStartupCheck } from './modules/updater/i
 import { getJobTrackerSync } from './modules/decision-engine/services/jobTracker.js';
 import { ContextWindowError } from './modules/api-integration/task-execution/index.js';
 import { InferenceTimeoutError } from './modules/utils/inferenceTimeout.js';
+import { reloadConfig } from './config/index.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -351,6 +352,8 @@ export class LocalLamaMcpServer {
                   }
                   return await routingModule.cancelTask(taskId);
                 }
+                case 'reload_config':
+                  return reloadConfig();
                 case 'get_free_models':
                   return await import('./modules/api-integration/openrouter-integration/index.js')
                     .then(module => module.getFreeModels(Boolean(args?.preemptive)));

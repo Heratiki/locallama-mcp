@@ -135,6 +135,7 @@ REMOVE_STALE_LOCK_FILES=true
 | 2026-05-19 | routing (Issues 24+26 / Gap 2) | 6 | 0 | 0 | Added provider-availability assertion in routing suite. With `EXPECT_LOCAL_PROVIDER_DOWN=true`, `preemptive_route_task` returned non-local recommendation (`costClass=paid`) and suite passed: `Passed: 6 Failed: 0`. |
 | 2026-05-19 | routing (Issues 20+25 / Gap 8) | 11 | 0 | 0 | Added oversized-prompt `route_task` operational assertion. The suite constructs a prompt longer than the largest declared model context window and verifies the MCP tool response contains `error: "context_overflow"`, `estimatedTokens`, and `modelContextWindow` with no silent dispatch. |
 | 2026-05-20 | storage (Issue 25 / Gaps 4+10) | 8 | 0 | 0 | Added `--suite storage` with F-3 (Gap 4), F-9a, and F-9b (Gap 10) assertions. F-3 [mock]: SQLite file is durable across DB close/reopen (restart-safe). F-9a [live]: second server exits 0 (graceful redirect) and does not steal the lock PID. F-9b [live]: `LOCALLAMA_ROOT_DIR` isolates lock file to custom root; default root unaffected. Full suite: 74 pass, 7 pre-existing failures unchanged. |
+| 2026-05-20 | smoke (Issue 24 / Gap 9 F-6) | 31 | 0 | 0 | Added live `reload_config` operational assertion: test edits `.env` (`OPENROUTER_FREE_ONLY`), calls `reload_config`, and verifies `activeConfig.openRouterFreeOnly` reflects the new value at runtime. |
 
 **Full suite command used:**
 ```bash
@@ -214,6 +215,7 @@ When you add a new MCP tool to the server, add a test case here:
 | `get_free_models` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
 | `clear_openrouter_tracking` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
 | `set_model_prompting_strategy` | Requires `OPENROUTER_API_KEY` (tool only registers with key) | Schema and dispatcher fixed 2026-05-18; add live test when OpenRouter key is available |
+| `reload_config` | Runtime `.env` reload with hot-reloadable field scope | ✅ Added to smoke suite 2026-05-20 — modifies `.env`, calls tool, verifies `activeConfig` update |
 
 ---
 

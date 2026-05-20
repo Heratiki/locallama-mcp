@@ -19,7 +19,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve, relative } from 'path';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import process from 'process';
 
 // ── Load .env from project root into process.env before spawning server ───────
@@ -179,6 +179,7 @@ async function runSuite(client, serverEnv) {
         'cancel_job',
         'get_task_status',
         'cancel_task',
+        'reload_config',
         'benchmark_task',
         'benchmark_tasks',
         'benchmark_model',
@@ -268,6 +269,42 @@ async function runSuite(client, serverEnv) {
 
       // lock file should exist while server process is alive during this suite
       assert(existsSync(lockPath), 'Lock file is created at expected root path');
+    });
+
+    await runTest('reload_config — applies .env change at runtime', async () => {
+      const envPath = join(resolve(serverEnv.LOCALLAMA_ROOT_DIR || __dirname), '.env');
+      const hadEnvFile = existsSync(envPath);
+      const originalEnvContent = hadEnvFile ? readFileSync(envPath, 'utf8') : '';
+      const nextValue = String(process.env.OPENROUTER_FREE_ONLY || '').toLowerCase() === 'true'
+        ? 'false'
+        : 'true';
+
+      try {
+        const updatedEnvContent = upsertEnvVar(originalEnvContent, 'OPENROUTER_FREE_ONLY', nextValue);
+        writeFileSync(envPath, updatedEnvContent, 'utf8');
+
+        const result = await client.callTool({
+          name: 'reload_config',
+          arguments: {},
+        });
+
+        const text = extractText(result);
+        assert(!!text, 'reload_config returns content');
+
+        let parsed;
+        try { parsed = JSON.parse(text); } catch { parsed = null; }
+        assert(parsed?.success === true, 'reload_config reports success');
+        assert(
+          parsed?.activeConfig?.openRouterFreeOnly === (nextValue === 'true'),
+          'reload_config activeConfig reflects updated OPENROUTER_FREE_ONLY value'
+        );
+      } finally {
+        if (hadEnvFile) {
+          writeFileSync(envPath, originalEnvContent, 'utf8');
+        } else if (existsSync(envPath)) {
+          unlinkSync(envPath);
+        }
+      }
     });
   }
 
@@ -1022,6 +1059,27 @@ function extractText(toolResult) {
     return textBlock?.text ?? null;
   }
   return typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+}
+
+function upsertEnvVar(content, key, value) {
+  const lines = content ? content.split(/\r?\n/) : [];
+  let replaced = false;
+  const nextLines = lines.map((line) => {
+    if (!line.trim() || line.trim().startsWith('#')) return line;
+    const idx = line.indexOf('=');
+    if (idx === -1) return line;
+    const existingKey = line.slice(0, idx).trim();
+    if (existingKey !== key) return line;
+    replaced = true;
+    return `${key}=${value}`;
+  });
+
+  if (!replaced) {
+    nextLines.push(`${key}=${value}`);
+  }
+
+  const joined = nextLines.join('\n');
+  return joined.endsWith('\n') ? joined : `${joined}\n`;
 }
 
 main().catch(e => {

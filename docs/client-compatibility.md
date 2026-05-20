@@ -9,6 +9,7 @@ This document tracks which MCP clients can successfully call the LocaLLama MCP t
 | `route_task` | Queue a coding task using the best available model | `{ task_id, status, job_count, queue_position, poll_again_after_ms, provider, model }` |
 | `get_task_status` | Poll a queued task and retrieve completed job results | `{ task_id, status, progress_pct, jobs: [...] }` |
 | `cancel_task` | Cancel all queued/in-progress jobs for a task | `{ success, task_id, cancelled_count, status, message }` |
+| `reload_config` | Reload `.env` at runtime (hot-reloadable fields only) | `{ success, envPath, appliedFields, restartRequiredFields, activeConfig }` |
 | `preemptive_route_task` | Model-selection pre-check without executing | `{ costClass, providerId, modelId, reason }` |
 | `get_cost_estimate` | Token-level cost estimate | `{ localCost, paidCost, ... }` |
 | `cancel_job` | Cancel a background job | `{ success, status, message, jobId }` |
@@ -54,6 +55,27 @@ All tool results are returned as MCP `content[0].text` (type `"text"`) containin
   "providerId": "ollama",
   "modelId": "codellama:7b",
   "reason": "Preemptive routing selected codellama:7b (ollama). Call route_task to execute."
+}
+
+// reload_config response
+{
+  "success": true,
+  "envPath": "<project>/.env",
+  "appliedFields": [
+    "defaultLocalModel",
+    "tokenThreshold",
+    "openRouterFreeOnly"
+  ],
+  "restartRequiredFields": [
+    "server.port",
+    "lmStudioEndpoint",
+    "openRouterApiKey"
+  ],
+  "activeConfig": {
+    "openRouterFreeOnly": true,
+    "tokenThreshold": 1200,
+    "providerTimeoutMs": 120000
+  }
 }
 ```
 

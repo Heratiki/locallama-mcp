@@ -98,7 +98,8 @@ describe('CircuitBreaker', () => {
     cb.recordFailure('p');
 
     const realNow = Date.now;
-    Date.now = () => realNow() + 1_000;
+    const frozen = realNow() + 1_000;
+    Date.now = () => frozen;
     try {
       expect(cb.getState('p')).toBe(CircuitState.HALF_OPEN);
       cb.recordFailure('p');
