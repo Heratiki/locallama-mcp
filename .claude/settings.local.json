@@ -41,7 +41,11 @@
       "Bash(git log *)",
       "Bash(git fetch *)",
       "Bash(git tag *)",
-      "Bash(npm whoami *)"
+      "Bash(npm whoami *)",
+      "Bash(gh label *)",
+      "Bash(python3 -c ' *)",
+      "Bash(xargs grep -l \"challenge\")",
+      "PowerShell(head *)"
     ]
   }
 }
