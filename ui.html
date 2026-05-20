@@ -3,723 +3,994 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LocalLama MCP Interface</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <title>LocalLama Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #f4f3ef;
+      --surface: #fff9f1;
+      --ink: #1f2329;
+      --ink-soft: #545a62;
+      --line: #d7d0c4;
+      --accent: #0f766e;
+      --accent-soft: #d9f6f2;
+      --warning: #b45309;
+      --danger: #b42318;
+      --success: #157347;
+      --shadow: 0 10px 30px rgba(24, 34, 45, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: Arial, sans-serif;
       margin: 0;
-      padding: 20px;
-      background-color: #f5f5f5;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 0 0, #fff 0, #fff8ec 35%, transparent 55%),
+        radial-gradient(circle at 100% 0, #d9f6f2 0, #eefaf8 25%, transparent 55%),
+        var(--bg);
+      min-height: 100vh;
+      padding: 24px;
     }
-    
-    .container {
-      max-width: 1200px;
+
+    .page {
+      max-width: 1320px;
       margin: 0 auto;
-    }
-    
-    .card {
-      margin-bottom: 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .model-card {
-      cursor: pointer;
-      transition: transform 0.2s;
-    }
-    
-    .model-card:hover {
-      transform: translateY(-2px);
-    }
-    
-    .status-indicator {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      padding: 8px 16px;
-      border-radius: 20px;
-      color: white;
-      font-weight: bold;
-    }
-    
-    .status-connecting { background-color: #ffc107; }
-    .status-connected { background-color: #28a745; }
-    .status-error { background-color: #dc3545; }
-    
-    .benchmark-button {
-      margin: 5px;
-      min-width: 120px;
-    }
-    
-    #modelSearch {
-      margin-bottom: 15px;
-    }
-    
-    .provider-section {
-      margin-bottom: 30px;
-    }
-    
-    .model-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 15px;
-      margin-top: 15px;
+      gap: 18px;
     }
-    
-    .tab-content {
-      padding: 20px;
-      background: white;
-      border-radius: 0 0 5px 5px;
-      border: 1px solid #dee2e6;
-      border-top: none;
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
     }
-    
-    .benchmark-results {
-      margin-top: 20px;
+
+    .title {
+      margin: 0;
+      font-size: 1.6rem;
+      letter-spacing: 0.02em;
     }
-    
-    .progress-bar {
-      height: 25px;
+
+    .subtitle {
+      margin: 4px 0 0;
+      color: var(--ink-soft);
+      font-size: 0.95rem;
     }
-    
-    .model-select-container {
-      margin-bottom: 20px;
+
+    .status {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
     }
-    
-    .result-card {
-      margin-bottom: 15px;
+
+    .status.ok {
+      border-color: #a7d8bb;
+      color: var(--success);
+      background: #eef9f1;
     }
-    
-    .benchmark-task {
-      margin-bottom: 25px;
-      border-left: 4px solid #007bff;
-      padding-left: 15px;
+
+    .status.warn {
+      border-color: #e8cc8e;
+      color: var(--warning);
+      background: #fff8e8;
     }
-    
-    .code-output {
-      background-color: #f8f9fa;
-      padding: 15px;
-      border-radius: 5px;
-      font-family: monospace;
-      white-space: pre-wrap;
-      font-size: 0.9em;
-      max-height: 300px;
-      overflow-y: auto;
+
+    .status.err {
+      border-color: #f0b8b5;
+      color: var(--danger);
+      background: #fff0ef;
     }
-    
-    .metric-label {
-      font-weight: bold;
-      display: inline-block;
-      width: 120px;
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 18px;
     }
-    
-    .metric-value {
-      font-weight: bold;
-      color: #007bff;
+
+    .stack {
+      display: grid;
+      gap: 18px;
     }
-    
-    .provider-badge {
-      display: inline-block;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 0.8em;
-      margin-left: 8px;
-      background-color: #e9ecef;
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
     }
-    
-    .thinking-toggle {
-      cursor: pointer;
-      color: #6c757d;
-      text-decoration: underline;
-      margin-top: 5px;
-      display: inline-block;
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 1.08rem;
     }
-    
-    .thinking-content {
-      background-color: #f0f8ff;
+
+    .card p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 0.9rem;
+    }
+
+    .stats {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 10px;
       padding: 10px;
-      border-radius: 5px;
-      margin-top: 5px;
-      font-style: italic;
-      display: none;
+      background: #fff;
+    }
+
+    .stat .label {
+      color: var(--ink-soft);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat .value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th,
+    td {
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.72rem;
+    }
+
+    .mono {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.8rem;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 9px;
+      border: 1px solid transparent;
+      font-size: 0.73rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+    }
+
+    .chip.pending {
+      background: #fff3cf;
+      border-color: #efd48b;
+      color: #996300;
+    }
+
+    .chip.in_progress {
+      background: #e1f5ff;
+      border-color: #96d5f2;
+      color: #00506d;
+    }
+
+    .chip.completed {
+      background: #e8f8ee;
+      border-color: #a4dbb6;
+      color: #1c6b3f;
+    }
+
+    .chip.failed,
+    .chip.permanently_failed,
+    .chip.cancelled,
+    .chip.not_found,
+    .chip.error {
+      background: #fdeceb;
+      border-color: #f2b9b5;
+      color: #8a1f17;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.86rem;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      border-color: #bcb2a0;
+      transform: translateY(-1px);
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn.warn {
+      border-color: #e6b6ae;
+      color: var(--danger);
+      background: #fff4f3;
+    }
+
+    .form-grid {
+      margin-top: 12px;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .form-grid .wide {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.82rem;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: inherit;
+      background: #fff;
+      color: var(--ink);
+      font-size: 0.92rem;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.86rem;
+    }
+
+    .notice {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      font-size: 0.88rem;
+      background: #fff;
+    }
+
+    .notice.ok {
+      border-color: #9bcdb0;
+      background: #edf8f1;
+      color: #145c35;
+    }
+
+    .notice.err {
+      border-color: #e4b7b3;
+      background: #fff1f0;
+      color: #8a2018;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .small {
+      font-size: 0.78rem;
+      color: var(--ink-soft);
+    }
+
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 700px) {
+      body {
+        padding: 12px;
+      }
+
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1 class="mb-4">LocalLama MCP Benchmark Interface</h1>
-    
-    <ul class="nav nav-tabs" id="mainTabs" role="tablist">
-      <li class="nav-item">
-        <a class="nav-link active" id="benchmarks-tab" data-bs-toggle="tab" href="#benchmarks" role="tab">Benchmark Results</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="jobs-tab" data-bs-toggle="tab" href="#jobs" role="tab">Jobs</a>
-      </li>
-    </ul>
-    
-    <div class="tab-content">
-      <div class="tab-pane fade show active" id="benchmarks" role="tabpanel">
-        <div class="row mb-3 mt-3">
-          <div class="col">
-            <h3>Model Benchmark Results</h3>
-            <p>Select a model to view its benchmark results or run new benchmarks.</p>
-          </div>
-          <div class="col-auto">
-            <button class="btn btn-primary" onclick="runAllBenchmarks()">
-              Run All Benchmarks
-            </button>
-          </div>
-        </div>
-        
-        <div class="model-select-container">
-          <label for="benchmarkModelSelect" class="form-label">Select Model:</label>
-          <div class="input-group">
-            <select class="form-select" id="benchmarkModelSelect" onchange="loadModelBenchmarks()">
-              <option value="" selected>Choose a model...</option>
-              <!-- Models will be loaded here -->
+  <div class="page">
+    <header class="header">
+      <div>
+        <h1 class="title">LocalLama Queue Dashboard</h1>
+        <p class="subtitle">Monitor jobs and tasks, submit route_task manually, and review benchmark history.</p>
+      </div>
+      <div id="wsStatus" class="status warn">WebSocket: connecting</div>
+    </header>
+
+    <section class="layout">
+      <div class="stack">
+        <article class="card">
+          <h2>Job Queue</h2>
+          <p>Live queue snapshot with provider/model, progress, and per-job cancellation.</p>
+          <div class="actions">
+            <select id="queueStatusFilter" aria-label="Queue status filter">
+              <option value="">All statuses</option>
+              <option value="pending">pending</option>
+              <option value="in_progress">in_progress</option>
+              <option value="completed">completed</option>
+              <option value="failed">failed</option>
+              <option value="cancelled">cancelled</option>
             </select>
-            <button class="btn btn-outline-primary" type="button" id="filterToggle" onclick="toggleProviderFilter()">
-              Filter: All
-            </button>
+            <input id="queueProviderFilter" placeholder="Provider filter" aria-label="Queue provider filter">
+            <input id="queueModelFilter" placeholder="Model filter" aria-label="Queue model filter">
+            <input id="queueSearchFilter" placeholder="Search jobs" aria-label="Queue search">
+            <label class="small">Page size
+              <select id="queuePageSize">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <button id="queueApplyFiltersBtn" class="btn" type="button">Apply</button>
           </div>
-        </div>
-        
-        <div id="benchmarkResults" class="benchmark-results">
-          <!-- Results will appear here -->
-          <div class="alert alert-info">
-            Select a model to view its benchmark results
+          <div class="stats">
+            <div class="stat"><div class="label">Total</div><div id="totalJobs" class="value">0</div></div>
+            <div class="stat"><div class="label">Active</div><div id="activeJobs" class="value">0</div></div>
+            <div class="stat"><div class="label">Queued</div><div id="queuedJobs" class="value">0</div></div>
+            <div class="stat"><div class="label">Running</div><div id="runningJobs" class="value">0</div></div>
           </div>
-        </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Status</th>
+                  <th>Task</th>
+                  <th>Provider</th>
+                  <th>Model</th>
+                  <th>Queue Pos</th>
+                  <th>ETA</th>
+                  <th>Progress</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="jobsTableBody"></tbody>
+            </table>
+          </div>
+          <div class="actions">
+            <button id="queuePrevBtn" class="btn" type="button">Prev</button>
+            <button id="queueNextBtn" class="btn" type="button">Next</button>
+            <span id="queuePaginationLabel" class="small">Page 1 / 1</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Task Monitor</h2>
+          <p>Aggregate task status from get_task_status, with task and per-job cancellation support.</p>
+          <div class="actions">
+            <button id="refreshTasksBtn" class="btn" type="button">Refresh Tasks</button>
+            <select id="taskStatusFilter" aria-label="Task status filter">
+              <option value="">All statuses</option>
+              <option value="queued">queued</option>
+              <option value="in_progress">in_progress</option>
+              <option value="completed">completed</option>
+              <option value="partially_failed">partially_failed</option>
+              <option value="failed">failed</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+            <input id="taskProviderFilter" placeholder="Provider filter" aria-label="Task provider filter">
+            <input id="taskModelFilter" placeholder="Model filter" aria-label="Task model filter">
+            <input id="taskSearchFilter" placeholder="Search tasks" aria-label="Task search">
+            <input id="taskLookupInput" class="mono" placeholder="Task ID" aria-label="Task ID lookup">
+            <button id="taskLookupBtn" class="btn" type="button">Lookup</button>
+            <label class="small">Page size
+              <select id="taskPageSize">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+            <button id="taskApplyFiltersBtn" class="btn" type="button">Apply</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>Status</th>
+                  <th>Jobs</th>
+                  <th>Complete</th>
+                  <th>Failed</th>
+                  <th>Progress</th>
+                  <th>Queue Range</th>
+                  <th>ETA</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="tasksTableBody"></tbody>
+            </table>
+          </div>
+          <div class="actions">
+            <button id="taskPrevBtn" class="btn" type="button">Prev</button>
+            <button id="taskNextBtn" class="btn" type="button">Next</button>
+            <span id="taskPaginationLabel" class="small">Page 1 / 1</span>
+          </div>
+          <div id="taskDetails" class="notice" hidden></div>
+        </article>
       </div>
-      
-      <div class="tab-pane fade" id="jobs" role="tabpanel">
-        <div class="card mt-3">
-          <div class="card-header">
-            <h5 class="mb-0">Active Jobs</h5>
+
+      <div class="stack">
+        <article class="card">
+          <h2>Manual route_task</h2>
+          <p>Submit tasks without an MCP client for testing queue and routing behavior.</p>
+          <form id="submitTaskForm" class="form-grid">
+            <label class="wide">Task Prompt
+              <textarea id="taskText" required placeholder="Describe the coding task..."></textarea>
+            </label>
+            <label>Context Length
+              <input id="contextLength" type="number" min="1" value="4096" required>
+            </label>
+            <label>Expected Output Length
+              <input id="outputLength" type="number" min="1" value="768">
+            </label>
+            <label>Complexity (0.0 - 1.0)
+              <input id="complexity" type="number" min="0" max="1" step="0.1" value="0.5">
+            </label>
+            <label>Priority
+              <select id="priority">
+                <option value="quality" selected>quality</option>
+                <option value="speed">speed</option>
+                <option value="cost">cost</option>
+              </select>
+            </label>
+            <div class="wide actions">
+              <button class="btn primary" type="submit">Submit Task</button>
+              <button id="clearFormBtn" class="btn" type="button">Clear</button>
+            </div>
+          </form>
+          <div id="submitNotice" class="notice" hidden></div>
+        </article>
+
+        <article class="card">
+          <h2>Benchmark History</h2>
+          <p>Scores by model with quick capability flags derived from benchmark metrics.</p>
+          <div class="actions">
+            <button id="refreshBenchBtn" class="btn" type="button">Refresh Benchmarks</button>
           </div>
-          <div class="card-body">
-            <div id="jobsList"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Provider</th>
+                  <th>Success</th>
+                  <th>Quality</th>
+                  <th>Avg ms</th>
+                  <th>Flags</th>
+                </tr>
+              </thead>
+              <tbody id="benchTableBody"></tbody>
+            </table>
           </div>
-        </div>
+          <p class="small">Flags: `stable` (success >= 80%), `strong-code` (quality >= 0.75), `complex-capable` (complexity >= 0.70)</p>
+        </article>
       </div>
-    </div>
+    </section>
   </div>
-  
-  <div id="status-indicator" class="status-indicator status-connecting">Connecting...</div>
-  
-  <!-- Benchmark modal -->
-  <div class="modal fade" id="benchmarkModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Benchmarking in Progress</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <p id="benchmarkModalText">Running benchmark for <span id="benchmarkModelName"></span>...</p>
-          <div class="progress">
-            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
     let ws;
-    let benchmarkedModels = [];
-    let currentFilter = 'all';
-    let benchmarkResults = {};
-    let benchmarkModal;
-    let jobRefreshInterval;
-    let isBenchmarking = false;
+    let wsPort = null;
+    let queueState = { queue: {}, jobs: [] };
+    let taskState = [];
+    let benchmarkState = [];
+    let trackedTaskId = null;
+    let queuePagination = { page: 1, total_pages: 1, has_next_page: false, has_previous_page: false };
+    let taskPagination = { page: 1, total_pages: 1, has_next_page: false, has_previous_page: false };
+    const queueQuery = { page: 1, page_size: 20, status: '', provider: '', model: '', q: '' };
+    const taskQuery = { page: 1, page_size: 20, status: '', provider: '', model: '', q: '' };
 
-    async function initializeWebSocket() {
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function updateWsStatus(kind, text) {
+      const statusEl = document.getElementById('wsStatus');
+      statusEl.className = `status ${kind}`;
+      statusEl.textContent = `WebSocket: ${text}`;
+    }
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, options);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = payload && payload.error ? payload.error : `HTTP ${response.status}`;
+        throw new Error(message);
+      }
+      return payload;
+    }
+
+    function sendWsCommand(command) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'executeCommand',
+        params: { command },
+      }));
+    }
+
+    function buildQueryString(params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const text = String(value).trim();
+        if (!text) return;
+        searchParams.set(key, text);
+      });
+      return searchParams.toString();
+    }
+
+    async function initWebSocket() {
       try {
-        // First fetch the WebSocket port from the API
-        const response = await fetch('/ws-port');
-        const data = await response.json();
-        const wsPort = data.port;
-        
-        // Use the dynamic port from the server
-        ws = new WebSocket(`ws://localhost:${wsPort}`);
-        const statusIndicator = document.getElementById('status-indicator');
-
-        ws.addEventListener('open', () => {
-          console.log(`WebSocket connection established on port ${wsPort}`);
-          statusIndicator.textContent = 'Connected';
-          statusIndicator.className = 'status-indicator status-connected';
-          // Request initial data
-          fetchBenchmarkedModels();
-          fetchActiveJobs();
-        });
-
-        ws.addEventListener('error', (error) => {
-          console.error('WebSocket error:', error);
-          statusIndicator.textContent = 'Error';
-          statusIndicator.className = 'status-indicator status-error';
-        });
-
-        ws.addEventListener('close', () => {
-          console.warn('WebSocket connection closed');
-          statusIndicator.textContent = 'Disconnected';
-          statusIndicator.className = 'status-indicator status-error';
-        });
-
-        ws.addEventListener('message', handleWebSocketMessage);
+        const portResponse = await requestJson('/ws-port');
+        wsPort = portResponse.port;
       } catch (error) {
-        console.error('WebSocket initialization error:', error);
+        updateWsStatus('err', `error (${error.message})`);
+        return;
+      }
+
+      ws = new WebSocket(`ws://localhost:${wsPort}`);
+      updateWsStatus('warn', 'connecting');
+
+      ws.addEventListener('open', () => {
+        updateWsStatus('ok', `connected on ${wsPort}`);
+        sendWsCommand('getBenchmarkedModels');
+      });
+
+      ws.addEventListener('close', () => {
+        updateWsStatus('err', 'disconnected');
+      });
+
+      ws.addEventListener('error', () => {
+        updateWsStatus('err', 'error');
+      });
+
+      ws.addEventListener('message', (event) => {
+        try {
+          const message = JSON.parse(event.data);
+
+          if (message && message.result && Array.isArray(message.result.models)) {
+            benchmarkState = message.result.models;
+            renderBenchmarkTable();
+            return;
+          }
+
+          if (message && Array.isArray(message.allJobs)) {
+            void refreshQueue();
+            return;
+          }
+
+          if (message && message.activeJobs && Array.isArray(message.activeJobs)) {
+            void refreshQueue();
+            return;
+          }
+        } catch (err) {
+          console.error('WebSocket message parse failed', err);
+        }
+      });
+    }
+
+    function statusChip(status) {
+      const normalized = String(status || 'unknown');
+      return `<span class="chip ${escapeHtml(normalized)}">${escapeHtml(normalized)}</span>`;
+    }
+
+    function renderQueueFromJobs(jobs) {
+      const tbody = document.getElementById('jobsTableBody');
+      if (!jobs || jobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="small">No jobs found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = jobs.map((job) => {
+        const progress = typeof job.progress_pct === 'number'
+          ? `${job.progress_pct}%`
+          : (job.progress || '0%');
+        const taskText = job.task_text || job.task || '';
+        const taskId = job.task_id || '';
+        const queuePosition = typeof job.queue_position === 'number' ? String(job.queue_position) : '-';
+        const eta = job.eta || '-';
+        return `
+          <tr>
+            <td class="mono">${escapeHtml(job.id)}</td>
+            <td>${statusChip(job.status)}</td>
+            <td title="${escapeHtml(taskText)}">${escapeHtml(taskId || taskText.slice(0, 80))}</td>
+            <td>${escapeHtml(job.provider_id || job.provider || '-')}</td>
+            <td>${escapeHtml(job.model_id || job.model || '-')}</td>
+            <td>${escapeHtml(queuePosition)}</td>
+            <td>${escapeHtml(eta)}</td>
+            <td>${escapeHtml(progress)}</td>
+            <td>
+              <button class="btn warn" data-job-cancel="${escapeHtml(job.id)}" type="button">Cancel</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderQueueStats(summary) {
+      document.getElementById('totalJobs').textContent = String(summary.total_jobs || 0);
+      document.getElementById('activeJobs').textContent = String(summary.active_jobs || 0);
+      document.getElementById('queuedJobs').textContent = String(summary.queued_jobs || 0);
+      document.getElementById('runningJobs').textContent = String(summary.running_jobs || 0);
+    }
+
+    function renderQueuePagination() {
+      const label = document.getElementById('queuePaginationLabel');
+      label.textContent = `Page ${queuePagination.page} / ${queuePagination.total_pages}`;
+      document.getElementById('queuePrevBtn').disabled = !queuePagination.has_previous_page;
+      document.getElementById('queueNextBtn').disabled = !queuePagination.has_next_page;
+    }
+
+    function renderTasks() {
+      const tbody = document.getElementById('tasksTableBody');
+      if (!taskState || taskState.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="small">No tasks found yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = taskState.map((task) => {
+        const queueRange = (typeof task.queue_position_min === 'number' && typeof task.queue_position_max === 'number')
+          ? `${task.queue_position_min}-${task.queue_position_max}`
+          : '-';
+        return `
+          <tr>
+            <td class="mono">${escapeHtml(task.task_id)}</td>
+            <td>${statusChip(task.status)}</td>
+            <td>${escapeHtml(task.job_count)}</td>
+            <td>${escapeHtml(task.completed_count)}</td>
+            <td>${escapeHtml(task.failed_count)}</td>
+            <td>${escapeHtml(task.progress_pct)}%</td>
+            <td>${escapeHtml(queueRange)}</td>
+            <td>${escapeHtml(task.eta || '-')}</td>
+            <td>
+              <button class="btn" data-task-inspect="${escapeHtml(task.task_id)}" type="button">Inspect</button>
+              <button class="btn warn" data-task-cancel="${escapeHtml(task.task_id)}" type="button">Cancel</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderTaskPagination() {
+      const label = document.getElementById('taskPaginationLabel');
+      label.textContent = `Page ${taskPagination.page} / ${taskPagination.total_pages}`;
+      document.getElementById('taskPrevBtn').disabled = !taskPagination.has_previous_page;
+      document.getElementById('taskNextBtn').disabled = !taskPagination.has_next_page;
+    }
+
+    function buildCapabilityFlags(metrics) {
+      const flags = [];
+      if (!metrics || typeof metrics !== 'object') return ['n/a'];
+      if (typeof metrics.successRate === 'number' && metrics.successRate >= 0.8) flags.push('stable');
+      if (typeof metrics.qualityScore === 'number' && metrics.qualityScore >= 0.75) flags.push('strong-code');
+      if (typeof metrics.complexityScore === 'number' && metrics.complexityScore >= 0.7) flags.push('complex-capable');
+      return flags.length > 0 ? flags : ['n/a'];
+    }
+
+    function renderBenchmarkTable() {
+      const tbody = document.getElementById('benchTableBody');
+      if (!benchmarkState || benchmarkState.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="small">No benchmark models discovered yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = benchmarkState.map((entry) => {
+        const metrics = entry.metrics || {};
+        const flags = buildCapabilityFlags(metrics).join(', ');
+        const success = typeof metrics.successRate === 'number' ? `${(metrics.successRate * 100).toFixed(1)}%` : '-';
+        const quality = typeof metrics.qualityScore === 'number' ? metrics.qualityScore.toFixed(2) : '-';
+        const avgMs = typeof metrics.avgResponseTime === 'number' ? String(Math.round(metrics.avgResponseTime)) : '-';
+
+        return `
+          <tr>
+            <td title="${escapeHtml(entry.id)}">${escapeHtml(entry.name || entry.id)}</td>
+            <td>${escapeHtml(entry.provider || '-')}</td>
+            <td>${escapeHtml(success)}</td>
+            <td>${escapeHtml(quality)}</td>
+            <td>${escapeHtml(avgMs)}</td>
+            <td>${escapeHtml(flags)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function refreshQueue() {
+      const queryString = buildQueryString(queueQuery);
+      const data = await requestJson(`/api/queue${queryString ? `?${queryString}` : ''}`);
+      queueState = data;
+      queuePagination = data.pagination || queuePagination;
+      renderQueueStats(data.queue || {});
+      renderQueueFromJobs(data.jobs || []);
+      renderQueuePagination();
+    }
+
+    async function refreshTasks() {
+      const queryString = buildQueryString(taskQuery);
+      const data = await requestJson(`/api/tasks${queryString ? `?${queryString}` : ''}`);
+      taskState = Array.isArray(data.tasks) ? data.tasks : [];
+      taskPagination = data.pagination || taskPagination;
+      renderTasks();
+      renderTaskPagination();
+    }
+
+    async function lookupTask(taskId) {
+      if (!taskId) return;
+      trackedTaskId = taskId;
+      const details = await requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
+      const detailEl = document.getElementById('taskDetails');
+
+      const jobs = Array.isArray(details.jobs) ? details.jobs : [];
+      const jobLines = jobs.map((job) => {
+        const queuePosition = typeof job.queue_position === 'number' ? ` | qp:${job.queue_position}` : '';
+        const eta = job.eta ? ` | eta:${job.eta}` : '';
+        return `${job.job_id} | ${job.status} | ${job.progress_pct}% | ${job.provider || '-'} | ${job.model || '-'}${queuePosition}${eta}${job.error ? ` | ${job.error}` : ''}`;
+      }).join('<br>');
+
+      detailEl.hidden = false;
+      detailEl.innerHTML = `
+        <strong>Task ${escapeHtml(details.task_id)}</strong><br>
+        Status: ${escapeHtml(details.status)} | Progress: ${escapeHtml(details.progress_pct)}% | Queue: ${escapeHtml(details.queue_position_min ?? '-')}-${escapeHtml(details.queue_position_max ?? '-')} | ETA: ${escapeHtml(details.eta || '-')}<br>
+        Jobs: ${escapeHtml(details.completed_count)}/${escapeHtml(details.job_count)} completed, ${escapeHtml(details.failed_count)} failed
+        <div class="small" style="margin-top:8px">${jobLines || 'No jobs for this task yet.'}</div>
+      `;
+    }
+
+    function showNotice(elementId, message, kind) {
+      const el = document.getElementById(elementId);
+      el.hidden = false;
+      el.className = `notice ${kind}`;
+      el.textContent = message;
+    }
+
+    async function cancelTask(taskId) {
+      await requestJson(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' });
+      await refreshTasks();
+      await refreshQueue();
+      if (trackedTaskId === taskId) {
+        await lookupTask(taskId);
       }
     }
 
-    function handleWebSocketMessage(event) {
+    async function cancelJob(jobId) {
+      await requestJson(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
+      await refreshQueue();
+      if (trackedTaskId) {
+        await lookupTask(trackedTaskId);
+      }
+    }
+
+    async function submitTask(event) {
+      event.preventDefault();
+      const payload = {
+        task: document.getElementById('taskText').value,
+        context_length: Number(document.getElementById('contextLength').value),
+        expected_output_length: Number(document.getElementById('outputLength').value),
+        complexity: Number(document.getElementById('complexity').value),
+        priority: document.getElementById('priority').value,
+      };
+
       try {
-        console.log('Received WebSocket message:', event.data);
-        const message = JSON.parse(event.data);
-        
-        // Check for RPC response format (for legacy support)
-        if (message.jsonrpc === '2.0' && message.result) {
-          console.log('Received RPC response:', message);
-          
-          // Check if this is a model list response
-          if (message.result && Array.isArray(message.result.models)) {
-            benchmarkedModels = message.result.models;
-            populateModelSelect();
-            return;
-          }
-          
-          // Check if this is a benchmark result response
-          if (message.result && message.result.modelId) {
-            benchmarkResults = message.result.data;
-            displayBenchmarkResults(message.result.modelId);
-            
-            // Reset benchmarking state when results come back
-            isBenchmarking = false;
-            
-            // Close modal if it's open
-            if (benchmarkModal && benchmarkModal._isShown) {
-              benchmarkModal.hide();
-            }
-            return;
-          }
-          
-          // Check if this is a benchmark completion notification
-          if (message.result && message.result.status === 'completed' && message.result.modelId) {
-            // Reset benchmarking state
-            isBenchmarking = false;
-            
-            // Close modal if it's open
-            if (benchmarkModal && benchmarkModal._isShown) {
-              benchmarkModal.hide();
-            }
-            
-            // Refresh data for the specific model
-            fetchModelBenchmarks(message.result.modelId);
-            return;
-          }
-          
-          // Check if this is a jobs response
-          if (message.result && Array.isArray(message.result.jobs)) {
-            displayActiveJobs(message.result.jobs);
-            return;
-          }
+        const result = await requestJson('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        trackedTaskId = result.task_id;
+        showNotice('submitNotice', `Task submitted: ${result.task_id} (queue position ${result.queue_position})`, 'ok');
+        document.getElementById('taskLookupInput').value = result.task_id;
+        await refreshQueue();
+        await refreshTasks();
+        await lookupTask(result.task_id);
+      } catch (error) {
+        showNotice('submitNotice', `Task submission failed: ${error.message}`, 'err');
+      }
+    }
+
+    async function refreshAll() {
+      try {
+        await Promise.all([refreshQueue(), refreshTasks()]);
+        if (trackedTaskId) {
+          await lookupTask(trackedTaskId);
         }
-        
-        // Check for error responses that might indicate benchmark failure
-        if (message.jsonrpc === '2.0' && message.error) {
-          console.error('RPC error:', message.error);
-          // Reset benchmarking state on error
-          isBenchmarking = false;
-          
-          if (benchmarkModal && benchmarkModal._isShown) {
-            benchmarkModal.hide();
+      } catch (error) {
+        console.error('Dashboard refresh failed', error);
+      }
+    }
+
+    function bindEvents() {
+      document.getElementById('submitTaskForm').addEventListener('submit', submitTask);
+
+      document.getElementById('queueApplyFiltersBtn').addEventListener('click', async () => {
+        queueQuery.status = document.getElementById('queueStatusFilter').value;
+        queueQuery.provider = document.getElementById('queueProviderFilter').value.trim();
+        queueQuery.model = document.getElementById('queueModelFilter').value.trim();
+        queueQuery.q = document.getElementById('queueSearchFilter').value.trim();
+        queueQuery.page_size = Number(document.getElementById('queuePageSize').value) || 20;
+        queueQuery.page = 1;
+        await refreshQueue();
+      });
+
+      document.getElementById('queuePrevBtn').addEventListener('click', async () => {
+        if (queueQuery.page > 1) {
+          queueQuery.page -= 1;
+          await refreshQueue();
+        }
+      });
+
+      document.getElementById('queueNextBtn').addEventListener('click', async () => {
+        if (queuePagination.has_next_page) {
+          queueQuery.page += 1;
+          await refreshQueue();
+        }
+      });
+
+      document.getElementById('clearFormBtn').addEventListener('click', () => {
+        document.getElementById('taskText').value = '';
+        document.getElementById('contextLength').value = '4096';
+        document.getElementById('outputLength').value = '768';
+        document.getElementById('complexity').value = '0.5';
+        document.getElementById('priority').value = 'quality';
+      });
+
+      document.getElementById('refreshTasksBtn').addEventListener('click', refreshTasks);
+      document.getElementById('refreshBenchBtn').addEventListener('click', () => sendWsCommand('getBenchmarkedModels'));
+
+      document.getElementById('taskApplyFiltersBtn').addEventListener('click', async () => {
+        taskQuery.status = document.getElementById('taskStatusFilter').value;
+        taskQuery.provider = document.getElementById('taskProviderFilter').value.trim();
+        taskQuery.model = document.getElementById('taskModelFilter').value.trim();
+        taskQuery.q = document.getElementById('taskSearchFilter').value.trim();
+        taskQuery.page_size = Number(document.getElementById('taskPageSize').value) || 20;
+        taskQuery.page = 1;
+        await refreshTasks();
+      });
+
+      document.getElementById('taskPrevBtn').addEventListener('click', async () => {
+        if (taskQuery.page > 1) {
+          taskQuery.page -= 1;
+          await refreshTasks();
+        }
+      });
+
+      document.getElementById('taskNextBtn').addEventListener('click', async () => {
+        if (taskPagination.has_next_page) {
+          taskQuery.page += 1;
+          await refreshTasks();
+        }
+      });
+
+      document.getElementById('taskLookupBtn').addEventListener('click', async () => {
+        const taskId = document.getElementById('taskLookupInput').value.trim();
+        if (!taskId) return;
+        try {
+          await lookupTask(taskId);
+        } catch (error) {
+          showNotice('taskDetails', `Task lookup failed: ${error.message}`, 'err');
+        }
+      });
+
+      document.getElementById('jobsTableBody').addEventListener('click', async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const jobId = target.getAttribute('data-job-cancel');
+        if (!jobId) return;
+        try {
+          await cancelJob(jobId);
+        } catch (error) {
+          showNotice('submitNotice', `Cancel job failed: ${error.message}`, 'err');
+        }
+      });
+
+      document.getElementById('tasksTableBody').addEventListener('click', async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        const inspectId = target.getAttribute('data-task-inspect');
+        if (inspectId) {
+          try {
+            document.getElementById('taskLookupInput').value = inspectId;
+            await lookupTask(inspectId);
+          } catch (error) {
+            showNotice('taskDetails', `Task inspect failed: ${error.message}`, 'err');
           }
-          
-          alert(`Error: ${message.error.message || 'Benchmark failed'}`);
           return;
         }
-        
-        // Handle structured message types (new format)
-        if (message.type === 'benchmarkedModels') {
-          console.log('Received benchmarked models:', message.models);
-          benchmarkedModels = message.models;
-          populateModelSelect();
-        } else if (message.type === 'benchmarkResults') {
-          benchmarkResults = message.results;
-          displayBenchmarkResults(message.modelId);
-          
-          // Reset benchmarking state
-          isBenchmarking = false;
-          
-          // Close modal if it's open
-          if (benchmarkModal && benchmarkModal._isShown) {
-            benchmarkModal.hide();
+
+        const cancelId = target.getAttribute('data-task-cancel');
+        if (cancelId) {
+          try {
+            await cancelTask(cancelId);
+          } catch (error) {
+            showNotice('taskDetails', `Cancel task failed: ${error.message}`, 'err');
           }
-        } else if (message.type === 'activeJobs') {
-          displayActiveJobs(message.jobs);
-        } else if (message.type === 'benchmarkStarted') {
-          showBenchmarkModal(message.modelId);
-        } else if (message.type === 'benchmarkCompleted') {
-          // Reset benchmarking state
-          isBenchmarking = false;
-          
-          if (benchmarkModal && benchmarkModal._isShown) {
-            benchmarkModal.hide();
-          }
-          fetchBenchmarkedModels();
-          fetchModelBenchmarks(message.modelId);
-        } else {
-          console.log('Unhandled message type:', message);
         }
-      } catch (error) {
-        console.error('Error processing message:', error);
-        // Reset benchmarking state on error
-        isBenchmarking = false;
-      }
-    }
-
-    function fetchBenchmarkedModels() {
-      sendCommand('getBenchmarkedModels');
-    }
-
-    function fetchModelBenchmarks(modelId) {
-      sendCommand(`getModelBenchmarks ${modelId}`);
-    }
-
-    function fetchActiveJobs() {
-      sendCommand('getActiveJobs');
-    }
-
-    function populateModelSelect() {
-      const select = document.getElementById('benchmarkModelSelect');
-      
-      // Clear current options except the first one
-      while (select.options.length > 1) {
-        select.options.remove(1);
-      }
-      
-      // Filter models based on current filter
-      let filteredModels = benchmarkedModels;
-      if (currentFilter !== 'all') {
-        filteredModels = benchmarkedModels.filter(model => model.provider === currentFilter);
-      }
-      
-      // Sort models by provider then name
-      filteredModels.sort((a, b) => {
-        if (a.provider !== b.provider) {
-          return a.provider.localeCompare(b.provider);
-        }
-        return a.name.localeCompare(b.name);
-      });
-      
-      // Add options for each model
-      filteredModels.forEach(model => {
-        const option = document.createElement('option');
-        option.value = model.id;
-        option.text = `${model.name} (${model.provider})`;
-        option.dataset.provider = model.provider;
-        select.add(option);
       });
     }
 
-    function toggleProviderFilter() {
-      const filterButton = document.getElementById('filterToggle');
-      const providers = [...new Set(benchmarkedModels.map(model => model.provider))];
-      
-      // Find the next filter in the cycle
-      let nextFilterIndex = 0;
-      if (currentFilter === 'all') {
-        nextFilterIndex = 0;
-      } else {
-        nextFilterIndex = providers.indexOf(currentFilter) + 1;
-        if (nextFilterIndex >= providers.length) {
-          nextFilterIndex = -1;  // Back to 'all'
-        }
-      }
-      
-      // Set the new filter
-      currentFilter = nextFilterIndex === -1 ? 'all' : providers[nextFilterIndex];
-      
-      // Update the button text
-      filterButton.textContent = `Filter: ${currentFilter === 'all' ? 'All' : currentFilter}`;
-      
-      // Re-populate the model select
-      populateModelSelect();
-    }
-
-    function loadModelBenchmarks() {
-      const select = document.getElementById('benchmarkModelSelect');
-      const modelId = select.value;
-      
-      if (!modelId) {
-        document.getElementById('benchmarkResults').innerHTML = `
-          <div class="alert alert-info">
-            Select a model to view its benchmark results
-          </div>
-        `;
-        return;
-      }
-      
-      fetchModelBenchmarks(modelId);
-    }
-
-    function displayBenchmarkResults(modelId) {
-      const resultsContainer = document.getElementById('benchmarkResults');
-      const results = benchmarkResults;
-      
-      if (!results || Object.keys(results).length === 0) {
-        resultsContainer.innerHTML = `
-          <div class="alert alert-warning">
-            No benchmark results found for this model
-          </div>
-        `;
-        return;
-      }
-      
-      // Get model info
-      const modelInfo = benchmarkedModels.find(m => m.id === modelId);
-      if (!modelInfo) {
-        return;
-      }
-      
-      // Build the results display
-      let html = `
-        <div class="card mb-4">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">${modelInfo.name} 
-              <span class="provider-badge">${modelInfo.provider}</span>
-            </h4>
-            <button class="btn btn-primary" onclick="rebenchmarkModel('${modelId}')">
-              Re-benchmark Model
-            </button>
-          </div>
-          <div class="card-body">
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <div><span class="metric-label">Success Rate:</span> <span class="metric-value">${(results.successRate * 100).toFixed(1)}%</span></div>
-              </div>
-              <div class="col-md-4">
-                <div><span class="metric-label">Quality Score:</span> <span class="metric-value">${results.qualityScore.toFixed(2)}</span></div>
-              </div>
-              <div class="col-md-4">
-                <div><span class="metric-label">Avg Response:</span> <span class="metric-value">${results.avgResponseTime.toFixed(0)}ms</span></div>
-              </div>
-            </div>
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <div><span class="metric-label">Complexity:</span> <span class="metric-value">${results.complexityScore.toFixed(2)}</span></div>
-              </div>
-              <div class="col-md-4">
-                <div><span class="metric-label">Benchmark Count:</span> <span class="metric-value">${results.benchmarkCount}</span></div>
-              </div>
-              <div class="col-md-4">
-                <div><span class="metric-label">Last Benchmark:</span> <span class="metric-value">${new Date(results.lastBenchmarked).toLocaleDateString()}</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      // Add task results if available
-      if (results.tasks && results.tasks.length > 0) {
-        html += `<h4>Benchmark Tasks</h4>`;
-        
-        results.tasks.forEach((task, index) => {
-          const hasThinking = task.output && (
-            task.output.includes('<thinking>') || 
-            task.output.includes('[thinking]') || 
-            task.output.includes('<|thinking|>')
-          );
-          
-          let cleanOutput = task.output || '';
-          let thinkingOutput = '';
-          
-          if (hasThinking) {
-            // Extract thinking content
-            const thinkingMatches = cleanOutput.match(/<thinking>([\s\S]*?)<\/thinking>/);
-            if (thinkingMatches) {
-              thinkingOutput = thinkingMatches[1];
-              cleanOutput = cleanOutput.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
-            }
-            
-            // Handle other thinking formats
-            const bracketThinkingMatches = cleanOutput.match(/\[thinking\]([\\s\S]*?)\[\/thinking\]/i);
-            if (bracketThinkingMatches) {
-              thinkingOutput = bracketThinkingMatches[1];
-              cleanOutput = cleanOutput.replace(/\[thinking\][\s\S]*?\[\/thinking\]/gi, '');
-            }
-          }
-          
-          html += `
-            <div class="benchmark-task">
-              <h5>Task ${index + 1}: ${task.name}</h5>
-              <div class="task-prompt mb-2">
-                <strong>Prompt:</strong> ${task.prompt}
-              </div>
-              <div class="row mb-3">
-                <div class="col-md-3">
-                  <div><span class="metric-label">Success:</span> <span class="metric-value">${task.success ? 'Yes' : 'No'}</span></div>
-                </div>
-                <div class="col-md-3">
-                  <div><span class="metric-label">Quality:</span> <span class="metric-value">${task.qualityScore.toFixed(2)}</span></div>
-                </div>
-                <div class="col-md-3">
-                  <div><span class="metric-label">Time:</span> <span class="metric-value">${task.responseTime}ms</span></div>
-                </div>
-              </div>
-              <div class="output-section">
-                <strong>Output:</strong>
-                <div class="code-output">${cleanOutput}</div>
-                ${hasThinking ? `
-                  <a class="thinking-toggle" onclick="toggleThinking('thinking-${index}')">
-                    Show/hide thinking process
-                  </a>
-                  <div id="thinking-${index}" class="thinking-content">
-                    ${thinkingOutput}
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          `;
-        });
-      }
-      
-      resultsContainer.innerHTML = html;
-    }
-
-    function toggleThinking(id) {
-      const element = document.getElementById(id);
-      if (element.style.display === 'block') {
-        element.style.display = 'none';
-      } else {
-        element.style.display = 'block';
-      }
-    }
-
-    function displayActiveJobs(jobs) {
-      const jobsList = document.getElementById('jobsList');
-      
-      if (!jobs || jobs.length === 0) {
-        jobsList.innerHTML = '<div class="alert alert-info">No active jobs</div>';
-        return;
-      }
-      
-      let html = '';
-      jobs.forEach(job => {
-        let statusBadge = '';
-        switch (job.status) {
-          case 'running':
-            statusBadge = '<span class="badge bg-primary">Running</span>';
-            break;
-          case 'completed':
-            statusBadge = '<span class="badge bg-success">Completed</span>';
-            break;
-          case 'failed':
-            statusBadge = '<span class="badge bg-danger">Failed</span>';
-            break;
-          default:
-            statusBadge = `<span class="badge bg-secondary">${job.status}</span>`;
-        }
-        
-        html += `
-          <div class="card mb-2">
-            <div class="card-body">
-              <div class="d-flex justify-content-between">
-                <h5 class="card-title">${job.type}</h5>
-                ${statusBadge}
-              </div>
-              <p class="card-text">${job.description}</p>
-              <div class="text-muted small">Started: ${new Date(job.startTime).toLocaleString()}</div>
-            </div>
-          </div>
-        `;
-      });
-      
-      jobsList.innerHTML = html;
-    }
-
-    function rebenchmarkModel(modelId) {
-      if (confirm('Are you sure you want to re-benchmark this model? This may take several minutes.')) {
-        // Set benchmarking state to true
-        isBenchmarking = true;
-        
-        // Show benchmark modal immediately
-        showBenchmarkModal(modelId);
-        
-        // Send command to server
-        sendCommand(`rebenchmarkModel ${modelId}`);
-      }
-    }
-
-    function runAllBenchmarks() {
-      if (confirm('Are you sure you want to run benchmarks for all models? This may take a long time.')) {
-        // Set benchmarking state to true
-        isBenchmarking = true;
-        sendCommand('runAllBenchmarks');
-      }
-    }
-
-    function showBenchmarkModal(modelId) {
-      const modelElement = document.getElementById('benchmarkModelName');
-      const model = benchmarkedModels.find(m => m.id === modelId);
-      
-      if (modelElement && model) {
-        modelElement.textContent = model.name;
-      }
-      
-      // Initialize modal if it doesn't exist
-      if (!benchmarkModal) {
-        benchmarkModal = new bootstrap.Modal(document.getElementById('benchmarkModal'));
-      }
-      
-      benchmarkModal.show();
-    }
-
-    function sendCommand(command) {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        const message = {
-          jsonrpc: '2.0',
-          id: Date.now(),
-          method: 'executeCommand',
-          params: { command }
-        };
-        ws.send(JSON.stringify(message));
-      } else {
-        alert('WebSocket is not connected.');
-      }
-    }
-
-    // Initialize the page
-    document.addEventListener('DOMContentLoaded', () => {
-      initializeWebSocket();
-      
-      // Set up refresh interval for jobs
-      startJobRefreshInterval();
+    document.addEventListener('DOMContentLoaded', async () => {
+      bindEvents();
+      await initWebSocket();
+      await refreshAll();
+      setInterval(refreshAll, 10000);
     });
-    
-    function startJobRefreshInterval() {
-      // Clear any existing interval first
-      if (jobRefreshInterval) {
-        clearInterval(jobRefreshInterval);
-      }
-      
-      // Set up a new interval
-      jobRefreshInterval = setInterval(() => {
-        // Only fetch jobs if we're not currently benchmarking
-        if (!isBenchmarking) {
-          fetchActiveJobs();
-        }
-      }, 10000); // Every 10 seconds
-    }
-    
-    function pauseJobRefreshInterval() {
-      if (jobRefreshInterval) {
-        clearInterval(jobRefreshInterval);
-        jobRefreshInterval = null;
-      }
-    }
   </script>
 </body>
 </html>

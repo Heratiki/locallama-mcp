@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-05-19
+Last updated: 2026-05-20
 
 ## Purpose
 
@@ -37,6 +37,7 @@ and this file for the current snapshot.
 - Issue #30 provider execution queuing is partially implemented as of 2026-05-20: the provider registry path enforces one shared local execution slot by default and one independent slot per remote provider by default. Caps are configurable via `PROVIDER_MAX_CONCURRENT_LOCAL` and `PROVIDER_MAX_CONCURRENT_REMOTE`. Unit coverage exists for local serialization and local+remote parallelism; live MCP concurrency validation is still pending.
 - OpenRouter Axios error logging now redacts credential-bearing request details as of 2026-05-20; logs keep response status/body summaries without serializing the original Axios request config.
 - Issue #32 was accidentally merged to `main` via PR #35 with no implementation diff. A fresh `future-testing` implementation was completed as of 2026-05-20: `route_task` queues a persistent Task/Job and returns `task_id` immediately; callers poll `get_task_status` or use `cancel_task`.
+- Issue #34 dashboard implementation moved from blocked intent to active baseline as of 2026-05-20: the web UI now supports manual `route_task` submission, task/job cancellation, benchmark history, and queue/task monitoring with server-side filters, pagination, queue-position range, and ETA fields (`eta_ms`/`eta`).
 
 ## What to keep out of docs
 

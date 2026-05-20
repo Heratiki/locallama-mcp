@@ -518,6 +518,67 @@ Benchmark results are stored in the `benchmark-results` directory and include:
 - Summary reports in JSON and Markdown formats
 - Comprehensive analysis of model performance
 
+### Dashboard (Job Queue + Tasks + Benchmarks)
+
+When the server is running, a dashboard is available at:
+
+`http://localhost:3001`
+
+The dashboard provides:
+
+- Real-time Job Queue visibility (status, provider/model, progress)
+- Task monitoring with aggregate status and per-job details
+- Manual `route_task` submission form for testing without an MCP client
+- Task and job cancellation actions
+- Benchmark history table with quick capability flags
+
+The UI consumes the existing WebSocket side channel and these Express endpoints:
+
+- `GET /api/queue` - queue summary and jobs
+- `GET /api/tasks` - recent tasks with aggregate status
+- `GET /api/tasks/:taskId` - detailed task status
+- `POST /api/tasks` - submit a task (`route_task`)
+- `POST /api/tasks/:taskId/cancel` - cancel a task
+- `POST /api/jobs/:jobId/cancel` - cancel a job
+
+`GET /api/queue` supports optional filters and pagination:
+
+- `status` (comma-separated)
+- `provider`
+- `model`
+- `task_id`
+- `q` (free-text search)
+- `page` (default `1`)
+- `page_size` (default `20`)
+
+`GET /api/tasks` supports optional filters and pagination:
+
+- `status` (comma-separated)
+- `provider`
+- `model`
+- `q` (free-text search)
+- `page` (default `1`)
+- `page_size` (default `20`)
+
+Dashboard responses now include queue/ETA metadata:
+
+- Job rows include `queue_position`, `eta_ms`, and `eta`
+- Task rows include `queue_position_min`, `queue_position_max`, `eta_ms`, and `eta`
+
+Example manual task submission:
+
+```bash
+curl -X POST http://localhost:3001/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "Refactor parser for readability and add tests",
+    "context_length": 4096,
+    "expected_output_length": 768,
+    "complexity": 0.6,
+    "priority": "quality"
+  }'
+```
+
 ## Benchmark Results
 
 The repository includes benchmark results that provide valuable insights into the performance of different models. These results:

@@ -9,6 +9,7 @@ import { initDatabase, getAllJobsFromDb } from './db.js';
 import { logger } from '../../utils/logger.js';
 import { benchmarkModule } from '../benchmark/index.js';
 import { config } from '../../config/index.js';
+import { router as routingModule } from '../api-integration/routing/index.js';
 // Keep these imports, but we'll use getJobTracker differently
 import { getJobTracker } from '../decision-engine/services/jobTracker.js';
 import { BroadcastJobsFunction } from './ws-server-types.js';
@@ -180,6 +181,141 @@ interface TaskResult {
   };
 }
 
+interface SubmitTaskBody {
+  task: string;
+  context_length: number;
+  expected_output_length?: number;
+  complexity?: number;
+  priority?: 'speed' | 'cost' | 'quality';
+}
+
+function isSubmitTaskBody(body: unknown): body is SubmitTaskBody {
+  if (!body || typeof body !== 'object') return false;
+  const candidate = body as Record<string, unknown>;
+  if (typeof candidate.task !== 'string' || !candidate.task.trim()) return false;
+  if (typeof candidate.context_length !== 'number' || !Number.isFinite(candidate.context_length)) return false;
+  if (candidate.expected_output_length !== undefined && (typeof candidate.expected_output_length !== 'number' || !Number.isFinite(candidate.expected_output_length))) return false;
+  if (candidate.complexity !== undefined && (typeof candidate.complexity !== 'number' || !Number.isFinite(candidate.complexity))) return false;
+  if (candidate.priority !== undefined && candidate.priority !== 'speed' && candidate.priority !== 'cost' && candidate.priority !== 'quality') return false;
+  return true;
+}
+
+type QueryValue = string | string[] | undefined;
+
+function firstQueryValue(value: QueryValue): string | undefined {
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value[0] : undefined;
+  }
+  return value;
+}
+
+function parsePositiveInt(value: QueryValue, fallbackValue: number, maxValue: number): number {
+  const parsed = Number(firstQueryValue(value));
+  if (!Number.isFinite(parsed) || parsed < 1) return fallbackValue;
+  return Math.min(Math.floor(parsed), maxValue);
+}
+
+function parseCsvFilter(value: QueryValue): string[] {
+  const raw = firstQueryValue(value);
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(part => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function toLowerMaybe(value: unknown): string {
+  return typeof value === 'string' ? value.toLowerCase() : '';
+}
+
+function formatEtaFromMs(ms: number | null | undefined): string | null {
+  if (!Number.isFinite(ms) || ms === undefined || ms === null || ms <= 0) return null;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remSeconds = seconds % 60;
+  return `${minutes}m ${remSeconds}s`;
+}
+
+interface DashboardJob {
+  id: string;
+  status: string;
+  task_id: string | null;
+  provider_id?: string | null;
+  provider?: string | null;
+  model_id?: string | null;
+  model?: string | null;
+  queue_position?: number | null;
+  poll_again_after_ms?: number | null;
+  created_at?: number;
+  [key: string]: unknown;
+}
+
+function normalizeDashboardJob(job: Record<string, unknown>): DashboardJob & { eta_ms: number | null; eta: string | null } {
+  const etaMs = typeof job.poll_again_after_ms === 'number' ? job.poll_again_after_ms : null;
+  return {
+    ...(job as DashboardJob),
+    id: typeof job.id === 'string' ? job.id : '',
+    status: typeof job.status === 'string' ? job.status : 'unknown',
+    task_id: typeof job.task_id === 'string' ? job.task_id : null,
+    eta_ms: etaMs,
+    eta: formatEtaFromMs(etaMs),
+  };
+}
+
+function paginate<T>(items: T[], page: number, pageSize: number): { pageItems: T[]; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } {
+  const totalItems = items.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const boundedPage = Math.min(page, totalPages);
+  const start = (boundedPage - 1) * pageSize;
+  return {
+    pageItems: items.slice(start, start + pageSize),
+    totalItems,
+    totalPages,
+    hasNextPage: boundedPage < totalPages,
+    hasPreviousPage: boundedPage > 1,
+  };
+}
+
+async function enrichTaskStatus(taskStatus: Awaited<ReturnType<typeof routingModule.getTaskStatus>>, allJobs: Array<Record<string, unknown>>) {
+  const jobsById = new Map<string, DashboardJob & { eta_ms: number | null; eta: string | null }>();
+  for (const rawJob of allJobs) {
+    const normalized = normalizeDashboardJob(rawJob);
+    if (normalized.id) jobsById.set(normalized.id, normalized);
+  }
+
+  const jobs = taskStatus.jobs.map(job => {
+    const persisted = jobsById.get(job.job_id);
+    const queuePosition = typeof persisted?.queue_position === 'number' ? persisted.queue_position : null;
+    const etaMs = typeof persisted?.poll_again_after_ms === 'number' ? persisted.poll_again_after_ms : null;
+    return {
+      ...job,
+      queue_position: queuePosition,
+      eta_ms: etaMs,
+      eta: formatEtaFromMs(etaMs),
+    };
+  });
+
+  const queuePositions = jobs
+    .map(job => job.queue_position)
+    .filter((value): value is number => typeof value === 'number')
+    .sort((a, b) => a - b);
+  const etaCandidates = jobs
+    .map(job => job.eta_ms)
+    .filter((value): value is number => typeof value === 'number' && value > 0);
+  const etaMs = etaCandidates.length > 0 ? Math.min(...etaCandidates) : null;
+
+  return {
+    ...taskStatus,
+    jobs,
+    queue_positions: queuePositions,
+    queue_position_min: queuePositions.length > 0 ? queuePositions[0] : null,
+    queue_position_max: queuePositions.length > 0 ? queuePositions[queuePositions.length - 1] : null,
+    eta_ms: etaMs,
+    eta: formatEtaFromMs(etaMs),
+  };
+}
+
 async function startWebSocketServer() {
   const port = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
   fs.writeFileSync(PORT_FILE, port.toString());
@@ -235,6 +371,7 @@ async function startExpressServer() {
   const app = express();
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const uiPath = path.resolve(__dirname, '../../../ui.html');
+  app.use(express.json());
 
   // Check if ui.html exists before setting up routes
   try {
@@ -266,6 +403,215 @@ async function startExpressServer() {
     } catch (err) {
       logger.error(`Error reading port file ${PORT_FILE}: ${err instanceof Error ? err.message : String(err)}`);
       res.status(500).json({ error: 'Could not read WebSocket port information' });
+    }
+  });
+
+  app.get('/api/queue', async (req, res) => {
+    try {
+      const page = parsePositiveInt(req.query.page as QueryValue, 1, 500);
+      const pageSize = parsePositiveInt(req.query.page_size as QueryValue, 20, 200);
+      const statusFilter = parseCsvFilter(req.query.status as QueryValue);
+      const providerFilter = parseCsvFilter(req.query.provider as QueryValue);
+      const modelFilter = parseCsvFilter(req.query.model as QueryValue);
+      const taskIdFilter = parseCsvFilter(req.query.task_id as QueryValue);
+      const search = toLowerMaybe(firstQueryValue(req.query.q as QueryValue));
+
+      const allJobsRaw = await getAllJobsFromDb();
+      const allJobs = allJobsRaw.map(job => normalizeDashboardJob(job));
+      const filteredJobs = allJobs.filter(job => {
+        const status = toLowerMaybe(job.status);
+        const provider = toLowerMaybe(job.provider_id ?? job.provider);
+        const model = toLowerMaybe(job.model_id ?? job.model);
+        const taskId = toLowerMaybe(job.task_id);
+        const haystack = `${job.id} ${taskId} ${provider} ${model}`.toLowerCase();
+
+        if (statusFilter.length > 0 && !statusFilter.includes(status)) return false;
+        if (providerFilter.length > 0 && !providerFilter.includes(provider)) return false;
+        if (modelFilter.length > 0 && !modelFilter.some(filter => model.includes(filter))) return false;
+        if (taskIdFilter.length > 0 && !taskIdFilter.some(filter => taskId.includes(filter))) return false;
+        if (search && !haystack.includes(search)) return false;
+        return true;
+      });
+
+      filteredJobs.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+
+      const pagination = paginate(filteredJobs, page, pageSize);
+      const activeJobs = filteredJobs.filter(job => job.status === 'pending' || job.status === 'in_progress');
+      const queuedJobs = activeJobs.filter(job => job.status === 'pending');
+      const runningJobs = activeJobs.filter(job => job.status === 'in_progress');
+
+      res.json({
+        queue: {
+          total_jobs: filteredJobs.length,
+          active_jobs: activeJobs.length,
+          queued_jobs: queuedJobs.length,
+          running_jobs: runningJobs.length,
+          total_jobs_unfiltered: allJobs.length,
+        },
+        jobs: pagination.pageItems,
+        pagination: {
+          page,
+          page_size: pageSize,
+          total_items: pagination.totalItems,
+          total_pages: pagination.totalPages,
+          has_next_page: pagination.hasNextPage,
+          has_previous_page: pagination.hasPreviousPage,
+        },
+        filters: {
+          status: statusFilter,
+          provider: providerFilter,
+          model: modelFilter,
+          task_id: taskIdFilter,
+          q: search,
+        },
+      });
+    } catch (error) {
+      logger.error('Error getting queue summary:', error);
+      res.status(500).json({
+        error: 'Failed to get queue summary',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get('/api/tasks', async (req, res) => {
+    try {
+      const page = parsePositiveInt(req.query.page as QueryValue, 1, 500);
+      const pageSize = parsePositiveInt(req.query.page_size as QueryValue, 20, 100);
+      const statusFilter = parseCsvFilter(req.query.status as QueryValue);
+      const providerFilter = parseCsvFilter(req.query.provider as QueryValue);
+      const modelFilter = parseCsvFilter(req.query.model as QueryValue);
+      const search = toLowerMaybe(firstQueryValue(req.query.q as QueryValue));
+
+      const allJobs = await getAllJobsFromDb();
+      const taskIds = Array.from(new Set(allJobs.map(job => {
+        const taskId = job.task_id;
+        return typeof taskId === 'string' ? taskId : '';
+      }).filter((taskId): taskId is string => Boolean(taskId))));
+
+      const rawTaskStatuses = await Promise.all(taskIds.map(taskId => routingModule.getTaskStatus(taskId)));
+      const enrichedTaskStatuses = await Promise.all(rawTaskStatuses.map(taskStatus => enrichTaskStatus(taskStatus, allJobs)));
+      const filteredTaskStatuses = enrichedTaskStatuses.filter(task => {
+        const taskId = toLowerMaybe(task.task_id);
+        const taskStatus = toLowerMaybe(task.status);
+        const providers = task.jobs.map(job => toLowerMaybe(job.provider));
+        const models = task.jobs.map(job => toLowerMaybe(job.model));
+        const haystack = `${taskId} ${providers.join(' ')} ${models.join(' ')}`;
+
+        if (statusFilter.length > 0 && !statusFilter.includes(taskStatus)) return false;
+        if (providerFilter.length > 0 && !providerFilter.some(filter => providers.some(provider => provider.includes(filter)))) return false;
+        if (modelFilter.length > 0 && !modelFilter.some(filter => models.some(model => model.includes(filter)))) return false;
+        if (search && !haystack.includes(search)) return false;
+        return true;
+      });
+
+      const pagination = paginate(filteredTaskStatuses, page, pageSize);
+      res.json({
+        tasks: pagination.pageItems,
+        pagination: {
+          page,
+          page_size: pageSize,
+          total_items: pagination.totalItems,
+          total_pages: pagination.totalPages,
+          has_next_page: pagination.hasNextPage,
+          has_previous_page: pagination.hasPreviousPage,
+        },
+        filters: {
+          status: statusFilter,
+          provider: providerFilter,
+          model: modelFilter,
+          q: search,
+        },
+      });
+    } catch (error) {
+      logger.error('Error listing task statuses:', error);
+      res.status(500).json({
+        error: 'Failed to list tasks',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get('/api/tasks/:taskId', async (req, res) => {
+    try {
+      const taskStatus = await routingModule.getTaskStatus(req.params.taskId);
+      if (taskStatus.status === 'not_found') {
+        res.status(404).json(taskStatus);
+        return;
+      }
+      const allJobs = await getAllJobsFromDb();
+      const enrichedTaskStatus = await enrichTaskStatus(taskStatus, allJobs);
+      res.json(enrichedTaskStatus);
+    } catch (error) {
+      logger.error(`Error getting task status for ${req.params.taskId}:`, error);
+      res.status(500).json({
+        error: 'Failed to get task status',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.post('/api/tasks', async (req, res) => {
+    if (!isSubmitTaskBody(req.body)) {
+      res.status(400).json({
+        error: 'Invalid task payload',
+        required: {
+          task: 'string',
+          context_length: 'number',
+        },
+      });
+      return;
+    }
+
+    try {
+      const response = await routingModule.routeTask({
+        task: req.body.task,
+        contextLength: req.body.context_length,
+        expectedOutputLength: req.body.expected_output_length,
+        complexity: req.body.complexity,
+        priority: req.body.priority,
+      });
+      res.status(202).json(response);
+    } catch (error) {
+      logger.error('Error submitting route_task from dashboard:', error);
+      res.status(500).json({
+        error: 'Failed to submit task',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.post('/api/tasks/:taskId/cancel', async (req, res) => {
+    try {
+      const response = await routingModule.cancelTask(req.params.taskId);
+      if (response.status === 'not_found') {
+        res.status(404).json(response);
+        return;
+      }
+      res.json(response);
+    } catch (error) {
+      logger.error(`Error cancelling task ${req.params.taskId}:`, error);
+      res.status(500).json({
+        error: 'Failed to cancel task',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.post('/api/jobs/:jobId/cancel', async (req, res) => {
+    try {
+      const response = await routingModule.cancelJob(req.params.jobId);
+      if (!response.success && response.status === 'Not Found') {
+        res.status(404).json(response);
+        return;
+      }
+      res.json(response);
+    } catch (error) {
+      logger.error(`Error cancelling job ${req.params.jobId}:`, error);
+      res.status(500).json({
+        error: 'Failed to cancel job',
+        details: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
