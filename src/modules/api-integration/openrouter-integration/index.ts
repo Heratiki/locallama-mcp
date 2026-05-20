@@ -1,6 +1,6 @@
 import { config } from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
-import { 
+import {
     IOpenRouterIntegration, 
     OpenRouterBenchmarkConfig, 
     OpenRouterBenchmarkResult, 
@@ -10,7 +10,7 @@ import {
     // ModelBenchmarkResult 
 } from './types.js';
 import { openRouterModule } from '../../openrouter/index.js';
-import { benchmarkService } from '../../decision-engine/services/benchmarkService.js';
+import { benchmarkModule } from '../../benchmark/index.js';
 
 export class OpenRouterIntegration implements IOpenRouterIntegration {
   /**
@@ -100,21 +100,9 @@ export class OpenRouterIntegration implements IOpenRouterIntegration {
   /**
    * Benchmark free models available from OpenRouter
    */
-  async benchmarkFreeModels(_benchmarkConfig: OpenRouterBenchmarkConfig): Promise<OpenRouterBenchmarkResult> {
-    logger.info('Forwarding benchmark request to benchmarkService');
-    // TODO: Implement proper benchmarking using _benchmarkConfig
-    await benchmarkService.benchmarkFreeModels();
-    
-    // Return a simplified result since the full implementation is in benchmarkService
-    return {
-      results: {},
-      summary: {
-        bestQualityModel: 'unknown',
-        bestSpeedModel: 'unknown',
-        totalTime: 0,
-        modelsCount: 0
-      }
-    };
+  async benchmarkFreeModels(benchmarkConfig: OpenRouterBenchmarkConfig): Promise<OpenRouterBenchmarkResult> {
+    logger.info('Forwarding benchmark_free_models request to modular benchmark engine');
+    return await benchmarkModule.benchmarkFreeModels(benchmarkConfig);
   }
 }
 

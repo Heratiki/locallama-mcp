@@ -6,11 +6,43 @@ import { BenchmarkConfig, BenchmarkResult, BenchmarkRunResult, Model, BenchmarkT
 import { simulateGenericApi } from '../api/simulation.js';
 import { evaluateQuality } from '../evaluation/quality.js';
 import { codeEvaluationService } from '../../decision-engine/services/codeEvaluationService.js';
-import { saveBenchmarkResult, getRecentModelResults } from '../storage/benchmarkDb.js';
+import { initBenchmarkDb, saveBenchmarkResult, getRecentModelResults } from '../storage/benchmarkDb.js';
 import { isProviderLocal, getProviderRegistry } from '../../core/provider/index.js';
 
 // Track model failure counts in memory
 const modelFailures = new Map<string, number>();
+
+export class BenchmarkProviderError extends Error {
+  constructor(
+    public readonly code: 'benchmark_rate_limited' | 'benchmark_provider_error',
+    public readonly providerId: string,
+    public readonly modelId: string,
+    message: string,
+    public readonly retryAfterMs?: number,
+    public readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = 'BenchmarkProviderError';
+  }
+
+  static from(error: unknown, providerId: string, modelId: string): BenchmarkProviderError {
+    const message = error instanceof Error ? error.message : String(error);
+    const retryMatch = message.match(/retry after\s+(\d+)\s*s/i);
+    const retryAfterMs = retryMatch ? Number(retryMatch[1]) * 1000 : undefined;
+    const isRateLimit =
+      /rate\s*limit|too many requests/i.test(message) ||
+      (typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 429);
+
+    return new BenchmarkProviderError(
+      isRateLimit ? 'benchmark_rate_limited' : 'benchmark_provider_error',
+      providerId,
+      modelId,
+      message,
+      retryAfterMs,
+      error
+    );
+  }
+}
 
 // Track model failure and get count
 function trackModelFailure(modelId: string): number {
@@ -56,7 +88,8 @@ export async function runModelBenchmark(
   task: string,
   contextLength: number,
   expectedOutputLength: number,
-  config: BenchmarkConfig
+  config: BenchmarkConfig,
+  options: { failFastProviderErrors?: boolean } = {}
 ): Promise<{
   timeTaken: number;
   successRate: number;
@@ -125,6 +158,9 @@ export async function runModelBenchmark(
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
           logger.warn(`Provider ${model.provider} executeTask failed for ${model.id}: ${errorMessage}`);
+          if (options.failFastProviderErrors) {
+            throw BenchmarkProviderError.from(err, model.provider, model.id);
+          }
           runOutput = `Benchmark run failed for ${model.id}: ${errorMessage}`;
         }
       } else {
@@ -204,6 +240,9 @@ export async function runModelBenchmark(
       tokenUsage.total += promptTokens + completionTokens;
       
     } catch (error) {
+      if (options.failFastProviderErrors && error instanceof BenchmarkProviderError) {
+        throw error;
+      }
       logger.error(`Error in run ${i + 1} for ${model.id}:`, error);
       
       // Still add the failed run to the results
@@ -464,6 +503,187 @@ export async function benchmarkTask(
   }
   
   return result;
+}
+
+export interface BenchmarkFreeModelsParams {
+  tasks: Array<Omit<BenchmarkTaskParams, 'expectedOutputLength' | 'complexity'> & {
+    expectedOutputLength?: number;
+    complexity?: number;
+  }>;
+  runsPerTask?: number;
+  parallel?: boolean;
+  maxParallelTasks?: number;
+  taskTimeout?: number;
+  saveResults?: boolean;
+}
+
+export interface BenchmarkFreeModelsResult {
+  results: Record<string, {
+    averageTime: number;
+    successRate: number;
+    averageQuality: number;
+    successfulTasks: number;
+    totalTasks: number;
+  }>;
+  summary: {
+    bestQualityModel: string;
+    bestSpeedModel: string;
+    totalTime: number;
+    modelsCount: number;
+    tasksCount: number;
+    runsCount: number;
+  };
+}
+
+function emptyModelResult() {
+  return {
+    model: 'none',
+    timeTaken: 0,
+    successRate: 0,
+    qualityScore: 0,
+    tokenUsage: { prompt: 0, completion: 0, total: 0 },
+    cost: 0,
+    output: ''
+  };
+}
+
+function resultTaskId(taskId: string, modelId: string): string {
+  return `${taskId}-${modelId.replace(/[^a-z0-9]/gi, '_')}`;
+}
+
+/**
+ * Benchmark currently healthy OpenRouter free models through the modular
+ * provider-backed runner and persist each run to benchmarkDb.
+ */
+export async function benchmarkFreeModels(params: BenchmarkFreeModelsParams): Promise<BenchmarkFreeModelsResult> {
+  const config: BenchmarkConfig = {
+    ...appConfig.benchmark,
+    runsPerTask: params.runsPerTask ?? appConfig.benchmark.runsPerTask,
+    parallel: params.parallel ?? appConfig.benchmark.parallel,
+    maxParallelTasks: params.maxParallelTasks ?? appConfig.benchmark.maxParallelTasks,
+    taskTimeout: params.taskTimeout ?? appConfig.benchmark.taskTimeout,
+    saveResults: params.saveResults ?? appConfig.benchmark.saveResults,
+  };
+
+  await initBenchmarkDb();
+  const freeModels = await costMonitor.getFreeModels(true);
+  if (freeModels.length === 0 || params.tasks.length === 0) {
+    return {
+      results: {},
+      summary: {
+        bestQualityModel: 'none',
+        bestSpeedModel: 'none',
+        totalTime: 0,
+        modelsCount: freeModels.length,
+        tasksCount: params.tasks.length,
+        runsCount: 0,
+      },
+    };
+  }
+
+  const perModel = new Map<string, {
+    totalTime: number;
+    totalQuality: number;
+    successfulTasks: number;
+    totalTasks: number;
+  }>();
+
+  for (const model of freeModels) {
+    const provider = getProviderRegistry().get(model.provider);
+    if (!provider) {
+      throw new BenchmarkProviderError(
+        'benchmark_provider_error',
+        model.provider,
+        model.id,
+        `No registered provider '${model.provider}' is available for benchmark_free_models`
+      );
+    }
+
+    const stats = {
+      totalTime: 0,
+      totalQuality: 0,
+      successfulTasks: 0,
+      totalTasks: 0,
+    };
+
+    for (const task of params.tasks) {
+      const expectedOutputLength = task.expectedOutputLength ?? 512;
+      const complexity = task.complexity ?? 0.5;
+      const run = await runModelBenchmark(
+        'paid',
+        model,
+        task.task,
+        task.contextLength,
+        expectedOutputLength,
+        config,
+        { failFastProviderErrors: true }
+      );
+
+      stats.totalTime += run.timeTaken;
+      stats.totalQuality += run.qualityScore;
+      stats.successfulTasks += run.successRate > 0 ? 1 : 0;
+      stats.totalTasks += 1;
+
+      if (config.saveResults) {
+        await saveBenchmarkResult({
+          taskId: resultTaskId(task.taskId, model.id),
+          task: task.task,
+          contextLength: task.contextLength,
+          outputLength: run.tokenUsage.completion || expectedOutputLength,
+          complexity,
+          local: emptyModelResult(),
+          paid: {
+            model: model.id,
+            timeTaken: run.timeTaken,
+            successRate: run.successRate,
+            qualityScore: run.qualityScore,
+            tokenUsage: run.tokenUsage,
+            cost: run.tokenUsage.prompt * (model.costPerToken?.prompt || 0) +
+              run.tokenUsage.completion * (model.costPerToken?.completion || 0),
+            output: run.output || '',
+            runs: run.runs,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    perModel.set(model.id, stats);
+  }
+
+  const results: BenchmarkFreeModelsResult['results'] = {};
+  for (const [modelId, stats] of perModel) {
+    results[modelId] = {
+      averageTime: stats.totalTasks > 0 ? stats.totalTime / stats.totalTasks : 0,
+      successRate: stats.totalTasks > 0 ? stats.successfulTasks / stats.totalTasks : 0,
+      averageQuality: stats.totalTasks > 0 ? stats.totalQuality / stats.totalTasks : 0,
+      successfulTasks: stats.successfulTasks,
+      totalTasks: stats.totalTasks,
+    };
+  }
+
+  const entries = Object.entries(results);
+  const bestQualityModel = entries.reduce(
+    (best, current) => current[1].averageQuality > best[1].averageQuality ? current : best,
+    entries[0]
+  )?.[0] ?? 'none';
+  const bestSpeedModel = entries.reduce(
+    (best, current) => current[1].averageTime < best[1].averageTime ? current : best,
+    entries[0]
+  )?.[0] ?? 'none';
+  const totalTime = entries.reduce((sum, [, result]) => sum + result.averageTime * result.totalTasks, 0);
+
+  return {
+    results,
+    summary: {
+      bestQualityModel,
+      bestSpeedModel,
+      totalTime,
+      modelsCount: freeModels.length,
+      tasksCount: params.tasks.length,
+      runsCount: entries.reduce((sum, [, result]) => sum + result.totalTasks, 0),
+    },
+  };
 }
 
 export function getDynamicTimeout(modelId: string, contextWindow: number = 4096, taskComplexity: number = 0.5): number {
