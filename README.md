@@ -195,6 +195,8 @@ cp .env.example .env
 
 Then edit the `.env` file with your specific configuration:
 
+The server resolves `.env` from its own root directory (or `LOCALLAMA_ROOT_DIR` when set), not from the MCP host's current working directory.
+
 ```
 # Local LLM Endpoints
 LM_STUDIO_ENDPOINT=http://localhost:1234/v1

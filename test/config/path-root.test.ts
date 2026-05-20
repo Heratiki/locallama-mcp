@@ -11,6 +11,7 @@ const originalRootDir = process.env.LOCALLAMA_ROOT_DIR;
 const originalProviderMaxConcurrentLocal = process.env.PROVIDER_MAX_CONCURRENT_LOCAL;
 const originalProviderMaxConcurrentRemote = process.env.PROVIDER_MAX_CONCURRENT_REMOTE;
 const originalProviderTimeoutMs = process.env.PROVIDER_TIMEOUT_MS;
+const originalBenchmarkResultsPath = process.env.BENCHMARK_RESULTS_PATH;
 
 function importFreshModule(modulePath: string, cacheKey: string) {
   const moduleUrl = new URL(`${pathToFileURL(modulePath).href}?${cacheKey}`);
@@ -43,6 +44,12 @@ afterEach(() => {
   } else {
     process.env.PROVIDER_TIMEOUT_MS = originalProviderTimeoutMs;
   }
+
+  if (originalBenchmarkResultsPath === undefined) {
+    delete process.env.BENCHMARK_RESULTS_PATH;
+  } else {
+    process.env.BENCHMARK_RESULTS_PATH = originalBenchmarkResultsPath;
+  }
 });
 
 describe('root path resolution', () => {
@@ -55,11 +62,11 @@ describe('root path resolution', () => {
 
     const configModule = await importFreshModule(
       path.resolve(originalCwd, 'dist/config/index.js'),
-      `config=${Date.now()}`
+      `config=${randomUUID()}`
     );
     const lockModule = await importFreshModule(
       path.resolve(originalCwd, 'dist/utils/lock-file.js'),
-      `lock=${Date.now()}`
+      `lock=${randomUUID()}`
     );
 
     try {
@@ -74,6 +81,50 @@ describe('root path resolution', () => {
     } finally {
       lockModule.removeLockFile();
       process.chdir(originalCwd);
+      fs.rmSync(tempRootDir, { recursive: true, force: true });
+      fs.rmSync(foreignCwd, { recursive: true, force: true });
+    }
+  });
+
+  it('loads startup .env from rootDir rather than caller cwd', async () => {
+    const tempRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-root-env-'));
+    const foreignCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-cwd-env-'));
+    const expectedResultsPath = path.join(tempRootDir, 'from-root');
+    const distConfigHref = pathToFileURL(path.resolve(originalCwd, 'dist/config/index.js')).href;
+
+    fs.writeFileSync(path.join(tempRootDir, '.env'), `BENCHMARK_RESULTS_PATH=${expectedResultsPath}\n`, 'utf8');
+    fs.writeFileSync(path.join(foreignCwd, '.env'), 'BENCHMARK_RESULTS_PATH=from-cwd\n', 'utf8');
+
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      LOCALLAMA_ROOT_DIR: tempRootDir,
+    };
+    delete childEnv.BENCHMARK_RESULTS_PATH;
+
+    try {
+      const script = [
+        `import('${distConfigHref}').then(({ config }) => {`,
+        'console.log(config.benchmark.resultsPath);',
+        '});',
+      ].join('');
+      const output = execFileSync(
+        process.execPath,
+        ['--input-type=module', '-e', script],
+        {
+          cwd: foreignCwd,
+          env: childEnv,
+          encoding: 'utf8',
+        },
+      );
+
+      const resolvedPath = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .pop();
+
+      expect(resolvedPath).toBe(expectedResultsPath);
+    } finally {
       fs.rmSync(tempRootDir, { recursive: true, force: true });
       fs.rmSync(foreignCwd, { recursive: true, force: true });
     }
