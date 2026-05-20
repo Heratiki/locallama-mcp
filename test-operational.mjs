@@ -662,6 +662,144 @@ async function runSuite(client, serverEnv) {
       }
     });
 
+    await runTest('[mock][F-2a] cross-provider handoff triggers releaseResources on previous local runtime', async () => {
+      const {
+        ProviderRegistry,
+        _setProviderRegistryForTests,
+        localProviderLifecycle,
+        _resetLocalProviderLifecycleForTests,
+      } = await import('./dist/modules/core/provider/index.js');
+
+      _resetLocalProviderLifecycleForTests();
+
+      const unloadCalls = [];
+      const makeLocalProvider = (id) => ({
+        id,
+        displayName: id,
+        costClass: 'local',
+        isLocal: true,
+        init: async () => {},
+        isAvailable: async () => true,
+        listModels: async () => [],
+        supportsModel: () => true,
+        executeTask: async () => ({ content: 'ok', model: id }),
+        releaseResources: async (opts) => { unloadCalls.push({ id, opts }); },
+        getCost: () => ({ prompt: 0, completion: 0 }),
+      });
+
+      const registry = new ProviderRegistry();
+      const ollama = makeLocalProvider('ollama');
+      const lmStudio = makeLocalProvider('lm-studio');
+      registry.register(ollama);
+      registry.register(lmStudio);
+      _setProviderRegistryForTests(registry);
+
+      try {
+        // First execution on Ollama with model A
+        await localProviderLifecycle.beforeExecution(ollama, 'qwen2.5-coder:7b');
+        assert(unloadCalls.length === 0, '[mock][F-2a] no unload before any cross-provider switch');
+
+        // Switch to LM Studio — should trigger Ollama unload
+        await localProviderLifecycle.beforeExecution(lmStudio, 'google/gemma-4');
+        assert(unloadCalls.length === 1, '[mock][F-2a] exactly one releaseResources call after cross-provider switch');
+        assert(unloadCalls[0].id === 'ollama', '[mock][F-2a] releaseResources called on the previous provider (ollama)');
+        assert(unloadCalls[0].opts?.reason === 'cross-provider-handoff', '[mock][F-2a] releaseResources called with cross-provider-handoff reason');
+        assert(unloadCalls[0].opts?.modelId === 'qwen2.5-coder:7b', '[mock][F-2a] releaseResources passes the previously loaded model ID');
+      } finally {
+        _resetLocalProviderLifecycleForTests();
+        _setProviderRegistryForTests(undefined);
+      }
+    });
+
+    await runTest('[mock][F-2b] same-provider reuse does NOT trigger releaseResources', async () => {
+      const {
+        ProviderRegistry,
+        _setProviderRegistryForTests,
+        localProviderLifecycle,
+        _resetLocalProviderLifecycleForTests,
+      } = await import('./dist/modules/core/provider/index.js');
+
+      _resetLocalProviderLifecycleForTests();
+
+      const unloadCalls = [];
+      const ollama = {
+        id: 'ollama',
+        displayName: 'ollama',
+        costClass: 'local',
+        isLocal: true,
+        init: async () => {},
+        isAvailable: async () => true,
+        listModels: async () => [],
+        supportsModel: () => true,
+        executeTask: async () => ({ content: 'ok', model: 'ollama' }),
+        releaseResources: async (opts) => { unloadCalls.push(opts); },
+        getCost: () => ({ prompt: 0, completion: 0 }),
+      };
+
+      const registry = new ProviderRegistry();
+      registry.register(ollama);
+      _setProviderRegistryForTests(registry);
+
+      try {
+        await localProviderLifecycle.beforeExecution(ollama, 'model-a');
+        await localProviderLifecycle.beforeExecution(ollama, 'model-b');
+        await localProviderLifecycle.beforeExecution(ollama, 'model-c');
+        assert(unloadCalls.length === 0, '[mock][F-2b] same-provider reuse across 3 model switches triggers zero releaseResources calls — no VRAM accumulation signal');
+      } finally {
+        _resetLocalProviderLifecycleForTests();
+        _setProviderRegistryForTests(undefined);
+      }
+    });
+
+    await runTest('[mock][F-2c] multiple cross-provider switches each unload exactly the previous local runtime', async () => {
+      const {
+        ProviderRegistry,
+        _setProviderRegistryForTests,
+        localProviderLifecycle,
+        _resetLocalProviderLifecycleForTests,
+      } = await import('./dist/modules/core/provider/index.js');
+
+      _resetLocalProviderLifecycleForTests();
+
+      const unloadLog = [];
+      const makeLocalProvider = (id) => ({
+        id,
+        displayName: id,
+        costClass: 'local',
+        isLocal: true,
+        init: async () => {},
+        isAvailable: async () => true,
+        listModels: async () => [],
+        supportsModel: () => true,
+        executeTask: async () => ({ content: 'ok', model: id }),
+        releaseResources: async (opts) => { unloadLog.push({ providerId: id, modelId: opts?.modelId }); },
+        getCost: () => ({ prompt: 0, completion: 0 }),
+      });
+
+      const registry = new ProviderRegistry();
+      const ollama = makeLocalProvider('ollama');
+      const lmStudio = makeLocalProvider('lm-studio');
+      registry.register(ollama);
+      registry.register(lmStudio);
+      _setProviderRegistryForTests(registry);
+
+      try {
+        // ollama → lmStudio → ollama → lmStudio: 3 switches, 3 unloads
+        await localProviderLifecycle.beforeExecution(ollama, 'model-A');
+        await localProviderLifecycle.beforeExecution(lmStudio, 'model-B');
+        await localProviderLifecycle.beforeExecution(ollama, 'model-C');
+        await localProviderLifecycle.beforeExecution(lmStudio, 'model-D');
+
+        assert(unloadLog.length === 3, '[mock][F-2c] exactly 3 unloads for 3 cross-provider switches — no accumulation');
+        assert(unloadLog[0].providerId === 'ollama' && unloadLog[0].modelId === 'model-A', '[mock][F-2c] first unload: ollama:model-A');
+        assert(unloadLog[1].providerId === 'lm-studio' && unloadLog[1].modelId === 'model-B', '[mock][F-2c] second unload: lm-studio:model-B');
+        assert(unloadLog[2].providerId === 'ollama' && unloadLog[2].modelId === 'model-C', '[mock][F-2c] third unload: ollama:model-C');
+      } finally {
+        _resetLocalProviderLifecycleForTests();
+        _setProviderRegistryForTests(undefined);
+      }
+    });
+
   }
 
   // ── 3. LLM: Real model calls via Ollama ───────────────────────────────────
