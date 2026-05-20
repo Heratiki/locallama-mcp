@@ -350,8 +350,6 @@ export class Router implements IRouter {
 
       // Load user preferences
       const userPreferences = await loadUserPreferences();
-      const executionMode = userPreferences.executionMode || 'Fully automated selection';
-
       // Cost estimation
       const costEstimate = await costEstimator.estimateCost({
         contextLength: params.contextLength,
@@ -765,27 +763,6 @@ function generateRoutingReason(decision: { model: string; reason?: string }): st
     return 'Selected API model for optimal quality';
   } else {
     return 'Selected based on current routing policy';
-  }
-}
-
-/**
- * Helper function to calculate estimated completion time
- */
-function calculateEstimatedTime(decision: { model: string; estimatedTime?: number }): number {
-  // Check if the decision already has an estimatedTime property
-  if (decision.estimatedTime) {
-    return decision.estimatedTime;
-  }
-  
-  // Estimate based on model type
-  if (decision.model.includes('gpt-4')) {
-    return 30000; // 30 seconds
-  } else if (decision.model.includes('gpt-3.5')) {
-    return 15000; // 15 seconds
-  } else if (decision.model.startsWith('ollama:')) {
-    return 60000; // 60 seconds for local models
-  } else {
-    return 20000; // 20 seconds default
   }
 }
 

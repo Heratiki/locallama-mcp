@@ -8,9 +8,7 @@ import {
   initJobStore,
   insertJob as dbInsertJob,
   updateJob as dbUpdateJob,
-  getJob as dbGetJob,
   getAllJobs as dbGetAllJobs,
-  getActiveJobs as dbGetActiveJobs,
   deleteOldJobs as dbDeleteOldJobs
 } from '../../job-store/index.js';
 import { refreshAlertState } from '../../job-store/alert.js';

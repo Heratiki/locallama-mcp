@@ -38,7 +38,7 @@ export default [
       // General rules for all TS files
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', ignoreRestSiblings: true }],
       'no-console': 'warn',
       'prefer-const': 'warn',
       'eqeqeq': ['warn', 'always'],

@@ -4,12 +4,11 @@ import { dependencyMapper } from './dependencyMapper.js';
 import { codeModelSelector } from './codeModelSelector.js';
 import { ModelNotFoundError } from '../../openrouter/index.js'; // Import ModelNotFoundError
 import { InferenceTimeoutError } from '../../utils/inferenceTimeout.js';
-import { fallbackHandler } from '../../fallback-handler/index.js'; // Import fallback handler for service availability checks
 import { getProviderRegistry } from '../../core/provider/registry.js';
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
-import { getJobTracker, JobStatus } from './jobTracker.js'; // Import job tracker
+import { getJobTracker } from './jobTracker.js'; // Import job tracker
 import { config } from '../../../config/index.js';
 import {
   assertPromptWithinContextWindow,
@@ -684,7 +683,6 @@ Please provide only the integrated code, without explanations or wrappers, unles
     const modelsToTry = await this.selectModelsForIntegration(integrationContext.length);
     
     let integratedCode: string | null = null;
-    let integrationModel: Model | null = null;
 
     for (const model of modelsToTry) {
       try {
@@ -693,6 +691,7 @@ Please provide only the integrated code, without explanations or wrappers, unles
         const bareId = model.id.startsWith(`${model.provider}:`)
           ? model.id.slice(model.provider.length + 1)
           : model.id;
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- supportsModel may return Promise; any truthy result selects the provider
         const provider = registry.get(model.provider) ?? registry.list().find((p) => p.supportsModel(bareId));
         assertPromptWithinContextWindow(model, integrationPrompt);
 
@@ -711,7 +710,6 @@ Please provide only the integrated code, without explanations or wrappers, unles
           // Basic validation: check if it's not empty and contains some code-like structure
           if (resultText.trim().length > 50 && (resultText.includes('def ') || resultText.includes('class ') || resultText.includes('import '))) {
             integratedCode = resultText;
-            integrationModel = model;
             logger.info(`Integration step successful with model ${model.id}`);
             break; // Success
           } else {

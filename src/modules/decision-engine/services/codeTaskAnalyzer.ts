@@ -26,12 +26,6 @@ type RawSubtask = {
   [key: string]: unknown; // Changed from any to unknown
 };
 
-// Helper function to check if an object has a subtasks array
-function isSubtasksWrapper(obj: unknown): obj is { subtasks: RawSubtask[] } {
-  return typeof obj === 'object' && obj !== null && 
-         'subtasks' in obj && Array.isArray((obj as Record<string, unknown>).subtasks);
-}
-
 // Prompt for decomposing a task into subtasks
 const DECOMPOSE_TASK_PROMPT = `
 You are an expert software architect. Your task is to decompose a given coding task into smaller, manageable subtasks.
@@ -818,7 +812,7 @@ export const codeTaskAnalyzer = {
           }
         } catch {
           // If JSON parsing fails, split by commas
-          dependencies = dependenciesMatch[1].replace(/[\[\]'"\s]/g, '').split(',');
+          dependencies = dependenciesMatch[1].replace(/[[\]'"\s]/g, '').split(',');
         }
       } else {
         // Split by commas
@@ -1042,7 +1036,6 @@ export const codeTaskAnalyzer = {
  * @param taskDescription The task description
  * @returns Detailed integration complexity factors
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 async function evaluateIntegrationFactors(taskDescription: string): Promise<IntegrationFactors> {
   const patterns = {
     systemInteractions: [
@@ -1096,7 +1089,6 @@ async function evaluateIntegrationFactors(taskDescription: string): Promise<Inte
  * @param taskDescription The task description to evaluate
  * @returns Domain knowledge evaluation scores
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 async function evaluateDomainKnowledge(taskDescription: string): Promise<DomainFactors> {
   const patterns = {
     domainSpecificity: [
@@ -1155,7 +1147,6 @@ async function evaluateDomainKnowledge(taskDescription: string): Promise<DomainF
  * @param taskDescription The task description to evaluate
  * @returns Technical requirements evaluation scores
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 async function evaluateTechnicalRequirements(taskDescription: string): Promise<Record<string, number>> {
   // Define patterns to recognize different technical requirement aspects
   const patterns = {
