@@ -55,6 +55,7 @@ export interface Config {
   tokenThreshold: number;
   costThreshold: number;
   qualityThreshold: number;
+  codeScoreThreshold: number;
   
   // API Keys
   openRouterApiKey?: string;
@@ -144,6 +145,7 @@ export const config: Config = {
   tokenThreshold: parseInt(process.env.TOKEN_THRESHOLD || '1000', 10),
   costThreshold: parseFloat(process.env.COST_THRESHOLD || '0.02'),
   qualityThreshold: parseFloat(process.env.QUALITY_THRESHOLD || '0.7'),
+  codeScoreThreshold: parseNumber(process.env.CODE_SCORE_THRESHOLD, 0.3),
   
   // API Keys
   openRouterApiKey: process.env.OPENROUTER_API_KEY,
@@ -222,6 +224,9 @@ export function validateConfig(): void {
   }
   if (config.qualityThreshold <= 0 || config.qualityThreshold > 1) {
     errors.push(`Invalid quality threshold: ${config.qualityThreshold}`);
+  }
+  if (config.codeScoreThreshold < 0 || config.codeScoreThreshold > 1) {
+    errors.push(`Invalid codeScoreThreshold: ${config.codeScoreThreshold}`);
   }
   // Validate model config
   const { temperature, topP, maxTokens } = config.defaultModelConfig;
