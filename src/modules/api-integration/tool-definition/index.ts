@@ -152,6 +152,17 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         }
       },
       {
+        name: 'reload_config',
+        description:
+          'Reload runtime configuration from the project .env file and apply only hot-reloadable fields. ' +
+          'Validation is atomic: if the updated config is invalid, no changes are applied.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
         name: 'preemptive_route_task',
         description:
           'Cheap model-selection check that returns a routing recommendation WITHOUT executing the task. ' +

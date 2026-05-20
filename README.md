@@ -86,6 +86,8 @@ The following tools are available in the LocalLama MCP Server:
     *   **Input:** `directories`, `exclude_patterns`, `chunk_size`, `force_reindex`, `bm25_options`, `install_dependencies`
 *   `cancel_job`: Cancel a running job.
     *   **Input:** `job_id`
+*   `reload_config`: Reload `.env` at runtime and apply hot-reloadable settings only.
+  *   **Input:** none
 *   `preemptive_route_task`: Quickly route a coding task without making API calls (faster but less accurate).
     *   **Input:** `task`, `context_length`, `expected_output_length`, `complexity`, `priority`
 *   `get_cost_estimate`: Get an estimate of the cost for a task.
