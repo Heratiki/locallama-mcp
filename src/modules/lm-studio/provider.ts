@@ -88,7 +88,7 @@ class LMStudioProvider implements LLMProvider {
     return { content, model: id };
   }
 
-  async releaseResources(options?: { reason?: 'cross-provider-handoff' | 'shutdown' | 'manual'; modelId?: string }): Promise<void> {
+  async releaseResources(options?: { reason?: 'cross-provider-handoff' | 'same-provider-model-switch' | 'shutdown' | 'manual'; modelId?: string }): Promise<void> {
     const modelId = options?.modelId ?? this.lastExecutedModelId;
     if (!modelId) {
       return;

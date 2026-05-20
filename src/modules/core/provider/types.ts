@@ -58,7 +58,7 @@ export interface LLMProvider {
   ): Promise<TaskExecutionResult>;
 
   releaseResources?(options?: {
-    reason?: 'cross-provider-handoff' | 'shutdown' | 'manual';
+    reason?: 'cross-provider-handoff' | 'same-provider-model-switch' | 'shutdown' | 'manual';
     modelId?: string;
   }): Promise<void>;
 
