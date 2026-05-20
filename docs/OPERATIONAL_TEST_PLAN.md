@@ -375,7 +375,13 @@ Issue 17 (cross-provider local model lifecycle) has no test coverage:
 
 2026-05-20 update: Added a mock-based routing-suite assertion in `test-operational.mjs` (`[mock][F-4] circuit-open Ollama fallback routes to LM Studio`) covering the core Ollama -> LM Studio failover path when Ollama's circuit is open. Explicit unload and quantitative memory assertions remain open.
 
-**Blocker:** Issue 17's unload hook is now implemented. The failover and explicit-unload assertions can be added now. Quantitative VRAM/RAM accumulation checks still depend on Issue 31 (memory monitoring).
+2026-05-20 update (Issue 27): Added three mock-based F-2 assertions to the routing suite in `test-operational.mjs`:
+
+- `[mock][F-2a] cross-provider handoff triggers releaseResources on previous local runtime` — verifies `localProviderLifecycle.beforeExecution` calls `releaseResources` on the prior provider with `reason: 'cross-provider-handoff'` and the correct `modelId`.
+- `[mock][F-2b] same-provider reuse does NOT trigger releaseResources` — verifies that switching models within the same provider (Ollama → Ollama) never calls `releaseResources`; zero unload calls across 3 model switches confirms no spurious VRAM-accumulation signal.
+- `[mock][F-2c] multiple cross-provider switches each unload exactly the previous local runtime` — verifies that N cross-provider switches produce exactly N `releaseResources` calls, one per handoff, with the correct provider ID and model ID at each step; confirms no accumulation leak.
+
+**Status:** Mock-based F-2 coverage complete. Live telemetry validation (quantitative VRAM/RAM usage across real Ollama ↔ LM Studio switches) still depends on Issue 31 (memory monitoring).
 
 ---
 
