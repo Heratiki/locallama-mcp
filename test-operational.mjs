@@ -780,10 +780,19 @@ async function runSuite(client, serverEnv) {
       _setProviderRegistryForTests(registry);
 
       try {
+        // Each switch to a different model within the same provider should trigger
+        // a releaseResources call for the previously loaded model.
         await localProviderLifecycle.beforeExecution(ollama, 'model-a');
+        assert(unloadCalls.length === 0, '[mock][F-2b] no unload on first execution (no previous model)');
+
         await localProviderLifecycle.beforeExecution(ollama, 'model-b');
+        assert(unloadCalls.length === 1, '[mock][F-2b] one unload after first same-provider model switch');
+        assert(unloadCalls[0]?.reason === 'same-provider-model-switch', '[mock][F-2b] reason is same-provider-model-switch');
+        assert(unloadCalls[0]?.modelId === 'model-a', '[mock][F-2b] unloads the previously active model (model-a)');
+
         await localProviderLifecycle.beforeExecution(ollama, 'model-c');
-        assert(unloadCalls.length === 0, '[mock][F-2b] same-provider reuse across 3 model switches triggers zero releaseResources calls — no VRAM accumulation signal');
+        assert(unloadCalls.length === 2, '[mock][F-2b] two unloads after two same-provider model switches');
+        assert(unloadCalls[1]?.modelId === 'model-b', '[mock][F-2b] second unload targets model-b');
       } finally {
         _resetLocalProviderLifecycleForTests();
         _setProviderRegistryForTests(undefined);
@@ -833,6 +842,55 @@ async function runSuite(client, serverEnv) {
         assert(unloadLog[0].providerId === 'ollama' && unloadLog[0].modelId === 'model-A', '[mock][F-2c] first unload: ollama:model-A');
         assert(unloadLog[1].providerId === 'lm-studio' && unloadLog[1].modelId === 'model-B', '[mock][F-2c] second unload: lm-studio:model-B');
         assert(unloadLog[2].providerId === 'ollama' && unloadLog[2].modelId === 'model-C', '[mock][F-2c] third unload: ollama:model-C');
+      } finally {
+        _resetLocalProviderLifecycleForTests();
+        _setProviderRegistryForTests(undefined);
+      }
+    });
+
+    await runTest('[mock][F-2d] same-provider model switch triggers releaseResources for the previous model', async () => {
+      const {
+        ProviderRegistry,
+        _setProviderRegistryForTests,
+        localProviderLifecycle,
+        _resetLocalProviderLifecycleForTests,
+      } = await import('./dist/modules/core/provider/index.js');
+
+      _resetLocalProviderLifecycleForTests();
+
+      const unloadLog = [];
+      const ollama = {
+        id: 'ollama',
+        displayName: 'ollama',
+        costClass: 'local',
+        isLocal: true,
+        init: async () => {},
+        isAvailable: async () => true,
+        listModels: async () => [],
+        supportsModel: () => true,
+        executeTask: async () => ({ content: 'ok', model: 'ollama' }),
+        releaseResources: async (opts) => { unloadLog.push({ reason: opts?.reason, modelId: opts?.modelId }); },
+        getCost: () => ({ prompt: 0, completion: 0 }),
+      };
+
+      const registry = new ProviderRegistry();
+      registry.register(ollama);
+      _setProviderRegistryForTests(registry);
+
+      try {
+        // Load model-A: no previous model, so no unload
+        await localProviderLifecycle.beforeExecution(ollama, 'llama-3-8b');
+        assert(unloadLog.length === 0, '[mock][F-2d] no unload on first model load');
+
+        // Switch to model-B within the same provider: should unload model-A
+        await localProviderLifecycle.beforeExecution(ollama, 'qwen-2.5-7b');
+        assert(unloadLog.length === 1, '[mock][F-2d] one unload after switching from llama-3-8b to qwen-2.5-7b');
+        assert(unloadLog[0].reason === 'same-provider-model-switch', '[mock][F-2d] reason is same-provider-model-switch');
+        assert(unloadLog[0].modelId === 'llama-3-8b', '[mock][F-2d] unloaded model is llama-3-8b (the previous model)');
+
+        // Re-executing model-B (same model): should NOT trigger unload
+        await localProviderLifecycle.beforeExecution(ollama, 'qwen-2.5-7b');
+        assert(unloadLog.length === 1, '[mock][F-2d] no extra unload when re-executing the same model');
       } finally {
         _resetLocalProviderLifecycleForTests();
         _setProviderRegistryForTests(undefined);

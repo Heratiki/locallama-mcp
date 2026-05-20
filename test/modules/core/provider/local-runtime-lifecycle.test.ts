@@ -57,7 +57,7 @@ describe('localProviderLifecycle', () => {
     expect(lmStudio.releaseResources).not.toHaveBeenCalled();
   });
 
-  it('does not unload when the same local provider is reused', async () => {
+  it('unloads the previous model when switching models within the same local provider', async () => {
     const registry = new ProviderRegistry();
     const ollama = makeLocalProvider('ollama');
     registry.register(ollama);
@@ -66,6 +66,42 @@ describe('localProviderLifecycle', () => {
     await localProviderLifecycle.beforeExecution(ollama, 'qwen2.5-coder:7b');
     await localProviderLifecycle.beforeExecution(ollama, 'qwen2.5-coder:14b');
 
+    expect(ollama.releaseResources).toHaveBeenCalledTimes(1);
+    expect(ollama.releaseResources).toHaveBeenCalledWith({
+      reason: 'same-provider-model-switch',
+      modelId: 'qwen2.5-coder:7b',
+    });
+  });
+
+  it('does not unload on the very first execution (no previous model)', async () => {
+    const registry = new ProviderRegistry();
+    const ollama = makeLocalProvider('ollama');
+    registry.register(ollama);
+    _setProviderRegistryForTests(registry);
+
+    await localProviderLifecycle.beforeExecution(ollama, 'qwen2.5-coder:7b');
+
     expect(ollama.releaseResources).not.toHaveBeenCalled();
+  });
+
+  it('unloads the previous model on each same-provider switch across multiple switches', async () => {
+    const registry = new ProviderRegistry();
+    const ollama = makeLocalProvider('ollama');
+    registry.register(ollama);
+    _setProviderRegistryForTests(registry);
+
+    await localProviderLifecycle.beforeExecution(ollama, 'model-a');
+    await localProviderLifecycle.beforeExecution(ollama, 'model-b');
+    await localProviderLifecycle.beforeExecution(ollama, 'model-c');
+
+    expect(ollama.releaseResources).toHaveBeenCalledTimes(2);
+    expect(ollama.releaseResources).toHaveBeenNthCalledWith(1, {
+      reason: 'same-provider-model-switch',
+      modelId: 'model-a',
+    });
+    expect(ollama.releaseResources).toHaveBeenNthCalledWith(2, {
+      reason: 'same-provider-model-switch',
+      modelId: 'model-b',
+    });
   });
 });
