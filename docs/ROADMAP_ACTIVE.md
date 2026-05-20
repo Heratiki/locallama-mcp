@@ -168,7 +168,7 @@ all four should land before Task 5 begins.
 **Depends on:** Task 3 (circuit breaker must exist before rate-limit layer uses it) and Task 4 (context enforcement prevents runaway long-prompt dispatches).
 
 **Scope:**
-- Design and implement per-provider concurrency cap (configurable, default: 2 concurrent requests per local provider, 5 per remote).
+- Design and implement provider concurrency caps (configurable; default: one shared local slot and one slot per remote provider).
 - Decide and document the long-run transport strategy: streaming tool results vs async job model (update `docs/PLAN.md` Issue 18 section with the decision).
 - Add a configurable `OLLAMA_TIMEOUT` (default 120 s) that returns a structured timeout error rather than hanging.
 

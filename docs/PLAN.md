@@ -922,7 +922,7 @@ Issues below are in the same severity and scope class as Issues #15–17. None a
 
 **Required research before implementation:** The MCP SDK's `StdioTransport` and `SSETransport` have different streaming semantics. Streaming tool results may require a protocol-level change. Investigate whether the MCP spec supports incremental tool result chunks, or whether the correct approach is an async job model (call `route_task` → get `jobId` → poll `cancel_job`/status until done). This is a **major design decision** requiring extensive research and planning before implementation.
 
-**Decision (2026-05-19):** Use the async job model as the primary long-run transport strategy and treat streaming tool chunks as an optional future enhancement. The current MCP tool contract already has `jobId`/`cancel_job` semantics and works across stdio clients without introducing protocol-specific partial-result behavior, while async jobs avoid client timeout ceilings for long inference and benchmark runs. This keeps compatibility stable for Codex/Copilot/Claude clients today and lets us ship reliability controls (timeouts, queueing, progress resources) immediately without waiting on transport-level streaming guarantees.
+**Decision (2026-05-19):** Use the async job model as the primary long-run transport strategy and treat streaming tool chunks as an optional future enhancement. The current MCP tool contract already has `jobId`/`cancel_job` semantics and works across stdio clients without introducing protocol-specific partial-result behavior, while async jobs avoid client timeout ceilings for long inference and benchmark runs. This keeps compatibility stable for Codex/Copilot/Claude clients today and lets us ship reliability controls (timeouts, queueing, progress resources) immediately without waiting on transport-level streaming guarantees. ADR-0001 formalizes the queue shape used by this decision: local providers share one execution slot because they contend for the same VRAM, while each remote provider has its own FIFO queue and execution slot.
 
 **Status:** 🚧 In progress. Transport decision documented; async-job execution path hardening still ongoing.
 
@@ -941,6 +941,8 @@ Issues below are in the same severity and scope class as Issues #15–17. None a
 - Silent inference degradation (Ollama serializes requests internally; callers see high latency, not an error).
 
 **Required research:** Whether the MCP SDK's transport layer supports backpressure, or whether queuing must be implemented at the application layer. Concurrency limits should be per-provider, not global. This interacts with Issue 18 (streaming/async job model). **Moderate engineering effort; design required.**
+
+**Implementation note (2026-05-20):** Application-level provider queuing is now wired through `ProviderRegistry.executeWithConcurrencyLimit()`. Local providers use a shared `local` FIFO queue with `PROVIDER_MAX_CONCURRENT_LOCAL=1` by default, matching the VRAM constraint in ADR-0001. Remote providers use independent queues keyed by provider id with `PROVIDER_MAX_CONCURRENT_REMOTE=1` by default. Both caps remain configurable through environment variables.
 
 **Status:** 🚧 In progress.
 

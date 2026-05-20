@@ -194,4 +194,64 @@ describe('TaskExecutor (provider-agnostic dispatch)', () => {
       executor.executeTask('unknown-model-xyz', 'hi', 'job-unknown'),
     ).rejects.toThrow(/No provider found/);
   });
+
+  it('serializes concurrent task execution across different local providers', async () => {
+    const events: string[] = [];
+    let releaseFirst: (() => void) | undefined;
+
+    lmStudio.executeTask.mockImplementation(async () => {
+      events.push('lm-studio:start');
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      events.push('lm-studio:end');
+      return { content: 'result-from-lm-studio', model: 'lm-studio' };
+    });
+
+    ollama.executeTask.mockImplementation(async () => {
+      events.push('ollama:start');
+      return { content: 'result-from-ollama', model: 'ollama' };
+    });
+
+    const executor = new TaskExecutor();
+    const first = executor.executeTask('lm-studio:llama-3.2-3b', 'first', 'job-local-1');
+    const second = executor.executeTask('ollama:qwen2.5-coder-7b', 'second', 'job-local-2');
+
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(events).toEqual(['lm-studio:start']);
+
+    releaseFirst?.();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      'result-from-lm-studio',
+      'result-from-ollama',
+    ]);
+    expect(events).toEqual(['lm-studio:start', 'lm-studio:end', 'ollama:start']);
+  });
+
+  it('allows one local task and one remote task to execute concurrently', async () => {
+    const active = new Set<string>();
+    let observedOverlap = false;
+
+    const run = async (label: string, content: string) => {
+      active.add(label);
+      observedOverlap = observedOverlap || (active.has('lm-studio') && active.has('openrouter'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      active.delete(label);
+      return { content, model: label };
+    };
+
+    lmStudio.executeTask.mockImplementation(async () => await run('lm-studio', 'result-from-lm-studio'));
+    openRouter.executeTask.mockImplementation(async () => await run('openrouter', 'result-from-openrouter'));
+
+    const executor = new TaskExecutor();
+    const [localResult, remoteResult] = await Promise.all([
+      executor.executeTask('lm-studio:llama-3.2-3b', 'local', 'job-local'),
+      executor.executeTask('openrouter:anthropic/claude-3.5-haiku', 'remote', 'job-remote'),
+    ]);
+
+    expect([localResult, remoteResult]).toEqual(['result-from-lm-studio', 'result-from-openrouter']);
+    expect(observedOverlap).toBe(true);
+  });
 });

@@ -1,11 +1,15 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { randomUUID } from 'crypto';
+import { execFileSync } from 'child_process';
 import { pathToFileURL } from 'url';
 import { afterEach, describe, expect, it } from '@jest/globals';
 
 const originalCwd = process.cwd();
 const originalRootDir = process.env.LOCALLAMA_ROOT_DIR;
+const originalProviderMaxConcurrentLocal = process.env.PROVIDER_MAX_CONCURRENT_LOCAL;
+const originalProviderMaxConcurrentRemote = process.env.PROVIDER_MAX_CONCURRENT_REMOTE;
 
 function importFreshModule(modulePath: string, cacheKey: string) {
   const moduleUrl = new URL(`${pathToFileURL(modulePath).href}?${cacheKey}`);
@@ -19,6 +23,18 @@ afterEach(() => {
     delete process.env.LOCALLAMA_ROOT_DIR;
   } else {
     process.env.LOCALLAMA_ROOT_DIR = originalRootDir;
+  }
+
+  if (originalProviderMaxConcurrentLocal === undefined) {
+    delete process.env.PROVIDER_MAX_CONCURRENT_LOCAL;
+  } else {
+    process.env.PROVIDER_MAX_CONCURRENT_LOCAL = originalProviderMaxConcurrentLocal;
+  }
+
+  if (originalProviderMaxConcurrentRemote === undefined) {
+    delete process.env.PROVIDER_MAX_CONCURRENT_REMOTE;
+  } else {
+    process.env.PROVIDER_MAX_CONCURRENT_REMOTE = originalProviderMaxConcurrentRemote;
   }
 });
 
@@ -66,5 +82,46 @@ describe('root path resolution', () => {
 
     expect(path.isAbsolute(derivedRootDir)).toBe(true);
     expect(fs.existsSync(derivedRootDir)).toBe(true);
+  });
+
+  it('defaults provider concurrency caps to one local slot and one remote slot', async () => {
+    delete process.env.PROVIDER_MAX_CONCURRENT_LOCAL;
+    delete process.env.PROVIDER_MAX_CONCURRENT_REMOTE;
+
+    const configModule = await importFreshModule(
+      path.resolve(originalCwd, 'dist/config/index.js'),
+      `provider-defaults=${randomUUID()}`
+    );
+
+    expect(configModule.config.providerMaxConcurrentLocal).toBe(1);
+    expect(configModule.config.providerMaxConcurrentRemote).toBe(1);
+  });
+
+  it('allows provider concurrency caps to be configured with env vars', async () => {
+    const script = [
+      "import('./dist/config/index.js').then(({ config }) => {",
+      "console.log(JSON.stringify({",
+      "local: config.providerMaxConcurrentLocal,",
+      "remote: config.providerMaxConcurrentRemote",
+      "}));",
+      "});",
+    ].join('');
+    const output = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      {
+        cwd: originalCwd,
+        env: {
+          ...process.env,
+          PROVIDER_MAX_CONCURRENT_LOCAL: '2',
+          PROVIDER_MAX_CONCURRENT_REMOTE: '3',
+        },
+        encoding: 'utf8',
+      },
+    );
+    const parsed = JSON.parse(output.trim()) as { local: number; remote: number };
+
+    expect(parsed.local).toBe(2);
+    expect(parsed.remote).toBe(3);
   });
 });

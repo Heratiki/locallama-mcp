@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import axios from 'axios';
 
 jest.unstable_mockModule('../../../dist/config/index.js', () => ({
   config: {
@@ -7,13 +8,15 @@ jest.unstable_mockModule('../../../dist/config/index.js', () => ({
   },
 }));
 
+const loggerMock = {
+  error: jest.fn(),
+  warn: jest.fn(),
+  info: jest.fn(),
+  debug: jest.fn(),
+};
+
 jest.unstable_mockModule('../../../dist/utils/logger.js', () => ({
-  logger: {
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
-  },
+  logger: loggerMock,
 }));
 
 const { openRouterModule } = await import('../../../dist/modules/openrouter/index.js');
@@ -22,6 +25,10 @@ const { OpenRouterErrorType } = await import('../../../dist/modules/openrouter/t
 describe('openRouterModule free-model health gating', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
+    loggerMock.error.mockClear();
+    loggerMock.warn.mockClear();
+    loggerMock.info.mockClear();
+    loggerMock.debug.mockClear();
 
     openRouterModule.modelTracking = {
       models: {},
@@ -117,5 +124,55 @@ describe('openRouterModule free-model health gating', () => {
     );
 
     expect(callApiSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('redacts authorization details when logging OpenRouter Axios errors', async () => {
+    const nowIso = new Date().toISOString();
+
+    openRouterModule.modelTracking = {
+      lastUpdated: nowIso,
+      freeModels: ['flaky/free-model'],
+      freeModelHealth: {},
+      models: {
+        'flaky/free-model': {
+          id: 'flaky/free-model',
+          name: 'flaky/free-model',
+          provider: 'openrouter',
+          isFree: true,
+          contextWindow: 8192,
+          capabilities: { chat: true, completion: true, vision: false },
+          costPerToken: { prompt: 0, completion: 0 },
+          lastUpdated: nowIso,
+        },
+      },
+    };
+
+    const axiosError = Object.assign(new Error('Request failed with status code 429'), {
+      isAxiosError: true,
+      code: 'ERR_BAD_REQUEST',
+      response: {
+        status: 429,
+        data: {
+          error: {
+            message: 'Provider returned error',
+            code: 429,
+          },
+        },
+      },
+      config: {
+        headers: {
+          Authorization: 'Bearer test-key',
+        },
+      },
+    });
+
+    jest.spyOn(axios, 'post').mockRejectedValue(axiosError);
+
+    const result = await openRouterModule.callOpenRouterApi('flaky/free-model', 'hello', 1000);
+
+    expect(result.success).toBe(false);
+    const logged = JSON.stringify(loggerMock.error.mock.calls);
+    expect(logged).not.toContain('test-key');
+    expect(logged).not.toContain('Authorization');
   });
 });

@@ -34,6 +34,8 @@ and this file for the current snapshot.
 - The MCP install/self-update feature is implemented in source (`src/modules/updater/index.ts`, `check_for_updates`, `update_server`, startup check). Older superpowers spec/plan files are historical implementation notes unless their status block says otherwise.
 - `docs/PLAN.md` and `docs/OPERATIONAL_TEST_PLAN.md` are the authoritative future-testing docs when they differ from older notes.
 - Task 4 in `docs/ROADMAP_ACTIVE.md` is complete as of 2026-05-19: routing now uses `js-tiktoken`-backed prompt token counting and returns structured `context_overflow` errors before dispatch when prompts exceed declared model context windows. Latest verification: `npm run build`, `npm test`, and `node test-operational.mjs --suite routing` pass.
+- Issue #30 provider execution queuing is partially implemented as of 2026-05-20: the provider registry path enforces one shared local execution slot by default and one independent slot per remote provider by default. Caps are configurable via `PROVIDER_MAX_CONCURRENT_LOCAL` and `PROVIDER_MAX_CONCURRENT_REMOTE`. Unit coverage exists for local serialization and local+remote parallelism; live MCP concurrency validation is still pending.
+- OpenRouter Axios error logging now redacts credential-bearing request details as of 2026-05-20; logs keep response status/body summaries without serializing the original Axios request config.
 
 ## What to keep out of docs
 
