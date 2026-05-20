@@ -35,6 +35,12 @@ export interface BenchmarkSummary {
   successRate?: number;
   qualityScore?: number;
   avgResponseTime?: number;
+  /**
+   * Number of benchmark runs accumulated. Used by the model selector to apply
+   * a confidence discount on sparse data so that a large unbenchmarked model is
+   * not permanently blocked by a small model with a single lucky benchmark run.
+   */
+  benchmarkCount?: number;
 }
 
 export interface ModelMetadata {

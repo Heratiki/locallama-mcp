@@ -367,6 +367,10 @@ export async function benchmarkModel(
       ? Math.max(0, Math.min(1, 1 - overallAvgMs / 60_000))
       : undefined;
 
+  // Carry forward the benchmark count from the existing registry entry so the
+  // model selector can apply a confidence discount on sparse data.
+  const previousCount = modelRegistry.getModel(modelId)?.benchmarkSummary?.benchmarkCount ?? 0;
+
   const registrySummary: BenchmarkSummary = {
     lastRunAt: Date.now(),
     taskCategories,
@@ -378,6 +382,7 @@ export async function benchmarkModel(
     successRate: overallSuccessRate,
     qualityScore: overallQuality,
     avgResponseTime: overallAvgMs,
+    benchmarkCount: previousCount + 1,
   };
 
   // -------------------------------------------------------------------------
