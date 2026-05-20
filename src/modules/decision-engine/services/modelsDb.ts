@@ -16,6 +16,7 @@ function toBenchmarkSummary(data: ModelPerformanceData): BenchmarkSummary {
     successRate: data.successRate,
     qualityScore: data.qualityScore,
     avgResponseTime: data.avgResponseTime,
+    benchmarkCount: data.benchmarkCount,
   };
 }
 
