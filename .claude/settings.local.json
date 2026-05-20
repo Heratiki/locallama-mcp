@@ -5,7 +5,18 @@
       "Bash(gh label *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs --testPathPattern=\"job-store\")",
+      "Bash(node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs)",
+      "Bash(git *)",
+      "PowerShell(git -C $wt log --oneline main..worktree-agent-a13d8e398a91a98c9 2>&1)",
+      "PowerShell(git -C $wt diff --stat HEAD 2>&1)",
+      "PowerShell($wt = \"C:\\\\Users\\\\herat\\\\source\\\\locallama-mcp\\\\.claude\\\\worktrees\\\\agent-a13d8e398a91a98c9\")",
+      "PowerShell(git -C $wt status --short)",
+      "Bash(1a50f87)",
+      "Bash(future-testing)"
     ]
   }
 }
