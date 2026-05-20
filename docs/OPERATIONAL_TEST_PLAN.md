@@ -221,7 +221,7 @@ When you add a new MCP tool to the server, add a test case here:
 1. Issue 34 / Gap 5: harden Windows path and shell assumptions, then add the missing Windows-native operational checks for `rootDir`, lock/caches/DB placement, and the Session Continuity Checklist commands.
 2. Issues 24 and 26 / Gap 2: add provider-level circuit breaking and periodic health probing, then add focused failure-injection operational tests for provider-down scenarios.
 3. Issues 20 and 25 / Gap 8: replace character-based token estimates with real token counting, then enforce context-window limits before dispatch and add overflow-focused operational coverage.
-4. Issue 19 / Gap 3: design and implement per-provider rate limiting/backpressure for concurrent MCP calls, then add concurrency operational tests once the behavior is defined.
+4. Issue 19 / Gap 3: per-provider rate limiting/backpressure is implemented in the provider registry path; add live concurrency operational tests for simultaneous local/local and local/remote `route_task` calls.
 5. Issue 18 / Gap 1: research and choose the transport strategy for long-running inference (streaming tool results vs async job model), then add timeout-boundary operational tests around the chosen design.
 
 ---
@@ -307,6 +307,8 @@ No test verifies what happens at the MCP tool-call timeout boundary. Currently, 
 
 **Blocker:** Requires a controllable slow-model fixture. On System A, `gemma4:26b` can serve this role for slow-inference tests, but it must be used in isolation (not in the standard suite) to avoid slowing every CI run.
 
+2026-05-20 update: Issue 18's transport strategy decision is documented in `docs/PLAN.md` and ADR-0001: async jobs and queue-backed progress are the primary path; streaming chunks remain optional future work. Timeout-boundary live coverage is still pending because it needs a deterministic slow-model fixture.
+
 ---
 
 ### Gap 2 — Provider health failure injection (Issue 24 / Issue 26)
@@ -330,7 +332,9 @@ No test verifies server behavior under concurrent tool calls:
 - Send 3–5 simultaneous `preemptive_route_task` calls and assert that all return well-formed responses (not partial responses or crashes from shared mutable state in the routing engine).
 - Send 2 simultaneous `route_task` calls that both select the same Ollama model. Assert that both eventually complete or one gracefully queues/fails with a clear error, and that neither leaves the server in a broken state.
 
-**Blocker:** Issue 19 (rate limiting/backpressure) must be designed before a concurrency test can assert correct behavior. Currently, the expected behavior is undefined.
+2026-05-20 update: Unit coverage now defines the expected behavior for the provider execution layer: local providers share one FIFO slot, and one local job can run concurrently with one remote provider job. Remaining work is operational coverage through the live MCP `route_task` path.
+
+**Blocker:** Live concurrency coverage still needs a deterministic harness that can submit simultaneous `route_task` calls and observe completion ordering without making routine test runs slow or paid by default.
 
 ---
 

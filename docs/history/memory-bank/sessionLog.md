@@ -84,3 +84,22 @@ Verification:
 
 Follow-ups:
 - Task 5 in `docs/ROADMAP_ACTIVE.md` is now unblocked: per-provider backpressure/rate limiting and timeout strategy.
+
+## 2026-05-20 - Provider Execution Queue
+
+Author: Codex
+
+Summary:
+- Updated the provider rate limiter so all local providers share one FIFO execution slot, matching ADR-0001's VRAM constraint.
+- Kept remote provider queues independent, with one default slot per remote provider.
+- Changed `PROVIDER_MAX_CONCURRENT_LOCAL` and `PROVIDER_MAX_CONCURRENT_REMOTE` defaults to `1`, while preserving env-var configurability.
+- Redacted OpenRouter Axios error logging so credential-bearing request config is not serialized during provider failures.
+- Updated current planning and operational docs for Issue #30 / Gap 3.
+
+Verification:
+- `npm run build` passes.
+- Focused Jest run passes: `test/modules/core/provider/rate-limiter.test.ts` and `test/config/path-root.test.ts`.
+- Focused OpenRouter redaction test passes: `test/modules/openrouter/index.test.ts`.
+
+Follow-ups:
+- Add/live-run an operational MCP concurrency harness for simultaneous local/local and local/remote `route_task` calls.

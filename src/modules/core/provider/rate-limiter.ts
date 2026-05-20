@@ -17,7 +17,10 @@ export interface ProviderRateLimiterOptions {
 }
 
 /**
- * Simple per-provider queue with tier-specific concurrency caps.
+ * Provider execution queue with tier-specific concurrency caps.
+ *
+ * Local providers share one queue because they contend for the same local
+ * accelerator memory. Remote providers keep independent FIFO queues.
  */
 export class ProviderRateLimiter {
   private readonly states = new Map<string, ProviderQueueState>();
@@ -33,11 +36,16 @@ export class ProviderRateLimiter {
 
   async schedule<T>(providerId: string, tier: ProviderTier, run: () => Promise<T>): Promise<T> {
     return await new Promise<T>((resolve, reject) => {
-      const state = this.getOrCreateState(providerId);
+      const queueKey = this.queueKeyFor(providerId, tier);
+      const state = this.getOrCreateState(queueKey);
       const entry: QueueEntry<T> = { run, resolve, reject };
       state.queue.push(entry as QueueEntry<unknown>);
-      this.drain(providerId, tier);
+      this.drain(queueKey, tier);
     });
+  }
+
+  private queueKeyFor(providerId: string, tier: ProviderTier): string {
+    return tier === 'local' ? 'local' : `remote:${providerId}`;
   }
 
   private getOrCreateState(providerId: string): ProviderQueueState {
@@ -53,8 +61,8 @@ export class ProviderRateLimiter {
     return tier === 'local' ? this.maxConcurrentLocal : this.maxConcurrentRemote;
   }
 
-  private drain(providerId: string, tier: ProviderTier): void {
-    const state = this.states.get(providerId);
+  private drain(queueKey: string, tier: ProviderTier): void {
+    const state = this.states.get(queueKey);
     if (!state) return;
 
     const cap = this.capForTier(tier);
@@ -75,7 +83,7 @@ export class ProviderRateLimiter {
         })
         .finally(() => {
           state.activeCount = Math.max(0, state.activeCount - 1);
-          this.drain(providerId, tier);
+          this.drain(queueKey, tier);
         });
     }
   }

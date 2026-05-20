@@ -56,6 +56,15 @@ const TRACKING_FILE_PATH = path.join(config.rootDir, 'openrouter-models.json');
 const FREE_MODEL_FAILURE_THRESHOLD = 2;
 const FREE_MODEL_QUARANTINE_MS = 30 * 60 * 1000;
 
+function sanitizeErrorForLogging(error: Error, message: string): Error {
+  const sanitized = new Error(message);
+  sanitized.name = error.name;
+  if (error.stack) {
+    sanitized.stack = error.stack;
+  }
+  return sanitized;
+}
+
 // Default prompting strategies for different model families
 const DEFAULT_PROMPTING_STRATEGIES: Record<string, Partial<PromptingStrategy>> = {
   'openai': {
@@ -865,7 +874,8 @@ export const openRouterModule = {
         }
       }
       
-      logger.error(`Error calling OpenRouter API for model ${modelId}: ${detailedErrorMessage}`, errorInstance);
+      const sanitizedError = sanitizeErrorForLogging(errorInstance, detailedErrorMessage);
+      logger.error(`Error calling OpenRouter API for model ${modelId}: ${detailedErrorMessage}`, sanitizedError);
       
       // Return structured error instead of re-throwing
       return {
