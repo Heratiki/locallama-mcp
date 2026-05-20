@@ -21,6 +21,20 @@ const mockGetBestLocalModel = jest
   .fn<() => Promise<{ id: string } | null>>()
   .mockResolvedValue({ id: 'llama-3.2-3b' });
 
+// CapabilityDetector mock — controls detectCapabilities per model id.
+const mockDetectCapabilities = jest.fn<(id: string) => { code?: boolean; scores?: { code?: number } }>(
+  () => ({ chat: true, code: true }),
+);
+const mockGetCapabilityDetector = jest.fn(() => ({
+  detectCapabilities: mockDetectCapabilities,
+}));
+
+jest.unstable_mockModule('../../../dist/modules/core/capability-detector.js', () => ({
+  getCapabilityDetector: mockGetCapabilityDetector,
+  _setCapabilityDetectorForTests: jest.fn(),
+  initCapabilityDetector: jest.fn(),
+}));
+
 jest.unstable_mockModule(
   '../../../dist/modules/decision-engine/services/modelSelector.js',
   () => ({
@@ -127,9 +141,17 @@ const { COMPLEXITY_THRESHOLDS, TOKEN_THRESHOLDS } = await import(
 
 describe('decisionEngine.preemptiveRouting', () => {
   beforeEach(() => {
+    mockHasFreeModels.mockReset();
+    mockGetBestFreeModel.mockReset();
+    mockGetBestLocalModel.mockReset();
+    mockDetectCapabilities.mockReset();
+    mockGetCapabilityDetector.mockReset();
+
     mockHasFreeModels.mockResolvedValue(false);
     mockGetBestFreeModel.mockResolvedValue(null);
     mockGetBestLocalModel.mockResolvedValue({ id: 'llama-3.2-3b' });
+    mockDetectCapabilities.mockReturnValue({ chat: true, code: true });
+    mockGetCapabilityDetector.mockReturnValue({ detectCapabilities: mockDetectCapabilities });
   });
 
   // ── Local preference ──────────────────────────────────────────────────────
@@ -244,5 +266,55 @@ describe('decisionEngine.preemptiveRouting', () => {
     expect(result.preemptive).toBe(true);
     expect(result.scores).toHaveProperty('local');
     expect(result.scores).toHaveProperty('paid');
+  });
+
+  // ── Issue #49: CapabilityDetector filter for code tasks ───────────────────
+
+  it('skips local model with code score below threshold when a better local model exists', async () => {
+    // First getBestLocalModel call returns the bad coder; second (with exclusion) returns good coder.
+    mockGetBestLocalModel
+      .mockResolvedValueOnce({ id: 'bad-coder-7b' })
+      .mockResolvedValueOnce({ id: 'good-coder-7b' });
+
+    mockDetectCapabilities.mockImplementation((id: string) => {
+      if (id === 'bad-coder-7b') return { chat: true, code: false, scores: { code: 0.1 } };
+      return { chat: true, code: true, scores: { code: 0.9 } };
+    });
+
+    const result = await decisionEngine.preemptiveRouting({
+      task: 'implement a function to parse JSON',
+      contextLength: 200,
+      expectedOutputLength: 100,
+      complexity: COMPLEXITY_THRESHOLDS.SIMPLE - 0.1,
+      priority: 'cost',
+    });
+
+    expect(result.provider).toBe('local');
+    expect(result.model).not.toBe('bad-coder-7b');
+    expect(result.model).toBe('good-coder-7b');
+  });
+
+  it('falls back to the original local model when no capable alternative exists', async () => {
+    // First call returns the bad coder; second call (exclusion fallback) returns null.
+    mockGetBestLocalModel
+      .mockResolvedValueOnce({ id: 'bad-coder-7b' })
+      .mockResolvedValueOnce(null);
+
+    mockDetectCapabilities.mockImplementation((id: string) => {
+      if (id === 'bad-coder-7b') return { chat: true, code: false, scores: { code: 0.1 } };
+      return { chat: true, code: true };
+    });
+
+    const result = await decisionEngine.preemptiveRouting({
+      task: 'implement a function to parse JSON',
+      contextLength: 200,
+      expectedOutputLength: 100,
+      complexity: COMPLEXITY_THRESHOLDS.SIMPLE - 0.1,
+      priority: 'cost',
+    });
+
+    // Must not crash — falls back gracefully to the only available model.
+    expect(result.provider).toBe('local');
+    expect(result.model).toBe('bad-coder-7b');
   });
 });
