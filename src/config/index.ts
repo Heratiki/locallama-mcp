@@ -91,6 +91,10 @@ export interface Config {
   //   preferred and paid APIs are only used for genuinely complex work.
   // 'default': standard thresholds from benchmark results.
   profile: 'default' | 'lightweight';
+
+  // Minimum empirical code-benchmark score (0..1) a model must meet to be
+  // eligible for code tasks. Models with no benchmark data are not filtered.
+  codeScoreThreshold: number;
 }
 
 /**
@@ -190,6 +194,9 @@ export const config: Config = {
   
   // Hardware profile
   profile: (process.env.LOCALLAMA_PROFILE === 'lightweight' ? 'lightweight' : 'default') as 'default' | 'lightweight',
+
+  // Code-score filter threshold — matches CapabilityDetector's own 0.3 floor
+  codeScoreThreshold: parseFloat(process.env.CODE_SCORE_THRESHOLD ?? '0.3'),
 
   // Paths
   rootDir,
