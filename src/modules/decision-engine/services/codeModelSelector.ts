@@ -653,6 +653,16 @@ export const codeModelSelector = {
       return this.selectModelsForSubtasks(subtasks, false, originalTask);
     }
 
+    // Filter available models by code score threshold
+    const threshold = config.codeScoreThreshold;
+    const eligibleModels = availableModels.filter(model => {
+      const caps = getModelRegistry().getModel(model.id)?.capabilities;
+      if (caps?.scores?.code !== undefined) {
+        return caps.scores.code > threshold;
+      }
+      return true;
+    });
+
     const assignments = new Map<string, Model>();
     const modelLoad = new Map<string, number>(); // Track load per model
 
@@ -673,7 +683,7 @@ export const codeModelSelector = {
       let bestModel = null;
       let bestScore = 0;
 
-      for (const model of availableModels) {
+      for (const model of eligibleModels) {
         // Pass originalTask to the scoring function
         const score = await this.scoreModelForSubtask(model, subtask, perfAnalysis, originalTask);
         if (score > bestScore) {
@@ -701,7 +711,7 @@ export const codeModelSelector = {
       // If the model is already heavily loaded, find an alternative
       if (currentLoad > 3) { // Arbitrary threshold for demonstration
         // Find alternative models that score within 15% of the ideal
-        const alternatives = Array.from(availableModels)
+        const alternatives = Array.from(eligibleModels)
           .filter(m => m.id !== idealAssignment.model.id)
           .filter(m => {
             // Check context window constraints

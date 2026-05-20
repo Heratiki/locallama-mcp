@@ -279,9 +279,13 @@ class TaskRouter {
       // If we have performance data, use it with load balancing
       if (models.length > 0) {
         // Filter models that can handle the token requirements
-        const suitableModels = models.filter(model => 
-          !model.contextWindow || model.contextWindow >= task.estimatedTokens
-        );
+        const suitableModels = models.filter(model => {
+          const caps = getModelRegistry().getModel(model.id)?.capabilities;
+          const needsLargeContext = task.estimatedTokens >= 32768;
+          return needsLargeContext
+            ? (caps !== undefined ? caps.largeContext : (!model.contextWindow || model.contextWindow >= task.estimatedTokens))
+            : (!model.contextWindow || model.contextWindow >= task.estimatedTokens);
+        });
         
         if (suitableModels.length === 0) {
           logger.warn(`No suitable models found for task with ${task.estimatedTokens} tokens`);
@@ -716,11 +720,16 @@ class TaskRouter {
   ): Model | null {
     // Filter models based on strategy
     const eligibleModels = models.filter(model => {
+      const caps = getModelRegistry().getModel(model.id)?.capabilities;
+      const needsLargeContext = task.estimatedTokens >= 32768;
+      const meetsTokenReq = needsLargeContext
+        ? (caps !== undefined ? caps.largeContext : (!model.contextWindow || model.contextWindow >= task.estimatedTokens))
+        : (!model.contextWindow || model.contextWindow >= task.estimatedTokens);
+
       if (strategy.requireLocalOnly) {
-        return isProviderLocal(model.provider) &&
-               (!model.contextWindow || model.contextWindow >= task.estimatedTokens);
+        return isProviderLocal(model.provider) && meetsTokenReq;
       }
-      return !model.contextWindow || model.contextWindow >= task.estimatedTokens;
+      return meetsTokenReq;
     });
     
     if (eligibleModels.length === 0) {
