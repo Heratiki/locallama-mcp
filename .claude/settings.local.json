@@ -21,7 +21,9 @@
       "Bash(npm run *)",
       "Bash(npm test *)",
       "Bash(gh pr *)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(npx jest *)",
+      "Bash(git checkout *)"
     ]
   }
 }
