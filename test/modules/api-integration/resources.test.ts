@@ -1,5 +1,6 @@
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { describe, expect, it, jest, beforeEach, afterAll } from '@jest/globals';
 import { setupResourceHandlers } from '../../../dist/modules/api-integration/resources.js';
+import { shutdownJobTracker } from '../../../dist/modules/decision-engine/services/jobTracker.js';
 
 jest.mock('@modelcontextprotocol/sdk/server/index.js'); // Keep external mock
 jest.mock('../../../dist/modules/cost-monitor/index.js'); // Corrected path (added ../)
@@ -15,17 +16,17 @@ describe('setupResourceHandlers', () => {
     // Reset mocks between tests
     jest.clearAllMocks();
     mockServer = {
-      setHandler: jest.fn(),
-      // Add missing mock function
       setRequestHandler: jest.fn()
     };
+  });
+
+  afterAll(async () => {
+    await shutdownJobTracker();
   });
 
   it('should register resource handlers with the server', async () => {
     await setupResourceHandlers(mockServer);
 
-    // Verify the server's setHandler method was called
-    expect(mockServer.setHandler).toHaveBeenCalled();
-    expect(mockServer.setRequestHandler).toHaveBeenCalled();
+    expect(mockServer.setRequestHandler).toHaveBeenCalledTimes(3);
   });
 });

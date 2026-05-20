@@ -170,6 +170,9 @@ export enum OllamaErrorType {
   
   /** Server error */
   SERVER_ERROR = 'server_error',
+
+  /** Inference request timed out */
+  TIMEOUT = 'timeout',
   
   /** Unknown error */
   UNKNOWN = 'unknown'

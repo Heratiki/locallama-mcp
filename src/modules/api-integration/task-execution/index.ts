@@ -1,270 +1,218 @@
 import { logger } from '../../../utils/logger.js';
-import { config } from '../../../config/index.js';
 import { getJobTracker } from '../../decision-engine/services/jobTracker.js';
-import { openRouterModule } from '../../openrouter/index.js';
-import { ollamaModule } from '../../ollama/index.js'; // Added import
-import { lmStudioModule } from '../../lm-studio/index.js'; // Added import
 import { ITaskExecutor } from '../types.js';
-import { indexDocuments } from '../../cost-monitor/codeSearchEngine.js';
+import { getProviderRegistry } from '../../core/provider/registry.js';
+import { getModelRegistry } from '../../core/model/registry.js';
+import type { TaskExecutionOptions } from '../../core/provider/types.js';
+import { buildCodeTaskExecutionOptions } from '../../core/prompting/execution-profile.js';
+import {
+  assertPromptWithinContextWindow,
+  ContextWindowError,
+} from '../../utils/contextWindow.js';
+import { InferenceTimeoutError } from '../../utils/inferenceTimeout.js';
+
+export { ContextWindowError };
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
 /**
- * Task Executor class implementing the ITaskExecutor interface
- * Handles execution of tasks with different models
+ * Resolves `modelId` to a bare model id and a provider id.
+ *
+ * The legacy calling convention used prefixed ids like `lm-studio:<id>` or
+ * `ollama:<id>`.  We strip those here so both legacy and registry paths work.
+ */
+function resolveModelId(modelId: string): { providerId: string | null; bareId: string } {
+  if (modelId.startsWith('lm-studio:')) return { providerId: 'lm-studio', bareId: modelId.slice(10) };
+  if (modelId.startsWith('ollama:')) return { providerId: 'ollama', bareId: modelId.slice(7) };
+  if (modelId.startsWith('openrouter:')) return { providerId: 'openrouter', bareId: modelId.slice(11) };
+  return { providerId: null, bareId: modelId };
+}
+
+/**
+ * Provider-agnostic task executor.
+ *
+ * Dispatch priority:
+ *  1. Look up the model in `ModelRegistry` → use its `providerId`.
+ *  2. Fall back to the prefix convention (`lm-studio:<id>`, etc.).
+ *  3. If neither resolves, try every local provider in turn (for bare ids with
+ *     no prefix and no registry entry — backward-compat with old callers).
  */
 export class TaskExecutor implements ITaskExecutor {
-  /**
-   * Execute a task using the selected model
-   * This handles the actual execution of the task through the appropriate service
-   */
-  async executeTask(model: string, task: string, jobId: string): Promise<string> {
+  async executeTask(modelId: string, task: string, jobId: string): Promise<string> {
+    logger.info(`Executing task with model ${modelId} for job ${jobId}`);
+
     try {
-      logger.info(`Executing task with model ${model} for job ${jobId}`);
+      jobTracker = await getJobTracker();
+    } catch (err) {
+      logger.error(`Failed to initialize jobTracker: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
 
-      try {
-        jobTracker = await getJobTracker();
-      } catch (getJobTrackerError) {
-        logger.error(`Failed to initialize jobTracker: ${getJobTrackerError instanceof Error ? getJobTrackerError.message : String(getJobTrackerError)}`);
-        throw getJobTrackerError;
-      }
+    try {
+      void jobTracker.updateJobProgress(jobId, 25, 120_000);
+    } catch (err) {
+      logger.error(`Failed to update job progress (25%) for job ${jobId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
-      // Update job progress to executing (25%)
-      try {
-        void jobTracker.updateJobProgress(jobId, 25, 120000);
-      } catch (updateJobProgressError) {
-        logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-      }
-
-      let result: string;
-
-      // Determine the execution path based on model provider
-      if (model.startsWith('openrouter:')) {
-        // Handle OpenRouter execution via explicit prefix
-        try {
-          // Update progress to 50% before API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 50, 60000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-
-          // Execute the task via OpenRouter
-          result = await openRouterModule.executeTask(model.replace('openrouter:', ''), task);
-
-          // Update progress to 75% after successful API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 75, 30000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to execute task with OpenRouter: ${error instanceof Error ? error.message : String(error)}`);
-          throw error;
-        }
-        /*
-        Author: Roo
-        Date: March 11, 2025, 8:34:22 PM
-        Original code preserved below - improved model provider handling logic
-        } else if (model.startsWith('mistralai/') || model.includes('/') || model === 'mistralai/mistral-small-24b-instruct-2501') {
-          // Handle OpenRouter models with provider/model format (e.g., google/gemini-exp-1206:free)
-        */
-      } else if (model.startsWith('mistralai/') ||
-        model.startsWith('google/') ||
-        model.startsWith('anthropic/') ||
-        (model.includes('/') && !model.includes(':'))) {
-        // Handle OpenRouter models with provider/model format
-        // Explicitly support known providers and handle generic provider/model formats
-        // Skip if it contains ':' as that's likely a local provider format (e.g., 'ollama:llama2')
-        try {
-          // Update progress to 50% before API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 50, 60000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-
-          // Execute the task via OpenRouter
-          result = await openRouterModule.executeTask(model, task);
-
-          // Update progress to 75% after successful API call
-          try {
-            void jobTracker.updateJobProgress(jobId, 75, 30000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to execute task with OpenRouter model ${model}: ${error instanceof Error ? error.message : String(error)}`);
-          throw error;
-        }
-      } else {
-        // For all other model types (local, ollama, lm-studio), handle execution directly
-        try {
-          // Update progress to 50% before execution
-          try {
-            void jobTracker.updateJobProgress(jobId, 50, 60000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-
-          // Extract provider and model name
-          const modelParts = model.split(':');
-          const provider = modelParts[0];
-          const modelName = modelParts.slice(1).join(':');
-
-          // Execute based on provider type
-          switch (provider) {
-            case 'ollama':
-              result = await this.executeOllamaModel(modelName, task);
-              break;
-            case 'lm-studio':
-              result = await this.executeLmStudioModel(modelName, task);
-              break;
-            case 'local':
-              result = await this.executeLocalModel(modelName, task);
-              break;
-            default:
-              throw new Error(`Unsupported model provider: ${model}`);
-          }
-
-          // Update progress to 75% after execution
-          try {
-            void jobTracker.updateJobProgress(jobId, 75, 30000);
-          } catch (updateJobProgressError) {
-            logger.error(`Failed to update job progress for job ${jobId}: ${updateJobProgressError instanceof Error ? updateJobProgressError.message : String(updateJobProgressError)}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to execute task with model ${model}: ${error instanceof Error ? error.message : String(error)}`);
-          throw error;
-        }
-      }
-
-      // Process and format result if needed
-      const formattedResult = typeof result === 'string' ? result : JSON.stringify(result);
-
-      // Index the result in Retriv if possible
-      try {
-        // Use the indexDocuments function directly instead of a method on CodeSearchEngine
-        await indexDocuments([
-          {
-            content: formattedResult,
-            path: `job_${jobId}`,
-            language: 'code'
-          }
-        ]);
-        logger.info(`Successfully indexed result for job ${jobId} in Retriv`);
-      } catch (error) {
-        logger.warn(`Failed to index result in Retriv: ${error instanceof Error ? error.message : String(error)}`);
-        // Continue even if indexing fails
-      }
-
-      // Complete the job (100%)
-      try {
-        void jobTracker.completeJob(jobId, [formattedResult]);
-      } catch (completeJobError) {
-        logger.error(`Failed to complete job ${jobId}: ${completeJobError instanceof Error ? completeJobError.message : String(completeJobError)}`);
-      }
-      logger.info(`Job ${jobId} completed successfully`);
-
-      return formattedResult;
+    let result: string;
+    try {
+      result = await this._dispatch(modelId, task);
     } catch (error) {
       logger.error(`Error executing task for job ${jobId}:`, error);
       try {
-        jobTracker = await getJobTracker();
-        void jobTracker.failJob(jobId, error instanceof Error ? error.message : 'Unknown error during execution');
-      } catch (failJobError) {
-        logger.error(`Failed to fail job ${jobId}: ${failJobError instanceof Error ? failJobError.message : String(failJobError)}`);
+        void jobTracker.failJob(
+          jobId,
+          error instanceof Error ? error.message : 'Unknown error during execution',
+        );
+      } catch (failErr) {
+        logger.error(`Failed to mark job ${jobId} as failed: ${failErr instanceof Error ? failErr.message : String(failErr)}`);
       }
+      throw error;
+    }
+
+    try {
+      void jobTracker.updateJobProgress(jobId, 75, 30_000);
+    } catch (err) {
+      logger.error(`Failed to update job progress (75%) for job ${jobId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    logger.info(`Job ${jobId} completed successfully`);
+    return result;
+  }
+
+  private async executeWithProvider(
+    providerId: string,
+    bareId: string,
+    task: string,
+    options: TaskExecutionOptions,
+    source: string,
+  ): Promise<string> {
+    const registry = getProviderRegistry();
+    const provider = registry.get(providerId);
+    if (!provider) {
+      throw new Error(`Provider '${providerId}' is not registered (${source})`);
+    }
+
+    if (!registry.isAvailable(provider.id)) {
+      throw new Error(`Provider '${provider.id}' is temporarily unavailable (circuit open)`);
+    }
+
+    try {
+      const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
+      const result = await registry.executeWithConcurrencyLimit(
+        provider,
+        async () => await provider.executeTask(bareId, task, executionOptions),
+      );
+      registry.recordProviderSuccess(provider.id);
+      return result.content;
+    } catch (error) {
+      registry.recordProviderFailure(provider.id);
       throw error;
     }
   }
 
-  /**
-   * Execute a task with an Ollama model
-   */
-  async executeOllamaModel(model: string, task: string): Promise<string> {
-    logger.info(`Executing task with Ollama model ${model}`);
-    try {
-      // Use the ollamaModule to execute the task
-      return await ollamaModule.executeTask(model, task);
-    } catch (error) {
-      logger.error(`Error executing task with Ollama model ${model}:`, error);
-      throw error;
+  /** Dispatch to the right provider without job tracking (pure routing). */
+  private async _dispatch(modelId: string, task: string): Promise<string> {
+    const { providerId: prefixProviderId, bareId } = resolveModelId(modelId);
+    const registry = getProviderRegistry();
+    const modelRegistry = getModelRegistry();
+    const options: TaskExecutionOptions = {};
+    let lastError: Error | undefined;
+
+    // Context-window enforcement: reject early if the task is too large.
+    const metaForCheck = modelRegistry.getModel(bareId) ?? modelRegistry.getModel(modelId);
+    if (metaForCheck) {
+      assertPromptWithinContextWindow(
+        { id: modelId, provider: metaForCheck.providerId, contextWindow: metaForCheck.contextWindow },
+        task,
+      );
     }
-  }
-  
-  /**
-   * Execute a task with an LM Studio model
-   */
-  async executeLmStudioModel(model: string, task: string): Promise<string> {
-    logger.info(`Executing task with LM Studio model ${model}`);
-    try {
-      // Use the lmStudioModule to execute the task
-      // Consider using executeSpeculativeTask if speculative inference is desired
-      return await lmStudioModule.executeTask(model, task);
-    } catch (error) {
-      logger.error(`Error executing task with LM Studio model ${model}:`, error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Execute a task with a local model
-   */
-  async executeLocalModel(model: string, task: string): Promise<string> {
-    logger.info(`Executing task with local model ${model}`);
-    try {
-      // Prioritize LM Studio if configured, then Ollama
-      if (config.lmStudioEndpoint) {
-        logger.debug(`Local model execution defaulting to LM Studio for model: ${model}`);
-        return await this.executeLmStudioModel(model, task);
-      } else if (config.ollamaEndpoint) {
-        logger.debug(`Local model execution defaulting to Ollama for model: ${model}`);
-        return await this.executeOllamaModel(model, task);
-      } else {
-        throw new Error('No local model endpoint configured for execution');
+
+    // 1. Registry lookup: model metadata tells us which provider to use.
+    const meta = modelRegistry.getModel(bareId) ?? modelRegistry.getModel(modelId);
+    if (meta) {
+      if (registry.get(meta.providerId)) {
+        logger.debug(`Dispatching ${bareId} via registry (provider: ${meta.providerId})`);
+        try {
+          return await this.executeWithProvider(meta.providerId, bareId, task, options, 'registry lookup');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Primary provider dispatch failed for ${bareId} via ${meta.providerId}: ${lastError.message}`);
+        }
       }
-    } catch (error) {
-      logger.error(`Error executing task with local model ${model}:`, error);
-      throw error;
     }
+
+    // 2. Prefix convention: `lm-studio:<id>`, `ollama:<id>`, `openrouter:<id>`.
+    if (prefixProviderId) {
+      if (registry.get(prefixProviderId)) {
+        logger.debug(`Dispatching ${bareId} via prefix (provider: ${prefixProviderId})`);
+        try {
+          return await this.executeWithProvider(prefixProviderId, bareId, task, options, 'prefixed model id');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Prefix provider dispatch failed for ${bareId} via ${prefixProviderId}: ${lastError.message}`);
+        }
+      }
+    }
+
+    // 3. Bare id — try all local providers in registration order, then any others.
+    const localProviders = registry.listByCostClass('local');
+    for (const provider of localProviders) {
+      if (!registry.isAvailable(provider.id)) {
+        logger.debug(`Skipping unavailable local provider ${provider.id} (circuit open)`);
+        continue;
+      }
+
+      const supports = await provider.supportsModel(bareId);
+      if (supports) {
+        logger.debug(`Dispatching ${bareId} to local provider ${provider.id} (fallback probe)`);
+        try {
+          return await this.executeWithProvider(provider.id, bareId, task, options, 'local fallback probe');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Local fallback provider ${provider.id} failed for ${bareId}: ${lastError.message}`);
+        }
+      }
+    }
+
+    // 4. Try non-local providers (openrouter / free-tier).
+    const otherProviders = registry.list().filter((p) => !p.isLocal);
+    for (const provider of otherProviders) {
+      if (!registry.isAvailable(provider.id)) {
+        logger.debug(`Skipping unavailable provider ${provider.id} (circuit open)`);
+        continue;
+      }
+
+      const supports = await provider.supportsModel(bareId);
+      if (supports) {
+        logger.debug(`Dispatching ${bareId} to provider ${provider.id} (fallback probe)`);
+        try {
+          return await this.executeWithProvider(provider.id, bareId, task, options, 'remote fallback probe');
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(`Fallback provider ${provider.id} failed for ${bareId}: ${lastError.message}`);
+        }
+      }
+    }
+
+    if (lastError) {
+      if (lastError instanceof InferenceTimeoutError) {
+        throw lastError;
+      }
+      throw new Error(
+        `Failed to execute model '${modelId}' after trying available providers: ${lastError.message}`,
+      );
+    }
+
+    throw new Error(
+      `No provider found for model '${modelId}'. Ensure it is available in a registered provider.`,
+    );
   }
 }
 
-// Create singleton instance
 const taskExecutor = new TaskExecutor();
 
-// For backward compatibility, create a new class that extends TaskExecutor
-class LegacyTaskExecutor extends TaskExecutor {
-  // Expose protected methods as public for backward compatibility
-  public async ollamaModel(model: string, task: string): Promise<string> {
-    return this.executeOllamaModel(model, task);
-  }
-
-  public async lmStudioModel(model: string, task: string): Promise<string> {
-    return this.executeLmStudioModel(model, task);
-  }
-
-  public async localModel(model: string, task: string): Promise<string> {
-    return this.executeLocalModel(model, task);
-  }
-}
-
-// Create singleton instance of legacy executor
-const legacyExecutor = new LegacyTaskExecutor();
-
-// Export the main task executor
 export { taskExecutor };
 
-// Export legacy functions with deprecated notice
 /** @deprecated Use taskExecutor.executeTask instead */
 export const executeTask = taskExecutor.executeTask.bind(taskExecutor);
-
-/** @deprecated Use taskExecutor directly instead */
-export const executeOllamaModel = legacyExecutor.ollamaModel.bind(legacyExecutor);
-
-/** @deprecated Use taskExecutor directly instead */
-export const executeLmStudioModel = legacyExecutor.lmStudioModel.bind(legacyExecutor);
-
-/** @deprecated Use taskExecutor directly instead */
-export const executeLocalModel = legacyExecutor.localModel.bind(legacyExecutor);

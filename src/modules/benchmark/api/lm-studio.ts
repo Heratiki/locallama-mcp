@@ -56,10 +56,11 @@ export async function callLmStudioApi(
     total_draft_tokens_count?: number;
   };
 }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  timeoutId.unref?.();
+
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
     // Use temperature and maxTokens from the default model config
     const temperature = config.defaultModelConfig.temperature;
     const maxTokens = config.defaultModelConfig.maxTokens;
@@ -93,9 +94,6 @@ export async function callLmStudioApi(
         },
       }
     );
-    
-    clearTimeout(timeoutId);
-    
     if (response.status === 200 && response.data.choices && response.data.choices.length > 0) {
       const result: {
         success: boolean;
@@ -144,5 +142,7 @@ export async function callLmStudioApi(
   } catch (error) {
     logger.error(`Error calling LM Studio API for model ${modelId}:`, error);
     return { success: false };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

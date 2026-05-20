@@ -13,10 +13,13 @@ import {
   OllamaChatResponse,
   OllamaListModelsResponse
 } from './types.js';
+import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
+import { getPromptingStrategyService } from '../core/prompting/service.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
+import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 
 // File path for storing Ollama model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'ollama-models.json');
-const STRATEGIES_FILE_PATH = path.join(config.rootDir, 'ollama-strategies.json');
 
 // Default prompting strategies for different model families
 const DEFAULT_PROMPTING_STRATEGIES: Record<string, Partial<PromptingStrategy>> = {
@@ -111,16 +114,18 @@ export const ollamaModule = {
         logger.debug(`Loaded Ollama tracking data with ${Object.keys(this.modelTracking.models).length} models`);
       } catch (error) {
         logger.debug('No existing Ollama tracking data found, will create new tracking data');
+        // epoch-0 forces the 24-hour threshold to trigger on first run
         this.modelTracking = {
           models: {},
-          lastUpdated: new Date().toISOString()
+          lastUpdated: new Date(0).toISOString()
         };
       }
       
-      // Load prompting strategies from disk if available
+      // Load prompting strategies from the shared user-override file
       try {
-        const data = await fs.readFile(STRATEGIES_FILE_PATH, 'utf8');
-        this.promptingStrategies = JSON.parse(data) as Record<string, PromptingStrategy>;
+        const svc = getPromptingStrategyService();
+        const userOverrides = await svc.readUserOverrides();
+        this.promptingStrategies = userOverrides as Record<string, PromptingStrategy>;
         logger.debug(`Loaded Ollama prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
       } catch (error) {
         logger.debug('No existing Ollama prompting strategies found');
@@ -163,7 +168,7 @@ export const ollamaModule = {
       
       // Query Ollama for available models
       logger.debug('Making request to Ollama API...');
-      const url = `${config.ollamaEndpoint}/api/tags`;
+      const url = `${config.ollamaEndpoint}/tags`;
       logger.debug(`Attempting to connect to Ollama at: ${url}`);
       
       const response = await axios.get<OllamaListModelsResponse>(url, {
@@ -290,7 +295,7 @@ export const ollamaModule = {
         logger.warn('Invalid response from Ollama API:', response.data);
       }
     } catch (error) {
-      logger.error('Error updating Ollama models:', error);
+      logger.error('Error updating Ollama models:', sanitizeErrorForLogging(error));
       this.handleOllamaError(error instanceof Error ? error : new Error('Unknown error'));
     }
   },
@@ -368,11 +373,20 @@ export const ollamaModule = {
       else family = 'default';
     }
     
-    // Special case for code models
-    if (modelId.toLowerCase().includes('code') && family !== 'codegemma' && family !== 'codellama' && family !== 'wizardcoder') {
-      family = 'codellama'; // Use code-specific prompting
+    // Consult the central prompting strategy service first (Section 4)
+    const svc = getPromptingStrategyService();
+    const strategyId = svc.resolveStrategyId(modelId, family, 'ollama');
+    const centralStrategy = svc.getStrategy(strategyId);
+    if (centralStrategy) {
+      return {
+        systemPrompt: centralStrategy.systemPrompt,
+        userPrompt: centralStrategy.userPromptTemplate,
+        assistantPrompt: centralStrategy.assistantPromptTemplate,
+        useChat: centralStrategy.useChat,
+      };
     }
-    
+
+    // Inline fallback (used when service not yet loaded, e.g. unit tests)
     const defaultStrategy = DEFAULT_PROMPTING_STRATEGIES[family] || DEFAULT_PROMPTING_STRATEGIES.default;
     
     return {
@@ -415,28 +429,15 @@ export const ollamaModule = {
    */
   async savePromptingStrategies(): Promise<void> {
     try {
-      logger.debug(`Saving prompting strategies to: ${STRATEGIES_FILE_PATH}`);
-      logger.debug(`Prompting strategies contains data for ${Object.keys(this.promptingStrategies).length} models`);
-      
-      // Ensure the directory exists
-      try {
-        await mkdir(path.dirname(STRATEGIES_FILE_PATH), { recursive: true });
-      } catch (error) {
-        if (error instanceof Error) {
-          logger.debug(`Directory check during save strategies: ${error.message}`);
-        } else {
-          logger.debug('Unknown error during directory check');
-        }
-      }
-      
-      await fs.writeFile(STRATEGIES_FILE_PATH, JSON.stringify(this.promptingStrategies, null, 2));
-      logger.debug('Successfully saved Ollama prompting strategies to disk');
+      logger.debug(`Saving Ollama prompting strategies (${Object.keys(this.promptingStrategies).length} models) to user-override file`);
+      const svc = getPromptingStrategyService();
+      await svc.mergeUserOverrides(this.promptingStrategies as Parameters<typeof svc.mergeUserOverrides>[0]);
+      logger.debug('Successfully saved Ollama prompting strategies');
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`Error saving Ollama prompting strategies:`, error);
-        logger.error(`Error details: ${error.message}`);
       } else {
-        logger.error('Unknown error occurred');
+        logger.error('Unknown error occurred saving Ollama prompting strategies');
       }
     }
   },
@@ -588,8 +589,11 @@ export const ollamaModule = {
           logger.error('Ollama server error');
           return OllamaErrorType.SERVER_ERROR;
         }
-      } else if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ECONNABORTED') {
-        logger.error('Ollama connection refused or timed out');
+      } else if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ERR_CANCELED') {
+        logger.error('Ollama request timed out or was canceled');
+        return OllamaErrorType.TIMEOUT;
+      } else if (axiosError.code === 'ECONNREFUSED') {
+        logger.error('Ollama connection refused');
         return OllamaErrorType.SERVER_ERROR;
       }
     } else if (error.message.includes('context length')) {
@@ -610,7 +614,8 @@ export const ollamaModule = {
   async callOllamaApi(
     modelId: string,
     task: string,
-    timeout: number
+    timeout: number,
+    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }
   ): Promise<{
     success: boolean;
     text?: string;
@@ -650,14 +655,16 @@ export const ollamaModule = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
-      // Use temperature and maxTokens from the default model config
-      const temperature = config.defaultModelConfig.temperature;
+      // Prefer task-tuned settings, then fall back to the default model config.
+      const temperature = options?.temperature ?? config.defaultModelConfig.temperature;
+      const maxTokens = options?.maxTokens ?? config.defaultModelConfig.maxTokens;
       
       // Prepare the messages based on the prompting strategy
       const messages = [];
       
-      if (strategy.systemPrompt) {
-        messages.push({ role: 'system', content: strategy.systemPrompt });
+      const systemPrompt = options?.systemPrompt ?? strategy.systemPrompt;
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       }
       
       if (strategy.userPrompt) {
@@ -674,15 +681,16 @@ export const ollamaModule = {
         temperature,
         // Ollama doesn't support max_tokens in the same way as OpenAI
         options: {
-          temperature
+          temperature,
+          num_predict: maxTokens
         }
       };
       
-      logger.debug(`Ollama API call for ${modelId} using temperature: ${temperature}`);
+      logger.debug(`Ollama API call for ${modelId} using temperature: ${temperature}, maxTokens: ${maxTokens}`);
       
       // Make the request
       const response = await axios.post<OllamaChatResponse>(
-        `${config.ollamaEndpoint}/api/chat`,
+        `${config.ollamaEndpoint}/chat`,
         requestBody,
         {
           signal: controller.signal,
@@ -709,8 +717,9 @@ export const ollamaModule = {
         return { success: false, error: OllamaErrorType.INVALID_REQUEST };
       }
     } catch (error) {
-      logger.error(`Error calling Ollama API for model ${modelId}:`, error);
-      const errorType = this.handleOllamaError(error instanceof Error ? error : new Error('Unknown error'));
+      const normalizedError = error instanceof Error ? error : new Error('Unknown error');
+      logger.error(`Error calling Ollama API for model ${modelId}:`, sanitizeErrorForLogging(normalizedError));
+      const errorType = this.handleOllamaError(normalizedError);
       return { success: false, error: errorType };
     }
   },
@@ -1012,7 +1021,7 @@ export const ollamaModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<string> {
     logger.info(`Executing task using Ollama model ${modelId}`);
     
     try {
@@ -1021,11 +1030,14 @@ export const ollamaModule = {
         throw new Error('Ollama endpoint not configured');
       }
       
-      // Determine the execution timeout (default to 3 minutes)
-      const timeout = 180000;
+      const timeout = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : config.ollamaTimeout;
+      const executionOptions = {
+        ...buildCodeTaskExecutionOptions(task, 'ollama'),
+        ...options,
+      };
       
       // Call the Ollama API
-      const result = await this.callOllamaApi(modelId, task, timeout);
+      const result = await this.callOllamaApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
         if (result.error) {
@@ -1040,6 +1052,12 @@ export const ollamaModule = {
               throw new Error(`Model ${modelId} not found in Ollama.`);
             case OllamaErrorType.SERVER_ERROR:
               throw new Error('Ollama server error. Please ensure Ollama is running.');
+            case OllamaErrorType.TIMEOUT:
+              throw new InferenceTimeoutError(
+                'ollama',
+                timeout,
+                `Ollama inference timed out after ${timeout}ms.`,
+              );
             default:
               throw new Error(`Error executing task: ${result.error}`);
           }
@@ -1061,5 +1079,32 @@ export const ollamaModule = {
       }
       throw error;
     }
+  },
+
+  async unloadModel(modelId: string): Promise<void> {
+    logger.info(`Unloading Ollama model ${modelId}`);
+
+    if (!config.ollamaEndpoint) {
+      logger.warn('Ollama endpoint not configured; cannot unload model');
+      return;
+    }
+
+    await axios.post(
+      `${config.ollamaEndpoint}/generate`,
+      {
+        model: modelId,
+        prompt: '',
+        stream: false,
+        keep_alive: 0,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      },
+    );
+
+    logger.debug(`Requested immediate unload for Ollama model ${modelId}`);
   }
 };

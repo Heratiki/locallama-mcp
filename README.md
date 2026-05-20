@@ -4,7 +4,7 @@ LocalLama MCP is a local-first, provider-neutral Model Context Protocol server f
 
 The project routes coding work across local models, free or low-cost remote models, and paid frontier models using cost, latency, context capacity, benchmark history, and task fit. It is no longer designed around Cline or Roo Code as primary clients.
 
-> Revival status: this repository has useful architecture, but several development commands and benchmark paths are stale. See `docs/ROADMAP.md` for the active modernization plan.
+> Revival status: this repository has useful architecture, but several development commands still need cleanup. See `docs/ROADMAP.md` for the active modernization plan.
 
 ## Overview
 
@@ -13,16 +13,19 @@ LocalLama MCP Server is designed to reduce token usage and costs without giving 
 ## Current Baseline
 
 - `npx tsc --project tsconfig.json --noEmit` succeeds.
-- `npm run build` currently fails on native Windows because the package script uses Unix `cp`.
+- `npm run build` now succeeds on native Windows because the package script uses a Node copy step.
 - `npm run lint` currently fails because `eslint-plugin-import` is referenced but not installed.
-- `npm run benchmark` and `npm run benchmark:comprehensive` currently reference a missing `run-benchmarks.js`.
+- `npm run benchmark` and `npm run benchmark:comprehensive` build the project and run the checked-in benchmark CLI.
 
 ## Project Memory and Roadmap
 
-- `AGENTS.md` is the shared operating guide for coding agents.
-- `CLAUDE.md` points Claude Code at the same shared guidance.
-- `memory-bank/` contains multi-author project memory.
-- `docs/ROADMAP.md` is the modernization roadmap and implementation plan.
+- `docs/AGENTS.md` is the shared operating guide for coding agents.
+- `docs/CLAUDE.md` points Claude Code at the same shared guidance.
+- `docs/PROJECT_STATE.md` is the current snapshot of what is done, in progress, and being tracked.
+- `docs/PLAN.md` is the branch implementation plan.
+- `docs/OPERATIONAL_TEST_PLAN.md` is the live test record.
+- `docs/history/memory-bank/` contains historical append-only project memory.
+- `docs/ROADMAP.md` is the long-form modernization backdrop.
 
 ## Key Components
 
@@ -199,6 +202,7 @@ DEFAULT_LOCAL_MODEL=qwen2.5-coder-3b-instruct
 TOKEN_THRESHOLD=1500
 COST_THRESHOLD=0.02
 QUALITY_THRESHOLD=0.7
+PROVIDER_HEALTH_PROBE_INTERVAL_MS=60000
 
 # Code Search Configuration
 CODE_SEARCH_ENABLED=true
@@ -241,12 +245,17 @@ PYTHON_DETECT_VENV=true
 - **Local LLM Endpoints**
   - `LM_STUDIO_ENDPOINT`: URL where your LM Studio instance is running
   - `OLLAMA_ENDPOINT`: URL where your Ollama instance is running
+  - `OLLAMA_TIMEOUT`: Per-request Ollama timeout in milliseconds (default `120000`)
+  - `PROVIDER_TIMEOUT_MS`: Generic per-request timeout in milliseconds for providers without a specific override (default `120000`)
 
 - **Configuration**
   - `DEFAULT_LOCAL_MODEL`: The local LLM model to use when offloading tasks
   - `TOKEN_THRESHOLD`: Maximum token count before considering offloading to local LLM
   - `COST_THRESHOLD`: Cost threshold (in USD) that triggers local LLM usage
   - `QUALITY_THRESHOLD`: Quality score below which to use paid APIs regardless of cost
+  - `PROVIDER_HEALTH_PROBE_INTERVAL_MS`: Interval in milliseconds for provider health probing (default `60000`)
+  - `PROVIDER_MAX_CONCURRENT_LOCAL`: Max concurrent requests per local provider (default `2`)
+  - `PROVIDER_MAX_CONCURRENT_REMOTE`: Max concurrent requests per remote provider (default `5`)
 
 - **Code Search Configuration**
   - `CODE_SEARCH_ENABLED`: Enable or disable semantic code search functionality
@@ -280,6 +289,9 @@ PYTHON_DETECT_VENV=true
 - **Server Lock Configuration** (New)
   - `LOCK_FILE_CHECK_ACTIVE_PROCESS`: Verify if processes in lock files are still running
   - `REMOVE_STALE_LOCK_FILES`: Automatically clean up stale lock files from crashed processes
+
+- **Operational Testing Flags**
+  - `EXPECT_LOCAL_PROVIDER_DOWN`: Optional flag for `test-operational.mjs` routing suite. When `true`, the preemptive routing test asserts that no local model is suggested.
 
 ### Environment Variables for MCP Clients
 
@@ -492,10 +504,10 @@ The project includes a comprehensive benchmarking system to compare local LLM mo
 
 ```bash
 # Run a simple benchmark
-node run-benchmarks.js
+npm run benchmark
 
 # Run a comprehensive benchmark across multiple models
-node run-benchmarks.js comprehensive
+npm run benchmark:comprehensive
 ```
 
 Benchmark results are stored in the `benchmark-results` directory and include:

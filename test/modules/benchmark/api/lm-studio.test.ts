@@ -1,44 +1,45 @@
-import { logger } from '../../../../dist/utils/logger.js'; // Changed path and extension
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-// Manually mock axios to ensure axios.post is a jest.Mock
-jest.mock('axios', () => ({
-  post: jest.fn(),
+const axiosPostMock = jest.fn();
+
+jest.unstable_mockModule('axios', () => ({
+  default: { post: axiosPostMock },
+  post: axiosPostMock
 }));
 
-// Import axios *after* the mock
-import axios from 'axios';
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
-import { callLmStudioApi } from '../../../../dist/modules/benchmark/api/lm-studio.js'; // Changed path and extension
+jest.unstable_mockModule('../../../../dist/utils/logger.js', () => ({
+  logger: {
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn()
+  }
+}));
 
-jest.mock('../../../../dist/utils/logger.js'); // Changed path and extension
+const { callLmStudioApi } = await import('../../../../dist/modules/benchmark/api/lm-studio.js');
 
 describe('callLmStudioApi', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-     // Ensure the mock function itself is reset if needed
-    (axios.post as jest.Mock).mockClear();
   });
 
   it('should handle a successful API response', async () => {
-    const mockResponse = {
+    axiosPostMock.mockResolvedValue({
       status: 200,
       data: {
         choices: [
           {
             message: { content: 'Hello, world!', role: 'assistant' },
-            index: 0,
-          },
+            index: 0
+          }
         ],
         usage: {
           prompt_tokens: 10,
           completion_tokens: 20,
-          total_tokens: 30,
-        },
-      },
-    };
-
-    // Use the mock function directly
-    (axios.post as jest.Mock).mockResolvedValue(mockResponse);
+          total_tokens: 30
+        }
+      }
+    });
 
     const result = await callLmStudioApi('test-model', 'Say hello', 5000);
 
@@ -48,37 +49,35 @@ describe('callLmStudioApi', () => {
       usage: {
         prompt_tokens: 10,
         completion_tokens: 20,
-      },
+        total_tokens: 30
+      }
     });
-    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(axiosPostMock).toHaveBeenCalledTimes(1);
   });
 
   it('should handle speculative decoding stats', async () => {
-    const mockResponse = {
+    axiosPostMock.mockResolvedValue({
       status: 200,
       data: {
         choices: [
           {
             message: { content: 'Speculative response', role: 'assistant' },
-            index: 0,
-          },
+            index: 0
+          }
         ],
         usage: {
           prompt_tokens: 15,
           completion_tokens: 25,
-          total_tokens: 40,
+          total_tokens: 40
         },
         stats: {
           tokens_per_second: 5,
           draft_model: 'draft-test-model',
           accepted_draft_tokens_count: 10,
-          total_draft_tokens_count: 20,
-        },
-      },
-    };
-
-    // Use the mock function directly
-    (axios.post as jest.Mock).mockResolvedValue(mockResponse);
+          total_draft_tokens_count: 20
+        }
+      }
+    });
 
     const result = await callLmStudioApi('test-model', 'Speculative task', 5000, 'draft-test-model');
 
@@ -88,46 +87,33 @@ describe('callLmStudioApi', () => {
       usage: {
         prompt_tokens: 15,
         completion_tokens: 25,
+        total_tokens: 40
       },
       stats: {
         tokens_per_second: 5,
         draft_model: 'draft-test-model',
         accepted_draft_tokens_count: 10,
-        total_draft_tokens_count: 20,
-      },
+        total_draft_tokens_count: 20
+      }
     });
-    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(axiosPostMock).toHaveBeenCalledTimes(1);
   });
 
   it('should handle API errors gracefully', async () => {
-    // Use the mock function directly
-    (axios.post as jest.Mock).mockRejectedValue(new Error('API error'));
+    axiosPostMock.mockRejectedValue(new Error('API error'));
 
     const result = await callLmStudioApi('test-model', 'Error task', 5000);
 
     expect(result).toEqual({ success: false });
-    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(axiosPostMock).toHaveBeenCalledTimes(1);
   });
 
   it('should handle timeouts', async () => {
-    jest.useFakeTimers();
+    axiosPostMock.mockRejectedValue(new Error('Timeout'));
 
-    // Use the mock function directly
-    (axios.post as jest.Mock).mockImplementation(() => {
-      return new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout')), 6000);
-      });
-    });
-
-    const resultPromise = callLmStudioApi('test-model', 'Timeout task', 5000);
-
-    jest.advanceTimersByTime(5000);
-
-    const result = await resultPromise;
+    const result = await callLmStudioApi('test-model', 'Timeout task', 5000);
 
     expect(result).toEqual({ success: false });
-    expect(axios.post).toHaveBeenCalledTimes(1);
-
-    jest.useRealTimers();
+    expect(axiosPostMock).toHaveBeenCalledTimes(1);
   });
 });

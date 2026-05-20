@@ -44,10 +44,9 @@ export async function callOllamaApi(
     total_draft_tokens_count?: number;
   };
 }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
     // Use temperature and other parameters from the default model config
     const temperature = config.defaultModelConfig.temperature;
     const maxTokens = config.defaultModelConfig.maxTokens;
@@ -84,8 +83,6 @@ export async function callOllamaApi(
         },
       }
     );
-    
-    clearTimeout(timeoutId);
     
     if (response.status === 200 && response.data.message) {
       // Ollama doesn't provide token counts directly, so we estimate
@@ -143,5 +140,7 @@ export async function callOllamaApi(
   } catch (error) {
     logger.error(`Error calling Ollama API for model ${modelId}:`, error);
     return { success: false };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

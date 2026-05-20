@@ -15,6 +15,7 @@ import { codeModelSelector } from './services/codeModelSelector.js';
 import { modelPerformanceTracker } from './services/modelPerformance.js';
 import { lmStudioModule } from '../lm-studio/index.js';
 import { ollamaModule } from '../ollama/index.js';
+import { getProviderRegistry, isProviderLocal } from '../core/provider/index.js';
 // import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
 /**
  * Represents a single factor in the routing decision.
@@ -104,13 +105,14 @@ export const decisionEngine = {
           jobTracker = await getJobTracker();
           
           // Setup cleanup interval once successfully initialized
-          setInterval(() => {
+          const cleanupInterval = setInterval(() => {
             try {
               jobTracker.cleanupCompletedJobs();
             } catch (cleanupError) {
               logger.error('Error cleaning up completed jobs:', cleanupError);
             }
           }, 3600000); // Clean up every hour
+          cleanupInterval.unref?.();
           
           logger.info('Job tracker successfully initialized');
           break; // Break out of retry loop on success
@@ -147,18 +149,45 @@ export const decisionEngine = {
         }
       }
 
-      // Check for new free models that haven't been benchmarked
-      if (config.openRouterApiKey) {
-        try {
-          // Schedule benchmarking to run in the background
-          void setTimeout(() => {
-            benchmarkService.benchmarkFreeModels().catch(err => {
-              logger.error('Error benchmarking free models:', err);
-            });
-          }, 5000); // Wait 5 seconds before starting benchmarks
-        } catch (error) {
-          logger.error('Error checking for unbenchmarked free models:', error);
-        }
+      // Schedule background benchmarks based on STARTUP_BENCHMARK_TARGETS.
+      // Uses costClass from the ProviderRegistry instead of hardcoded provider names,
+      // so adding a new local provider Just Works (Section 6 of PLAN.md).
+      const targets = config.startupBenchmarkTargets;
+      if (targets.length > 0) {
+        const startupBenchmarkTimer = setTimeout(async () => {
+          try {
+            const { getProviderRegistry } = await import('../core/provider/index.js');
+            const { getModelRegistry } = await import('../core/model/index.js');
+            const { benchmarkModel } = await import('../benchmark/core/model-benchmarker.js');
+            const registry = getProviderRegistry();
+            const modelRegistry = getModelRegistry();
+
+            // Benchmark local models when 'local' or 'all' is in targets
+            if (targets.includes('local') || targets.includes('all')) {
+              const localProviders = registry.listByCostClass('local');
+              for (const provider of localProviders) {
+                const models = modelRegistry.listByProvider(provider.id);
+                for (const model of models) {
+                  try {
+                    await benchmarkModel({ modelId: model.id, taskCategories: ['code', 'chat'] });
+                  } catch (err) {
+                    logger.warn(`Startup benchmark failed for local model '${model.id}': ${err instanceof Error ? err.message : String(err)}`);
+                  }
+                }
+              }
+            }
+
+            // Benchmark free OpenRouter models when 'free' or 'all' is in targets
+            if ((targets.includes('free') || targets.includes('all')) && config.openRouterApiKey) {
+              benchmarkService.benchmarkFreeModels().catch(err => {
+                logger.error('Error benchmarking free models:', err);
+              });
+            }
+          } catch (err) {
+            logger.error('Error during startup benchmark scheduling:', err);
+          }
+        }, 5000); // Wait 5 seconds before starting benchmarks
+        startupBenchmarkTimer.unref?.();
       }
       
       logger.info('Decision engine initialized successfully');
@@ -518,15 +547,35 @@ export const decisionEngine = {
     complexity: number,
     totalTokens: number
   ): Promise<string> {
-    if (provider === 'local') {
+    if (isProviderLocal(provider)) {
       const bestModel = await modelSelector.getBestLocalModel(complexity, totalTokens);
       return bestModel?.id || config.defaultLocalModel;
     } else {
-      if (complexity >= COMPLEXITY_THRESHOLDS.COMPLEX) {
-        return 'gpt-4o';
-      } else {
-        return 'gpt-3.5-turbo';
+      const preferredModelIds = complexity >= COMPLEXITY_THRESHOLDS.COMPLEX
+        ? ['openai/gpt-4o', 'openai/gpt-4o-mini']
+        : ['openai/gpt-4o-mini', 'openai/gpt-4o'];
+
+      for (const paidProvider of getProviderRegistry().listByCostClass('paid')) {
+        try {
+          const models = await paidProvider.listModels();
+          const suitableModels = models.filter(model => !model.contextWindow || model.contextWindow >= totalTokens);
+          const preferredModel = preferredModelIds
+            .map(modelId => suitableModels.find(model => model.id === modelId))
+            .find((model): model is NonNullable<typeof model> => Boolean(model));
+
+          if (preferredModel) {
+            return preferredModel.id;
+          }
+
+          if (suitableModels.length > 0) {
+            return suitableModels[0].id;
+          }
+        } catch (error) {
+          logger.warn(`Failed to list paid provider models from ${paidProvider.id}:`, error);
+        }
       }
+
+      return complexity >= COMPLEXITY_THRESHOLDS.COMPLEX ? 'openai/gpt-4o' : 'openai/gpt-4o-mini';
     }
   },
 

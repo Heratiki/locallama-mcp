@@ -1,25 +1,39 @@
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
-import { benchmarkModule } from '../../../dist/modules/benchmark/index.js';
-import { benchmarkTask } from '../../../dist/modules/benchmark/core/runner.js';
-import { generateSummary } from '../../../dist/modules/benchmark/core/summary.js'; // Corrected import path/extension
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-// Mock dependencies manually
-jest.mock('../../../dist/modules/benchmark/core/runner.js', () => ({
-  benchmarkTask: jest.fn()
-}));
-jest.mock('../../../dist/modules/benchmark/core/summary.js', () => ({
-  generateSummary: jest.fn()
-}));
-jest.mock('../../../dist/modules/benchmark/storage/benchmarkDb.js', () => ({ // Manual mock for benchmarkDb
-  initBenchmarkDb: jest.fn(),
-  cleanupOldResults: jest.fn()
-}));
-jest.mock('../../../dist/modules/benchmark/api/ollama.js'); 
-jest.mock('../../../dist/modules/benchmark/api/lm-studio.js'); 
-jest.mock('../../../dist/modules/benchmark/api/simulation.js'); 
+const benchmarkTaskMock = jest.fn();
+const generateSummaryMock = jest.fn();
+const initBenchmarkDbMock = jest.fn();
+const cleanupOldResultsMock = jest.fn();
 
-// Import after mocks
-import { initBenchmarkDb, cleanupOldResults } from '../../../dist/modules/benchmark/storage/benchmarkDb.js';
+jest.unstable_mockModule('../../../dist/modules/benchmark/core/runner.js', () => ({
+  benchmarkTask: benchmarkTaskMock
+}));
+
+jest.unstable_mockModule('../../../dist/modules/benchmark/core/summary.js', () => ({
+  generateSummary: generateSummaryMock
+}));
+
+jest.unstable_mockModule('../../../dist/modules/benchmark/storage/benchmarkDb.js', () => ({
+  initBenchmarkDb: initBenchmarkDbMock,
+  saveBenchmarkResult: jest.fn(),
+  getRecentModelResults: jest.fn(),
+  cleanupOldResults: cleanupOldResultsMock
+}));
+
+jest.unstable_mockModule('../../../dist/modules/benchmark/api/ollama.js', () => ({
+  callOllamaApi: jest.fn()
+}));
+
+jest.unstable_mockModule('../../../dist/modules/benchmark/api/lm-studio.js', () => ({
+  callLmStudioApi: jest.fn()
+}));
+
+jest.unstable_mockModule('../../../dist/modules/benchmark/api/simulation.js', () => ({
+  simulateOpenAiApi: jest.fn(),
+  simulateGenericApi: jest.fn()
+}));
+
+const { benchmarkModule } = await import('../../../dist/modules/benchmark/index.js');
 
 describe('benchmarkModule', () => {
   beforeEach(() => {
@@ -41,24 +55,25 @@ describe('benchmarkModule', () => {
       { taskId: 'task1', task: 'Test task 1', contextLength: 100, expectedOutputLength: 50, complexity: 0.5 },
       { taskId: 'task2', task: 'Test task 2', contextLength: 150, expectedOutputLength: 75, complexity: 0.9 }
     ];
+
     const mockResults = [
       { id: 'task1', result: 'success' },
       { id: 'task2', result: 'success' }
     ];
+
     const mockSummary = { total: 2, success: 2 };
 
-    // Access the mocked functions directly
-    (initBenchmarkDb as jest.Mock).mockResolvedValue(undefined);
-    (benchmarkTask as jest.Mock).mockImplementation((task) => mockResults.find(r => r.id === task.taskId));
-    (generateSummary as jest.Mock).mockReturnValue(mockSummary);
-    (cleanupOldResults as jest.Mock).mockResolvedValue(undefined);
+    initBenchmarkDbMock.mockResolvedValue(undefined);
+    benchmarkTaskMock.mockImplementation((task) => mockResults.find((r) => r.id === task.taskId));
+    generateSummaryMock.mockReturnValue(mockSummary);
+    cleanupOldResultsMock.mockResolvedValue(undefined);
 
     const summary = await benchmarkModule.benchmarkTasks(mockTasks);
 
-    expect(initBenchmarkDb).toHaveBeenCalledTimes(1);
-    expect(benchmarkTask).toHaveBeenCalledTimes(mockTasks.length);
-    expect(generateSummary).toHaveBeenCalledWith(mockResults);
-    expect(cleanupOldResults).toHaveBeenCalledTimes(1);
+    expect(initBenchmarkDbMock).toHaveBeenCalledTimes(1);
+    expect(benchmarkTaskMock).toHaveBeenCalledTimes(mockTasks.length);
+    expect(generateSummaryMock).toHaveBeenCalledWith(mockResults);
+    expect(cleanupOldResultsMock).toHaveBeenCalledTimes(1);
     expect(summary).toEqual(mockSummary);
   });
 });

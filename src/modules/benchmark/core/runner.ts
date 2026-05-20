@@ -3,12 +3,11 @@ import { costMonitor } from '../../cost-monitor/index.js';
 import { openRouterModule } from '../../openrouter/index.js';
 import { logger } from '../../../utils/logger.js';
 import { BenchmarkConfig, BenchmarkResult, BenchmarkRunResult, Model, BenchmarkTaskParams } from '../../../types/index.js';
-import { callLmStudioApi } from '../api/lm-studio.js';
-import { callOllamaApi } from '../api/ollama.js';
-import { simulateOpenAiApi, simulateGenericApi } from '../api/simulation.js';
+import { simulateGenericApi } from '../api/simulation.js';
 import { evaluateQuality } from '../evaluation/quality.js';
 import { codeEvaluationService } from '../../decision-engine/services/codeEvaluationService.js';
 import { saveBenchmarkResult, getRecentModelResults } from '../storage/benchmarkDb.js';
+import { isProviderLocal, getProviderRegistry } from '../../core/provider/index.js';
 
 // Track model failure counts in memory
 const modelFailures = new Map<string, number>();
@@ -18,6 +17,34 @@ function trackModelFailure(modelId: string): number {
   const currentFailures = modelFailures.get(modelId) || 0;
   modelFailures.set(modelId, currentFailures + 1);
   return currentFailures + 1;
+}
+
+function getEffectiveRunTimeout(dynamicTimeout: number, benchmarkTaskTimeout: number): number {
+  // Keep each run below the benchmark tool timeout with a small buffer so the
+  // MCP request can still serialize and return a result payload.
+  const safetyBufferMs = 2000;
+  const minTimeoutMs = 5000;
+  const boundedByConfig = Math.max(minTimeoutMs, benchmarkTaskTimeout - safetyBufferMs);
+  return Math.max(minTimeoutMs, Math.min(dynamicTimeout, boundedByConfig));
+}
+
+async function withHardTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeoutMessage: string): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      const error = new Error(onTimeoutMessage);
+      (error as Error & { code?: string }).code = 'BENCHMARK_TIMEOUT';
+      reject(error);
+    }, timeoutMs);
+    timeoutHandle.unref?.();
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
 }
 
 /**
@@ -65,62 +92,54 @@ export async function runModelBenchmark(
       
       // Calculate dynamic timeout based on model size and task complexity
       const dynamicTimeout = getDynamicTimeout(model.id, model.contextWindow, task.length / 1000);
-      logger.info(`Using dynamic timeout of ${dynamicTimeout}ms for model ${model.id}`);
+      const effectiveTimeout = getEffectiveRunTimeout(dynamicTimeout, config.taskTimeout);
+      logger.info(
+        `Using benchmark timeout of ${effectiveTimeout}ms for model ${model.id} ` +
+        `(dynamic=${dynamicTimeout}ms, benchmarkTaskTimeout=${config.taskTimeout}ms)`
+      );
       
       // Measure response time
       const startTime = Date.now();
       
-      // Call the appropriate API based on model provider
-      let response;
+      // Call the appropriate API based on model provider (registry-based, Section 6)
       let success = false;
       let qualityScore = 0;
       let promptTokens = 0;
       let completionTokens = 0;
       let runOutput = '';
-      
-      if (model.provider === 'lm-studio') {
-        logger.info(`Calling LM Studio API for model ${model.id}`);
-        response = await callLmStudioApi(model.id, task, dynamicTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
-        promptTokens = response.usage?.prompt_tokens || contextLength;
-        completionTokens = response.usage?.completion_tokens || expectedOutputLength;
-        if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
+
+      const registryProvider = getProviderRegistry().get(model.provider);
+      if (registryProvider) {
+        try {
+          const execResult = await withHardTimeout(
+            registryProvider.executeTask(model.id, task, { timeoutMs: effectiveTimeout }),
+            effectiveTimeout,
+            `Benchmark run timed out after ${effectiveTimeout}ms for model ${model.id}`
+          );
+          success = true;
+          qualityScore = evaluateQuality(task, execResult.content);
+          promptTokens = execResult.promptTokens ?? contextLength;
+          completionTokens = execResult.completionTokens ?? expectedOutputLength;
+          runOutput = execResult.content;
           output = runOutput;
-        }
-      } else if (model.provider === 'ollama') {
-        response = await callOllamaApi(model.id, task, config.taskTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
-        promptTokens = response.usage?.prompt_tokens || contextLength;
-        completionTokens = response.usage?.completion_tokens || expectedOutputLength;
-        if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
-          output = runOutput;
-        }
-      } else if (model.provider === 'openai') {
-        response = await simulateOpenAiApi(task, config.taskTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
-        promptTokens = response.usage?.prompt_tokens || contextLength;
-        completionTokens = response.usage?.completion_tokens || expectedOutputLength;
-        if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
-          output = runOutput;
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          logger.warn(`Provider ${model.provider} executeTask failed for ${model.id}: ${errorMessage}`);
+          runOutput = `Benchmark run failed for ${model.id}: ${errorMessage}`;
         }
       } else {
-        response = await simulateGenericApi(task, config.taskTimeout);
-        success = response.success;
-        qualityScore = response.text ? evaluateQuality(task, response.text) : 0;
+        // Unknown provider — fall back to generic simulation
+        const simResponse = await withHardTimeout(
+          simulateGenericApi(task, effectiveTimeout),
+          effectiveTimeout,
+          `Benchmark simulation timed out after ${effectiveTimeout}ms for model ${model.id}`
+        );
+        success = simResponse.success;
+        qualityScore = simResponse.text ? evaluateQuality(task, simResponse.text) : 0;
         promptTokens = contextLength;
         completionTokens = expectedOutputLength;
         if (success) {
-          runOutput = response.text || '';
-          // Store the latest successful output
+          runOutput = simResponse.text || '';
           output = runOutput;
         }
       }
@@ -134,7 +153,7 @@ export async function runModelBenchmark(
           try {
             const evaluationResult = await codeEvaluationService.evaluateCodeQuality(
               task,
-              response.text || '',
+              runOutput,
               'general',
               { useModel: true, detailedAnalysis: true }
             );
@@ -145,8 +164,8 @@ export async function runModelBenchmark(
               qualityScore = evaluationResult.modelEvaluation.qualityScore;
               logger.info(`Code evaluation service evaluation: Valid=${success}, Quality=${qualityScore}`);
               if (success) {
-                runOutput = response.text || '';
-                // Store the latest successful output
+                // Keep existing runOutput (the provider's response) since the
+                // evaluation service validates it but doesn't produce new content
                 output = runOutput;
               }
             }
@@ -241,16 +260,16 @@ export async function benchmarkTask(
   const availableModels = await costMonitor.getAvailableModels();
   
   // Determine which models to use
-  const localModel = params.localModel 
-    ? availableModels.find(m => m.id === params.localModel && (m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama'))
-    : availableModels.find(m => m.provider === 'local' || m.provider === 'lm-studio' || m.provider === 'ollama');
+  const localModel = params.localModel
+    ? availableModels.find(m => m.id === params.localModel && isProviderLocal(m.provider))
+    : availableModels.find(m => isProviderLocal(m.provider));
   
   // For paid model, check if we should use a free model from OpenRouter
   let paidModel: Model | undefined;
   let skipBenchmark = false;
   
   if (params.paidModel) {
-    paidModel = availableModels.find(m => m.id === params.paidModel && m.provider !== 'local' && m.provider !== 'lm-studio' && m.provider !== 'ollama');
+    paidModel = availableModels.find(m => m.id === params.paidModel && !isProviderLocal(m.provider));
   } else if ('isConfigured' in openRouterModule && typeof openRouterModule.isConfigured === 'function') {
     try {
       if (Object.keys(openRouterModule.modelTracking.models).length === 0) {
@@ -261,13 +280,12 @@ export async function benchmarkTask(
       const freeModels = await costMonitor.getFreeModels();
       
       // Find LM Studio models and add them to the free models pool
-      const lmStudioModels = availableModels.filter(m => m.provider === 'lm-studio');
-      if (lmStudioModels.length > 0) {
-        logger.info(`Including ${lmStudioModels.length} LM Studio models in free models pool`);
-        
-        // Combine OpenRouter free models with LM Studio models 
-        // Prioritize LM Studio models by putting them first in the list
-        const combinedFreeModels = [...lmStudioModels, ...freeModels];
+      const localModels = availableModels.filter(m => isProviderLocal(m.provider));
+      if (localModels.length > 0) {
+        logger.info(`Including ${localModels.length} local model(s) in free models pool`);
+
+        // Prioritize local models by putting them first in the list
+        const combinedFreeModels = [...localModels, ...freeModels];
         
         // Find a model that can handle the context + output length
         const bestFreeModel = combinedFreeModels.find(m => 

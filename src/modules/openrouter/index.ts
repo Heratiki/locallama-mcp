@@ -10,10 +10,15 @@ import {
   OpenRouterModelsResponse,
   OpenRouterErrorResponse,
   OpenRouterModelTracking,
+  OpenRouterFreeModelHealth,
   PromptingStrategy,
   OpenRouterErrorType
 } from './types.js';
 import { speculativeDecodingService } from '../decision-engine/services/speculativeDecoding.js';
+import { getPromptingStrategyService } from '../core/prompting/service.js';
+import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
+import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
+import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 
 
 // Add a custom error class
@@ -50,6 +55,8 @@ interface OpenRouterChatCompletion {
 
 // File path for storing OpenRouter model tracking data
 const TRACKING_FILE_PATH = path.join(config.rootDir, 'openrouter-models.json');
+const FREE_MODEL_FAILURE_THRESHOLD = 2;
+const FREE_MODEL_QUARANTINE_MS = 30 * 60 * 1000;
 
 // Default prompting strategies for different model families
 const DEFAULT_PROMPTING_STRATEGIES: Record<string, Partial<PromptingStrategy>> = {
@@ -89,7 +96,8 @@ export const openRouterModule = {
   modelTracking: {
     models: {},
     lastUpdated: '',
-    freeModels: []
+    freeModels: [],
+    freeModelHealth: {}
   } as OpenRouterModelTracking,
 
   // In-memory cache of prompting strategies
@@ -122,21 +130,23 @@ export const openRouterModule = {
       try {
         const data = await fs.readFile(TRACKING_FILE_PATH, 'utf8');
         this.modelTracking = JSON.parse(data) as OpenRouterModelTracking;
+        this.modelTracking.freeModelHealth = this.modelTracking.freeModelHealth || {};
         logger.debug(`Loaded OpenRouter tracking data with ${Object.keys(this.modelTracking.models).length} models and ${this.modelTracking.freeModels.length} free models`);
       } catch {
         logger.debug('No existing OpenRouter tracking data found, will create new tracking data');
         this.modelTracking = {
           models: {},
           lastUpdated: new Date().toISOString(),
-          freeModels: []
+          freeModels: [],
+          freeModelHealth: {}
         };
       }
       
-      // Load prompting strategies from disk if available
+      // Load prompting strategies from the shared user-override file
       try {
-        const strategiesPath = path.join(config.rootDir, 'openrouter-strategies.json');
-        const data = await fs.readFile(strategiesPath, 'utf8');
-        this.promptingStrategies = JSON.parse(data) as Record<string, PromptingStrategy>;
+        const svc = getPromptingStrategyService();
+        const userOverrides = await svc.readUserOverrides();
+        this.promptingStrategies = userOverrides as Record<string, PromptingStrategy>;
         logger.debug(`Loaded OpenRouter prompting strategies for ${Object.keys(this.promptingStrategies).length} models`);
       } catch {
         logger.debug('No existing OpenRouter prompting strategies found');
@@ -242,10 +252,19 @@ export const openRouterModule = {
         }
         
         // Update the tracking data
+        const existingHealth = this.modelTracking.freeModelHealth || {};
+        const nextHealth: Record<string, OpenRouterFreeModelHealth> = {};
+        for (const freeModelId of freeModels) {
+          if (existingHealth[freeModelId]) {
+            nextHealth[freeModelId] = existingHealth[freeModelId];
+          }
+        }
+
         this.modelTracking = {
           models: updatedModels,
           lastUpdated: new Date().toISOString(),
-          freeModels
+          freeModels,
+          freeModelHealth: nextHealth
         };
         
         // Save the tracking data to disk
@@ -291,6 +310,20 @@ export const openRouterModule = {
     assistantPrompt?: string;
     useChat: boolean;
   } {
+    // Consult the central prompting strategy service first (Section 4)
+    const svc = getPromptingStrategyService();
+    const strategyId = svc.resolveStrategyId(modelId, undefined, 'openrouter');
+    const centralStrategy = svc.getStrategy(strategyId);
+    if (centralStrategy) {
+      return {
+        systemPrompt: centralStrategy.systemPrompt,
+        userPrompt: centralStrategy.userPromptTemplate,
+        assistantPrompt: centralStrategy.assistantPromptTemplate,
+        useChat: centralStrategy.useChat,
+      };
+    }
+
+    // Inline fallback
     const provider = this.getProviderFromModelId(modelId);
     const defaultStrategy = DEFAULT_PROMPTING_STRATEGIES[provider] || DEFAULT_PROMPTING_STRATEGIES.default;
     
@@ -334,29 +367,15 @@ export const openRouterModule = {
    */
   async savePromptingStrategies(): Promise<void> {
     try {
-      const strategiesPath = path.join(config.rootDir, 'openrouter-strategies.json');
-      logger.debug(`Saving prompting strategies to: ${strategiesPath}`);
-      logger.debug(`Prompting strategies contains data for ${Object.keys(this.promptingStrategies).length} models`);
-      
-      // Ensure the directory exists
-      try {
-        await mkdir(path.dirname(strategiesPath), { recursive: true });
-      } catch (error) {
-        if (error instanceof Error) {
-          logger.debug(`Directory check during save strategies: ${error.message}`);
-        } else {
-          logger.debug('Unknown error during directory check');
-        }
-      }
-      
-      await fs.writeFile(strategiesPath, JSON.stringify(this.promptingStrategies, null, 2));
-      logger.debug('Successfully saved OpenRouter prompting strategies to disk');
+      logger.debug(`Saving OpenRouter prompting strategies (${Object.keys(this.promptingStrategies).length} models) to user-override file`);
+      const svc = getPromptingStrategyService();
+      await svc.mergeUserOverrides(this.promptingStrategies as Parameters<typeof svc.mergeUserOverrides>[0]);
+      logger.debug('Successfully saved OpenRouter prompting strategies');
     } catch (error) {
       if (error instanceof Error) {
-        logger.error(`Error saving OpenRouter prompting strategies to ${path.join(config.rootDir, 'openrouter-strategies.json')}:`, error);
-        logger.error(`Error details: ${error.message}`);
+        logger.error(`Error saving OpenRouter prompting strategies:`, error);
       } else {
-        logger.error('Unknown error occurred');
+        logger.error('Unknown error occurred saving OpenRouter prompting strategies');
       }
     }
   },
@@ -436,10 +455,14 @@ export const openRouterModule = {
       
       // Filter for free models
       const freeModels = allModels.filter(model => {
-        return this.modelTracking.freeModels.includes(model.id);
+        return this.modelTracking.freeModels.includes(model.id) && !this.isModelQuarantined(model.id);
       });
-      
-      logger.info(`Found ${freeModels.length} free models out of ${allModels.length} total models from OpenRouter`);
+
+      const quarantinedFreeModels = this.modelTracking.freeModels.filter((modelId) => this.isModelQuarantined(modelId));
+      logger.info(`Found ${freeModels.length} healthy free models out of ${allModels.length} total models from OpenRouter`);
+      if (quarantinedFreeModels.length > 0) {
+        logger.warn(`Excluded ${quarantinedFreeModels.length} quarantined free model(s): ${quarantinedFreeModels.join(', ')}`);
+      }
       
       // If still no free models, try one more time with a forced update
       if (freeModels.length === 0 && !forceUpdate) {
@@ -528,6 +551,71 @@ export const openRouterModule = {
     return this.promptingStrategies[modelId];
   },
 
+  normalizeModelId(modelId: string): string {
+    return modelId.startsWith('openrouter:') ? modelId.substring('openrouter:'.length) : modelId;
+  },
+
+  isModelQuarantined(modelId: string): boolean {
+    const normalizedModelId = this.normalizeModelId(modelId);
+    const state = this.modelTracking.freeModelHealth?.[normalizedModelId];
+    if (!state?.quarantinedUntil) {
+      return false;
+    }
+
+    return new Date(state.quarantinedUntil).getTime() > Date.now();
+  },
+
+  async recordFreeModelSuccess(modelId: string): Promise<void> {
+    const normalizedModelId = this.normalizeModelId(modelId);
+    if (!this.modelTracking.freeModels.includes(normalizedModelId)) {
+      return;
+    }
+
+    const state = this.modelTracking.freeModelHealth?.[normalizedModelId] || { consecutiveFailures: 0 };
+    this.modelTracking.freeModelHealth = this.modelTracking.freeModelHealth || {};
+    this.modelTracking.freeModelHealth[normalizedModelId] = {
+      ...state,
+      consecutiveFailures: 0,
+      quarantinedUntil: undefined,
+      lastSuccessAt: new Date().toISOString(),
+    };
+
+    await this.saveTrackingData();
+  },
+
+  async recordFreeModelFailure(modelId: string, errorType: OpenRouterErrorType): Promise<void> {
+    const normalizedModelId = this.normalizeModelId(modelId);
+    if (!this.modelTracking.freeModels.includes(normalizedModelId)) {
+      return;
+    }
+
+    this.modelTracking.freeModelHealth = this.modelTracking.freeModelHealth || {};
+    const previous = this.modelTracking.freeModelHealth[normalizedModelId] || { consecutiveFailures: 0 };
+    const consecutiveFailures = previous.consecutiveFailures + 1;
+
+    const nextState: OpenRouterFreeModelHealth = {
+      ...previous,
+      consecutiveFailures,
+      lastErrorType: errorType,
+      lastFailureAt: new Date().toISOString(),
+    };
+
+    if (
+      consecutiveFailures >= FREE_MODEL_FAILURE_THRESHOLD &&
+      (errorType === OpenRouterErrorType.INVALID_REQUEST ||
+        errorType === OpenRouterErrorType.MODEL_NOT_FOUND ||
+        errorType === OpenRouterErrorType.SERVER_ERROR)
+    ) {
+      nextState.quarantinedUntil = new Date(Date.now() + FREE_MODEL_QUARANTINE_MS).toISOString();
+      logger.warn(
+        `Quarantining OpenRouter free model ${normalizedModelId} after ${consecutiveFailures} consecutive ${errorType} failures until ${nextState.quarantinedUntil}`,
+      );
+    }
+
+    this.modelTracking.freeModelHealth[normalizedModelId] = nextState;
+    await this.saveTrackingData();
+  },
+
   /**
    * Handle errors from OpenRouter
    */
@@ -574,6 +662,9 @@ export const openRouterModule = {
       } else if (axiosError.response && axiosError.response.status >= 500) {
         logger.error('OpenRouter server error');
         return OpenRouterErrorType.SERVER_ERROR;
+      } else if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ERR_CANCELED') {
+        logger.error('OpenRouter request timed out or was canceled');
+        return OpenRouterErrorType.TIMEOUT;
       }
     }
     
@@ -587,7 +678,8 @@ export const openRouterModule = {
   async callOpenRouterApi(
     modelId: string,
     task: string,
-    timeout: number
+    timeout: number,
+    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }
   ): Promise<{
     success: boolean;
     text?: string;
@@ -637,8 +729,9 @@ export const openRouterModule = {
       // Prepare the messages based on the prompting strategy
       const messages = [];
       
-      if (strategy.systemPrompt) {
-        messages.push({ role: 'system', content: strategy.systemPrompt });
+      const systemPrompt = options?.systemPrompt ?? strategy.systemPrompt;
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       }
       
       if (strategy.userPrompt) {
@@ -651,8 +744,8 @@ export const openRouterModule = {
       const requestBody: Record<string, unknown> = {
         model: modelId,
         messages,
-        temperature: 0.7,
-        max_tokens: 1000,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 1000,
       };
 
       // Try to find a compatible draft model for speculative decoding
@@ -777,7 +870,8 @@ export const openRouterModule = {
         }
       }
       
-      logger.error(`Error calling OpenRouter API for model ${modelId}: ${detailedErrorMessage}`, errorInstance);
+      const sanitizedError = sanitizeErrorForLogging(errorInstance, detailedErrorMessage);
+      logger.error(`Error calling OpenRouter API for model ${modelId}: ${detailedErrorMessage}`, sanitizedError);
       
       // Return structured error instead of re-throwing
       return {
@@ -1116,7 +1210,8 @@ export const openRouterModule = {
     this.modelTracking = {
       models: {},
       lastUpdated: '',
-      freeModels: []
+      freeModels: [],
+      freeModelHealth: {}
     };
     
     try {
@@ -1153,7 +1248,7 @@ export const openRouterModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<string> {
     logger.info(`Executing task using OpenRouter model ${modelId}`);
     
     try {
@@ -1161,14 +1256,29 @@ export const openRouterModule = {
       if (!config.openRouterApiKey) {
         throw new Error('OpenRouter API key not configured');
       }
+
+      const normalizedModelId = this.normalizeModelId(modelId);
+      if (this.modelTracking.freeModels.includes(normalizedModelId) && this.isModelQuarantined(normalizedModelId)) {
+        throw new Error(`Model ${normalizedModelId} is temporarily quarantined due to recent failures. Please retry later or select another model.`);
+      }
       
-      // Determine the execution timeout (default to 3 minutes)
-      const timeout = 180000;
+      // Use explicit timeout when provided; otherwise fall back to global provider timeout.
+      const timeout = options?.timeoutMs && options.timeoutMs > 0
+        ? options.timeoutMs
+        : config.providerTimeoutMs;
+
+      const executionOptions = {
+        ...buildCodeTaskExecutionOptions(task, 'openrouter'),
+        ...options,
+      };
       
       // Call the OpenRouter API
-      const result = await this.callOpenRouterApi(modelId, task, timeout);
+      const result = await this.callOpenRouterApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
+        if (result.error) {
+          await this.recordFreeModelFailure(normalizedModelId, result.error);
+        }
         if (result.error) {
           switch (result.error) {
             case OpenRouterErrorType.RATE_LIMIT:
@@ -1179,6 +1289,12 @@ export const openRouterModule = {
               throw new Error('Context length exceeded. Please reduce the size of your task.');
             case OpenRouterErrorType.MODEL_NOT_FOUND:
               throw new Error(`Model ${modelId} not found in OpenRouter.`);
+            case OpenRouterErrorType.TIMEOUT:
+              throw new InferenceTimeoutError(
+                'openrouter',
+                timeout,
+                `OpenRouter inference timed out after ${timeout}ms.`,
+              );
             case OpenRouterErrorType.SERVER_ERROR:
               throw new Error('OpenRouter server error. Please try again later.');
             default:
@@ -1192,6 +1308,8 @@ export const openRouterModule = {
       if (result.usage) {
         logger.debug(`OpenRouter usage: ${result.usage.prompt_tokens} prompt tokens, ${result.usage.completion_tokens} completion tokens`);
       }
+
+      await this.recordFreeModelSuccess(normalizedModelId);
       
       return result.text;
     } catch (error) {

@@ -2,7 +2,7 @@
 .clinerules-architect
 .clinerules-ask
 .clinerules-code
-memory-bank/*.code-workspace
+docs/history/memory-bank/*.code-workspace
 
 # Dependency directories
 node_modules/
@@ -107,3 +107,6 @@ lm-studio-models.json
 chats.db
 package-lock.json
 job-results.txt
+ollama-models.json
+.rooignore
+job-results.json

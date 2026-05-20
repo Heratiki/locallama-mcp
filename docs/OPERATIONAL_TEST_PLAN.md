@@ -1,0 +1,484 @@
+# Operational Test Plan — LocalLama MCP Server
+
+> **Purpose:** This document captures the intent, approach, and ongoing results of
+> operational (live, end-to-end) testing of the LocalLama MCP server using real
+> Ollama models. It is distinct from the unit/integration test suite in `test/`
+> and from the PLAN.md implementation roadmap.
+>
+> Any AI agent or human developer can pick up this document cold and continue the
+> testing work without losing context.
+
+---
+
+## Context & Motivation
+
+The project's `test/` directory contains Jest unit tests. These verify internal
+logic with mocks but cannot prove that the MCP server actually works when wired to
+a real LLM. The PLAN.md audit (2026-05-14) flagged that several features were
+marked "completed" but were never exercised end-to-end.
+
+This plan defines an *operational* test approach: the MCP server runs as a real
+process, a client connects via stdio using the official MCP SDK Client, and we call
+real tools against real Ollama models. No mocks. No stubs.
+
+---
+
+## System Requirements (verified 2026-05-16)
+
+| Component | Status | Notes |
+|---|---|---|
+| Node.js | ✅ | ES modules (`"type": "module"`) — must use `.mjs` scripts or `--experimental-vm-modules` |
+| TypeScript build (`npm run build`) | ✅ | Zero `tsc` errors; `dist/` exists in worktree |
+| Ollama daemon | ✅ Running on `http://localhost:11434` | |
+| Ollama models | ✅ | `gpt-oss:20b` (13GB), `gemma3n:e2b` (5.6GB), `gemma3n:latest` (7.5GB) |
+| LM Studio | ❓ | Not checked — not required for initial testing |
+| OpenRouter API key | ✅ Present locally for bounded paid-routing tests | Keep paid calls opt-in; set `OPENROUTER_FREE_ONLY=false` only for explicit paid verification |
+
+**Default test model:** `gemma3n:e2b` — smallest available, fastest for iteration.
+
+---
+
+## Test Client
+
+**File:** [`test-operational.mjs`](test-operational.mjs)
+
+The client is a self-contained Node.js ESM script that:
+1. Spawns `node dist/index.js` as a child process.
+2. Connects via `StdioClientTransport` from the MCP SDK.
+3. Runs a structured suite of assertions against real tool calls.
+4. Exits `0` on all-pass, `1` if any test fails.
+
+### Running the suite
+
+```bash
+# Full suite (smoke + routing + LLM calls)
+node test-operational.mjs
+
+# Smoke only — fast, no LLM calls (~5s)
+node test-operational.mjs --suite smoke
+
+# Routing decisions only — no LLM calls (~5s)
+node test-operational.mjs --suite routing
+
+# LLM calls only — slow (~30-120s per call)
+node test-operational.mjs --suite llm
+
+# Verbose output (shows raw tool responses)
+node test-operational.mjs --verbose
+
+# Combine
+node test-operational.mjs --suite smoke --verbose
+```
+
+### Environment
+
+The server reads `.env` from the project root. The `.env` created here sets:
+
+```
+OLLAMA_ENDPOINT=http://localhost:11434
+DEFAULT_LOCAL_MODEL=gemma3n:e2b
+STARTUP_BENCHMARK_TARGETS=none   # don't benchmark on startup
+LOG_LEVEL=debug
+REMOVE_STALE_LOCK_FILES=true
+```
+
+---
+
+## Test Suites
+
+### Suite 1: Smoke (Server Startup + Discovery)
+*No LLM calls. Verifies the server boots and exposes its declared surface area.*
+
+| Test | What it checks | Expected |
+|---|---|---|
+| Connect | stdio handshake completes | Client connects without error |
+| List tools | Core tools are registered | Exact tool names present, including async task polling tools |
+| List resources | Resources are registered | `locallama://status`, `locallama://models` |
+| Read `locallama://status` | Returns parseable content | JSON with `version`, `status`, or `server` fields |
+| Read `locallama://models` | Returns model list | Array or `{models:[...]}` |
+
+### Suite 2: Routing (Lightweight Decisions)
+*No LLM calls. Verifies the decision engine responds with well-formed output.*
+
+| Test | Input | Expected fields |
+|---|---|---|
+| `preemptive_route_task` (simple) | Short TypeScript task | `costClass`, `modelId` or `providerId`, `reason` |
+| `preemptive_route_task` (complex) | Multi-feature OAuth2 server | Same fields; likely `costClass: paid` or note about complexity |
+| `get_cost_estimate` | Hello-world Python | `estimatedCost` / `cost` / `totalCost` |
+
+### Suite 3: LLM (Real Inference via Ollama)
+*Makes real LLM calls. Slow (30–120s per call). Tests end-to-end routing.*
+
+| Test | Input | Expected |
+|---|---|---|
+| `route_task` tiny prompt | "Write a JS `add` function" | Immediate `task_id`; `get_task_status` eventually returns completed result inline |
+
+---
+
+## Current Results
+
+| Date | Suite | Passed | Failed | Skipped | Notes |
+|---|---|---|---|---|---|
+| 2026-05-16 | all | 24 | 0 | 5 | Skips: 5 optional tools absent (no OpenRouter key) |
+| 2026-05-18 | smoke | 13 | 0 | 5 | After Issues #4, #5, #6 fixes. Models: `gpt-oss:20b`, `gemma3n:e2b` (no llama3 fallback) |
+| 2026-05-18 | routing | 5 | 0 | 0 | Simple task → `gemma3n:e2b`; complex task → `gpt-4o` (paid). Issue #5 verified fixed |
+| 2026-05-18 | all | 25 | 0 | 4 | Smoke 17, Routing 5, LLM 3. LLM inference blocked by agent sandbox (EPERM on localhost:11434) — route_task returned graceful error content; structural assertions passed. route_task chose `gpt-oss:20b` for simple task (vs `gemma3n:e2b` from preemptive); full routing engine uses different selection path than preemptive. |
+| 2026-05-18 | all | 25 | 0 | 4 | After Issue #9 fix. `route_task` now correctly selects `gemma3n:e2b` for simple tasks. All routing paths (preemptive + full) consistently prefer the smallest available model for low-complexity tasks. |
+| 2026-05-18 | all | 29 | 0 | 4 | After Issue #10 fix. Added `retriv_init` + `retriv_search` dispatcher cases and functional test coverage. Smoke 21, Routing 5, LLM 3. Both routing paths consistently choose `gemma3n:e2b` for simple tasks. |
+| 2026-05-19 | targeted live MCP | 2 | 0 | 0 | Verified `benchmark_task` and `benchmark_tasks` dispatcher fixes through the MCP stdio path. `benchmark_task` ran one `qwen2.5-coder:3b` inference for a debounce regression task in ~9.4s. `benchmark_tasks` returned a two-task summary using cached recent 3b benchmark data. |
+| 2026-05-19 | targeted paid-routing MCP | 2 | 0 | 0 | Checked OpenRouter credits (`$1.644186` remaining), then ran `get_cost_estimate` + `preemptive_route_task` for complexity 0.9. Preemptive selected paid `gpt-4o`; estimate was `$0.0084`. Full `route_task` attempted OpenRouter (`openrouter/pareto-code`) but returned local `qwen2.5-coder:7b`; balance unchanged afterward. |
+| 2026-05-19 | targeted paid-routing MCP | 2 | 0 | 0 | After Issue #12 fix, ran `get_cost_estimate` and full `route_task` with `OPENROUTER_FREE_ONLY=false`. Full route returned `providerId: openrouter`, `costClass: paid`, `modelId: openai/gpt-4o`, estimated cost `$0.0036`, valid JSON content, and monitoring metadata. OpenRouter remaining credits changed from `$1.635033553` to `$1.634338553` (~`$0.000695`). |
+| 2026-05-19 | focused lm-studio/openrouter-free validation | 3 | 0 | 0 | `benchmark_model` for LM Studio `google/gemma-4-e4b` no longer fails provider resolution; now returns structured result with `providerId: lm-studio` and `categoryResults.code`. Runtime execution still fails (`successRate: 0`). In same pass, `route_task` selected OpenRouter free models that failed with `invalid_request` (`baidu/cobuddy:free`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`). |
+| 2026-05-19 | issue-15 focused lm-studio MCP probe | 1 | 0 | 0 | After diagnostics changes, live `benchmark_model` call now returns per-task `failures[]` with `errorType`, `timeoutMs`, and transport fields. Current failure classifies as `model_not_found` in LM Studio tracking data (`endpoint=http://localhost:1234/v1`) rather than opaque `successRate: 0` with no detail. |
+| 2026-05-19 | issue-15 startup-discovery fix validation | 2 | 0 | 0 | LM Studio provider now forces model refresh on startup (`initialize(true)`), and tracking file updates immediately with live LM Studio inventory (`qwen/qwen3.5-9b`, `google/gemma-4-e4b`, embeddings). Focused MCP `benchmark_model` on `google/gemma-4-e4b` (`tool-use`) succeeded with `successRate: 1`, confirming non-embedding LM Studio execution path works. |
+| 2026-05-19 | smoke (Issue 34 / Gap 5) | 30 | 0 | 0 | Added Windows-native smoke assertions for `rootDir` equality and artifact-path placement under expected root (`locallama.lock`, `ollama-models.json`, `data/benchmarks.db`). Also aligned benchmark DB default path to root-scoped `data/benchmarks.db` to avoid host-CWD drift. |
+| 2026-05-19 | routing (Issues 24+26 / Gap 2) | 6 | 0 | 0 | Added provider-availability assertion in routing suite. With `EXPECT_LOCAL_PROVIDER_DOWN=true`, `preemptive_route_task` returned non-local recommendation (`costClass=paid`) and suite passed: `Passed: 6 Failed: 0`. |
+| 2026-05-19 | routing (Issues 20+25 / Gap 8) | 11 | 0 | 0 | Added oversized-prompt `route_task` operational assertion. The suite constructs a prompt longer than the largest declared model context window and verifies the MCP tool response contains `error: "context_overflow"`, `estimatedTokens`, and `modelContextWindow` with no silent dispatch. |
+
+**Full suite command used:**
+```bash
+node test-operational.mjs --suite all
+```
+
+**Ollama model used for LLM inference:** `gpt-oss:20b` (router's choice given no small-model preference)
+
+**Notable observations (2026-05-16):**
+- LM Studio is not running — connection-refused errors logged on startup (expected, non-fatal)
+- `retriv_init` and `retriv_search` are always registered (native TypeScript BM25, no Python needed)
+- Router correctly chose `gpt-oss:20b` for the simple task via `preemptive_route_task`, then used it for `route_task`
+- `route_task` produced valid JavaScript code from Ollama with correct `costClass: local`
+
+**Notable observations (2026-05-18, after fixes):**
+- `locallama://models` now correctly lists `gpt-oss:20b` and `gemma3n:e2b` (Issue #4 fixed)
+- `preemptive_route_task` simple task now routes to `gemma3n:e2b` instead of `gpt-oss:20b` (Issue #5 fixed)
+- `set_model_prompting_strategy` tool schema and dispatcher case were corrected (wrong fields → correct fields matching `updatePromptingStrategy` API)
+- Unit tests: 174/174 pass; Jest teardown ReferenceErrors eliminated by adding missing mocks in `test/index.test.ts`
+
+---
+
+## Known Issues & Investigation Queue
+
+Track issues found during operational testing here. This is separate from PLAN.md
+(which tracks implementation work) — these are *test findings*.
+
+| # | Severity | Tool/Module | Symptom | Root cause | Status |
+|---|---|---|---|---|---|
+| 1 | P1 (fixed) | `ollama/index.ts` | Ollama models not discovered on fresh start | `lastUpdated` set to `now` when no tracking file found; `hoursSinceLastUpdate = 0 < 24` → `updateModels()` never called | **Fixed 2026-05-16**: init with `new Date(0)` to force first update |
+| 2 | P1 (fixed) | `ollama/index.ts` | Wrong URL: `${endpoint}/api/tags` instead of `${endpoint}/tags` | Endpoint is expected to already include `/api`; double-appending `/api` caused 404 | **Fixed 2026-05-16**: changed to `${endpoint}/tags` and `${endpoint}/chat` |
+| 3 | P1 (fixed) | `tool-definition/index.ts` | `v3Schema.safeParse is not a function` crash on server when `route_task` runs | `outputSchema` fields were plain JSON schema objects; MCP SDK calls `.safeParse()` on them expecting Zod schemas | **Fixed 2026-05-16**: removed `outputSchema` from `route_task` and `preemptive_route_task` |
+| 4 | P2 (fixed) | `cost-monitor/api.ts` | Models resource shows "llama3" fallback even when Ollama responds | `getAvailableModels()` concat'd LM Studio models into `confirmedModels` then pushed that back — duplicating LM Studio entries — and the `batchError` catch block never pushed basic Ollama models, triggering the fallback | **Fixed 2026-05-18**: replaced `models.concat(detailedModels)` with direct `models.push(...detailedModels)`; added basic Ollama fallback in `batchError` handler. Verified: `locallama://models` now returns `gpt-oss:20b` and `gemma3n:e2b` |
+| 5 | P2 (fixed) | `decision-engine/services/modelSelector.ts` | Routes simple tasks to `gpt-oss:20b` (13GB) instead of `gemma3n:e2b` (5.6GB) | Gemma's `e2b`/`e4b` naming convention not recognized; `e2b` scored same as unknown (0.1) for all task complexities | **Fixed 2026-05-18**: added `normalizedId` regex that converts `e2b`→`2b` and `e4b`→`4b`; extended size scoring to include 2b/4b/20b/27b/32b. Verified: `preemptive_route_task` on simple task now returns `gemma3n:e2b` |
+| 6 | P3 (fixed) | `cost-monitor` | Startup log spam: Python venv not found (`ENOENT .venv/bin/python`) | Hard-coded `.venv` path | **Now moot**: Python subprocess bridge fully removed; native TypeScript BM25 engine has no Python dependency |
+| 7 | P2 (fixed) | `cost-monitor/api.ts` | `getAvailableModels()` fell back to hardcoded `llama3` in offline/sandboxed environments | Function bypassed `ModelRegistry` and failed with `EPERM`; catch block returned hardcoded fallback | **Fixed 2026-05-18**: added `ModelRegistry` as intermediate fallback before hardcoded value |
+| 8 | P2 (resolved, arch decision) | `cost-monitor/bm25.ts` | Python `retriv` v0.2.3 unmaintainable; `numba` dependency cannot build on Python 3.11–3.14 | `retriv` is unmaintained (~2023); `numba` wheels absent for modern Python | **Resolved**: replaced entire Python subprocess bridge with native TypeScript Okapi BM25 implementation (`bm25.ts`). No Python required. `retriv_init` and `retriv_search` now always available. |
+| 9 | P2 (fixed) | `decision-engine/services/codeModelSelector.ts` | `route_task` routes simple tasks to `gpt-oss:20b` (13GB) instead of `gemma3n:e2b` (5.6GB) | Same root cause as Issue #5 but in `codeModelSelector.ts` (used by `route_task` via `codeTaskCoordinator`). `calculateComplexityMatchScore` regex for small models (`1\.5b|1b|3b|mini|tiny`) didn't include `2b`/`4b` and had no `e2b`→`2b` normalization. Both fallback and main scoring paths had the gap. | **Fixed 2026-05-18**: added `normalizedId` regex (`e2b`→`2b`, `e4b`→`4b`) and extended size regexes to `2b|3b|4b` (small), `9b|12b|14b` (medium), `20b|27b|32b|65b` (large) in both scoring paths. Verified: `route_task` on simple JS task now returns `ollama:gemma3n:e2b`. |
+| 10 | P2 (fixed) | `src/index.ts` `setupToolCallHandler` | `retriv_init` and `retriv_search` listed as registered tools but return `Unknown tool` when called | Dispatcher `switch` statement had no `case` blocks for `retriv_init` or `retriv_search` — tools were defined in schema but not wired to `RetrivIntegration` | **Fixed 2026-05-18**: added `case 'retriv_init'` and `case 'retriv_search'` to the dispatcher, mapping snake_case args to `RetrivIntegration.initializeRetriv()` and `.search()`. Added functional test coverage to the smoke suite. Verified: `retriv_init` indexes `src/config/` and `retriv_search` returns a result array. |
+| 11 | P1 (fixed) | `src/index.ts` `setupToolCallHandler` | `benchmark_task` and `benchmark_tasks` listed as tools but returned `Unknown tool` | Dispatcher `switch` statement had no cases for the two legacy benchmark tools after the Section 6 benchmark refactor | **Fixed 2026-05-19**: added dispatcher cases, snake_case→camelCase argument normalization, and realistic dispatcher tests. Verified with targeted live MCP calls against Ollama `qwen2.5-coder:3b`. First live attempt exposed stale native dependency state (`sqlite3@5.1.7` invalid for Node 22); `npm install` reconciled to `sqlite3@6.0.1`. |
+| 12 | P2 (fixed) | `route_task` / `codeTaskCoordinator` | High-complexity full `route_task` did not preserve the paid routing decision | Initial decision engine selected paid `gpt-4o`, but full execution delegated to `codeTaskCoordinator`, which reselected per-subtask models independently. Paid model selection also returned aliases instead of OpenRouter catalog ids. | **Fixed 2026-05-19**: paid decisions now execute directly through `taskExecutor`, paid model selection returns real OpenRouter ids (`openai/gpt-4o` / `openai/gpt-4o-mini`), and selected-model cost is checked before execution. Live MCP route returned paid `openai/gpt-4o` and consumed ~`$0.000695`. |
+| 13 | P2 (fixed) | `cost-monitor/api.ts` | OpenRouter credit usage check hits stale `/api/v1/auth/credits` endpoint and receives 404 HTML | OpenRouter now exposes credits at `/api/v1/credits` with `{ data: { total_credits, total_usage } }` | **Fixed 2026-05-19**: updated endpoint/response parsing and added unit coverage. |
+| 14 | P1 (fixed) | `benchmark_model` provider resolution | `benchmark_model` rejected valid LM Studio model ids from `locallama://models` as "not found in any registered provider" | ID format mismatch: call path used unprefixed ids (for example `google/gemma-4-e4b`) while LM Studio provider support checks/listing could require provider-prefixed variants | **Fixed 2026-05-19**: benchmark path now resolves prefixed/non-prefixed id variants and executes with provider-native id. Verified in focused live pass: tool now resolves to `providerId: lm-studio` instead of failing resolution. |
+| 15 | P2 (resolved) | `lm-studio` runtime execution | LM Studio benchmark runs returned `successRate: 0` with no actionable detail | Root causes were stale startup model discovery and cache/listing mismatch between LM Studio tracking and live model list. Added structured diagnostics, startup forced refresh for LM Studio provider init, and cache-miss refresh before execution. | **Resolved 2026-05-19:** live MCP validation shows startup tracking now includes non-embedding models and `benchmark_model` executes `google/gemma-4-e4b` successfully (`tool-use` category, `successRate: 1`, `failureCount: 0`). |
+| 16 | P2 (implemented, pending live validation) | OpenRouter free-model routing | `route_task` can choose OpenRouter free models that repeatedly fail with `invalid_request` | Free-model selection lacked health filtering and repeatedly retried currently unusable catalog entries | **Implemented 2026-05-19:** added free-model failure tracking with automatic quarantine after repeated `invalid_request` / `model_not_found` / `server_error` failures, excluded quarantined models from `getFreeModels()` results (routing input), and switched OpenRouter execution in `benchmarkFreeModels()` to the provider path so provider rate limiting and quarantine gating are consistently applied there too. Unit coverage exists for quarantine/filtering in `test/modules/openrouter/index.test.ts`; live MCP quarantine/fallback validation still pending. |
+| 17 | P2 (implemented, pending live validation) | Cross-provider local runtime lifecycle | Switching local tasks between Ollama and LM Studio can leave previously loaded models resident in memory | No explicit unload handoff when local provider changes; stale model residency can waste VRAM/RAM and increase failure risk under memory pressure | **Implemented 2026-05-19:** added a shared local-provider lifecycle handoff in the provider layer so cross-provider local execution unloads the previously active local runtime first. Ollama now requests immediate unload via `keep_alive: 0`, and LM Studio uses `POST /api/v1/models/unload`. Focused unit coverage added in `test/modules/core/provider/local-runtime-lifecycle.test.ts`; live telemetry validation (memory usage + unload/load timing) is still pending. |
+
+### Severity legend
+- **P0** — Server crashes or hangs; all tests blocked
+- **P1** — Tool returns error or malformed response on valid input
+- **P2** — Tool returns valid response but wrong/unexpected content
+- **P3** — Minor formatting or field naming issues
+
+---
+
+## Extending the Suite
+
+When you add a new MCP tool to the server, add a test case here:
+
+1. Identify what inputs the tool accepts (read `src/modules/api-integration/` for its schema).
+2. Choose the lightest input that exercises the tool's real logic.
+3. Define the expected response shape.
+4. Add a `runTest()` block in `test-operational.mjs` under the appropriate suite.
+5. Run the suite and record results above.
+
+### Tools not yet covered
+
+| Tool | Reason not covered | When to add |
+|---|---|---|
+| `cancel_job` | Requires a running job ID | After `route_task` async flow is verified |
+| `benchmark_task` | ~~Makes LLM calls~~ | ✅ Targeted live MCP check passed 2026-05-19. Add to automated llm suite only with an opt-in flag to avoid slow routine runs. |
+| `benchmark_tasks` | ~~Makes multiple LLM calls~~ | ✅ Targeted live MCP check passed 2026-05-19 using cached recent 3b benchmark data. Add to automated llm suite only with an opt-in flag. |
+| `benchmark_model` | Makes LLM calls | After benchmark_task passes |
+| `benchmark_free_models` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
+| `retriv_init` | ~~Always available (native TS BM25)~~ | ✅ Added to smoke suite 2026-05-18 — indexes `src/config/`, verifies `success` and `summary` fields |
+| `retriv_search` | ~~Always available (native TS BM25)~~ | ✅ Added to smoke suite 2026-05-18 — queries after init, verifies array response |
+| `get_free_models` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
+| `clear_openrouter_tracking` | Requires `OPENROUTER_API_KEY` | When OpenRouter key is available |
+| `set_model_prompting_strategy` | Requires `OPENROUTER_API_KEY` (tool only registers with key) | Schema and dispatcher fixed 2026-05-18; add live test when OpenRouter key is available |
+
+---
+
+## Immediate provider hardening TODOs (reprioritized 2026-05-19)
+
+1. Issue 34 / Gap 5: harden Windows path and shell assumptions, then add the missing Windows-native operational checks for `rootDir`, lock/caches/DB placement, and the Session Continuity Checklist commands.
+2. Issues 24 and 26 / Gap 2: add provider-level circuit breaking and periodic health probing, then add focused failure-injection operational tests for provider-down scenarios.
+3. Issues 20 and 25 / Gap 8: replace character-based token estimates with real token counting, then enforce context-window limits before dispatch and add overflow-focused operational coverage.
+4. Issue 19 / Gap 3: per-provider rate limiting/backpressure is implemented in the provider registry path; add live concurrency operational tests for simultaneous local/local and local/remote `route_task` calls.
+5. Issue 18 / Gap 1: research and choose the transport strategy for long-running inference (streaming tool results vs async job model), then add timeout-boundary operational tests around the chosen design.
+
+---
+
+## Development Workflow
+
+When developing a new feature, use this loop:
+
+```
+1.  Edit src/...
+2.  npm run build
+3.  node test-operational.mjs --suite smoke        # fast sanity check
+4.  node test-operational.mjs --suite routing      # decision engine check
+5.  node test-operational.mjs --suite llm          # full end-to-end (only when needed)
+6.  npm test                                        # unit tests
+7.  Update PLAN.md section status if criteria met
+```
+
+The smoke suite should run in under 10 seconds. Run it after every build.
+
+### Lock file issues
+
+If a previous test run didn't clean up:
+
+```bash
+node -e "const fs=require('fs'); if (fs.existsSync('locallama.lock')) fs.unlinkSync('locallama.lock');"
+# Windows PowerShell:
+# if (Test-Path locallama.lock) { Remove-Item locallama.lock }
+```
+
+The `.env` sets `REMOVE_STALE_LOCK_FILES=true` which auto-removes stale locks on
+startup.
+
+### Viewing server logs
+
+Logs go to `./locallama-test.log` (set in `.env`). To tail while testing:
+
+```bash
+Get-Content locallama-test.log -Wait
+# Unix alternative:
+# tail -f locallama-test.log
+```
+
+---
+
+## Ollama Configuration Notes
+
+The Ollama API base URL in LocalLama is configured via `OLLAMA_ENDPOINT`.
+
+**Critical:** The Ollama provider in this project may append `/api` to the endpoint
+or may expect the base URL without `/api`. Check
+`src/modules/ollama/` for the actual path construction. If models aren't discovered,
+try toggling between:
+
+```
+OLLAMA_ENDPOINT=http://localhost:11434
+OLLAMA_ENDPOINT=http://localhost:11434/api
+```
+
+The Ollama REST API serves:
+- `GET  /api/tags`       — list models
+- `POST /api/generate`   — text generation
+- `POST /api/chat`       — chat completion (OpenAI-compatible)
+
+Models available on this system:
+- `gemma3n:e2b`    — 5.6 GB  ← **use for fast iteration**
+- `gemma3n:latest` — 7.5 GB
+- `gpt-oss:20b`    — 13 GB   ← only when accuracy matters
+
+---
+
+## Testing Gaps and Coverage Debt (added 2026-05-19)
+
+The following operational test scenarios are not covered by any existing suite. Add them to the appropriate suite when the underlying feature or fix is ready.
+
+### Gap 1 — Timeout boundary tests (Issue 18 / Bug 6 / Bug 7)
+
+No test verifies what happens at the MCP tool-call timeout boundary. Currently, the suite relies on tool calls completing within the MCP client's default timeout. A dedicated timeout-boundary suite is needed:
+
+- Invoke `route_task` against a model that is known to be too large for available hardware and assert that the response is a structured error (not a hang or a connection reset).
+- Verify that `ERR_CANCELED` from Ollama maps to a user-readable error message, not `"Error executing task: unknown"`.
+- Assert that `OLLAMA_TIMEOUT` is respected: a task that would take longer than the configured timeout returns a timeout error within `OLLAMA_TIMEOUT + 5s`.
+- Assert that `PROVIDER_TIMEOUT_MS` applies to providers without dedicated timeout vars (LM Studio/OpenRouter), and timeout failures surface as structured `inference_timeout` responses including `timeoutMs`.
+
+**Blocker:** Requires a controllable slow-model fixture. On System A, `gemma4:26b` can serve this role for slow-inference tests, but it must be used in isolation (not in the standard suite) to avoid slowing every CI run.
+
+2026-05-20 update: Issue 18's transport strategy decision is documented in `docs/PLAN.md` and ADR-0001: async jobs and queue-backed progress are the primary path; streaming chunks remain optional future work. Timeout-boundary live coverage is still pending because it needs a deterministic slow-model fixture.
+
+---
+
+### Gap 2 — Provider health failure injection (Issue 24 / Issue 26)
+
+No test verifies server behavior when a provider becomes unavailable after startup:
+
+- Start the server with Ollama running, then stop Ollama, then call `route_task`. Assert that the response either falls back gracefully to another provider or returns a clear "no local provider available" error — not a hang or a crash.
+- Start the server with Ollama unavailable. Assert that `preemptive_route_task` does not claim local models are available.
+- Verify that the periodic health probe (Issue 26, now implemented) updates provider availability state and that subsequent `preemptive_route_task` calls reflect the updated state.
+
+2026-05-19 update: Added routing-suite assertion path for provider-down preemptive behavior (`EXPECT_LOCAL_PROVIDER_DOWN=true`). Current evidence shows non-local preemptive suggestions under provider-down expectations (`costClass=paid`).
+
+2026-05-20 update: Added a mock-based routing-suite assertion in `test-operational.mjs` (`[mock][F-4] circuit-open Ollama fallback routes to LM Studio`) that verifies circuit-open local failover behavior through `TaskExecutor` with a real `ProviderRegistry`. Live post-startup provider-loss coverage is still pending.
+
+**Blocker:** Full live failure-injection sequence (start with provider up, stop provider mid-session, then assert `route_task` graceful fallback/error response) is still pending as a dedicated deterministic harness.
+
+---
+
+### Gap 3 — Rate limiting and concurrent call behavior (Issue 19)
+
+No test verifies server behavior under concurrent tool calls:
+
+- Send 3–5 simultaneous `preemptive_route_task` calls and assert that all return well-formed responses (not partial responses or crashes from shared mutable state in the routing engine).
+- Send 2 simultaneous `route_task` calls that both select the same Ollama model. Assert that both eventually complete or one gracefully queues/fails with a clear error, and that neither leaves the server in a broken state.
+
+2026-05-20 update: Unit coverage now defines the expected behavior for the provider execution layer: local providers share one FIFO slot, and one local job can run concurrently with one remote provider job. Remaining work is operational coverage through the live MCP `route_task` path.
+
+**Blocker:** Live concurrency coverage still needs a deterministic harness that can submit simultaneous `route_task` calls and observe completion ordering without making routine test runs slow or paid by default.
+
+---
+
+### Gap 4 — Benchmark DB integrity after restart (Issue 21)
+
+No test verifies that benchmark results written in one server session are correctly read in the next:
+
+- Run `benchmark_task` against a model. Stop the server. Restart the server. Call `preemptive_route_task` and assert that the newly started server's routing decision reflects the benchmark data from the previous session (i.e., the DB was read correctly at startup).
+- Add a test that writes a row in the old benchmark schema (if schema is ever migrated) and verifies the migration runs without data loss.
+
+**Blocker:** Issue 21 (schema migration framework) must be in place before the migration test. The restart/persistence test can be added now.
+
+---
+
+### Gap 5 — Windows path correctness (Issue 34 / Bug 4)
+
+2026-05-19 update: baseline Windows path assertions were added to the smoke suite and passed (`node test-operational.mjs --suite smoke` -> `Passed: 30, Failed: 0`).
+
+Completed checks:
+
+- Add a check that `rootDir` (from `src/config/index.ts`) resolves to the project root, not `C:\Program Files\nodejs` or any other host-process CWD.
+- Add a smoke test assertion that `locallama.lock`, `ollama-models.json`, and `data/benchmarks.db` are created in the expected directory (project root or `LOCALLAMA_ROOT_DIR` if set), not in the host CWD.
+
+**Status:** Completed for smoke baseline on 2026-05-19.
+
+---
+
+### Gap 6 — Cross-provider failover (Issue 17)
+
+Issue 17 (cross-provider local model lifecycle) has no test coverage:
+
+- Simulate a task flow where the initial local decision is Ollama, but Ollama becomes unavailable at execution time. Assert that the server either retries with LM Studio or returns a clear error — not a crash.
+- Assert that after a cross-provider switch, the previously loaded model in the prior provider is explicitly unloaded (when Issue 17's unload hook is implemented).
+- Assert that VRAM/RAM usage does not accumulate across multiple provider switches (requires the memory monitoring from Issue 31 to be in place for a quantitative assertion).
+
+2026-05-20 update: Added a mock-based routing-suite assertion in `test-operational.mjs` (`[mock][F-4] circuit-open Ollama fallback routes to LM Studio`) covering the core Ollama -> LM Studio failover path when Ollama's circuit is open. Explicit unload and quantitative memory assertions remain open.
+
+**Blocker:** Issue 17's unload hook is now implemented. The failover and explicit-unload assertions can be added now. Quantitative VRAM/RAM accumulation checks still depend on Issue 31 (memory monitoring).
+
+---
+
+### Gap 7 — OpenRouter free-model health gating (Issue 16)
+
+Issue 16 (free-model health gating) has no test coverage beyond the live observation that currently-failing models are re-selected:
+
+- Mock an OpenRouter free model to return `invalid_request` on every call. Assert that after N failures (configurable threshold), the model is quarantined and no longer selected by `route_task`.
+- Assert that after the quarantine window expires, the model becomes eligible again.
+- Assert that a quarantined model appears in diagnostic output (tool response or log) so the developer knows why routing avoided it.
+
+2026-05-20 update: Added mock-based routing-suite assertions in `test-operational.mjs` for quarantine skip (`[mock][F-1] OpenRouter quarantined free model is skipped and healthy fallback remains selectable`) and quarantine expiry (`[mock][F-5] OpenRouter quarantine expiry re-admits the model`). Diagnostic surfacing remains unverified in the operational suite.
+
+**Blocker:** Issue 16 is now implemented. Remaining work is operational coverage: add route-selection, quarantine-expiry, and quarantine-diagnostic assertions against the live routing path.
+
+---
+
+### Gap 8 — Token overflow detection (Issue 25)
+
+2026-05-19 update: routing-suite coverage added and passed (`node test-operational.mjs --suite routing` -> `Passed: 11, Failed: 0`).
+
+Completed checks:
+
+- Construct a task string that is provably longer than the largest declared `contextWindow` exposed by `locallama://models`.
+- Assert that the server returns a structured `context_overflow` error rather than silently dispatching.
+- Assert that the error body includes `estimatedTokens` and `modelContextWindow`, and that `estimatedTokens > modelContextWindow`.
+
+**Status:** Completed for routing-suite baseline on 2026-05-19.
+
+---
+
+### Gap 9 — Config change detection (Issue 28)
+
+No test verifies that config changes are (or are not) picked up at runtime:
+
+- Change `models.json` to add a new model entry. Assert that the model does NOT appear in `locallama://models` without a restart (documenting current behavior: restart required).
+- Once Issue 28's `reload_config` tool is implemented: trigger `reload_config`, then assert the new model appears without a restart.
+
+**Blocker:** Issue 28 must be implemented for the second assertion.
+
+---
+
+### Gap 10 — Multi-instance lock contention (Issue 32)
+
+No test verifies server behavior when two instances attempt to start against the same data directory:
+
+- Start one server instance. Attempt to start a second instance pointing at the same root directory. Assert that the second instance either exits with a clear "lock file held" error or (if `REMOVE_STALE_LOCK_FILES=true`) detects the other instance is live and refuses to steal the lock.
+- Assert that `LOCALLAMA_DATA_DIR` correctly redirects all file-based state, allowing two instances with different data dirs to run simultaneously without conflict.
+
+**Blocker:** Issue 32 (`LOCALLAMA_DATA_DIR` env var) must be implemented for the second assertion. The first assertion can be added now.
+
+---
+
+### Gap 11 — Provider API Version Compatibility (Issue 29 / F-10)
+
+Issue 29 (version compatibility checks at startup) has unit tests, but lacks operational validation:
+
+- Start the server with a configured provider having a version lower than the minimum declared in `src/config/provider-compat.json`. Assert that a structured warning containing the provider name, detected version, and minimum version is printed in the server logs.
+- Start the server with the provider having a version equal to or above the minimum. Assert that no compatibility warnings are logged for that provider.
+- Start the server with the provider endpoint unreachable. Assert that the server logs a warning about inability to check version and completes startup without crashing.
+
+**Blocker:** Requires a mock or controllable provider version endpoint during execution.
+
+---
+
+## Interactive Webapp Test Client — Planning Reference
+
+See the **Interactive Testing Webapp — Planning Section** added to `PLAN.md` (2026-05-19) for the full requirements, architectural options, risks, and dependency chain.
+
+**Key operational testing implications for the webapp:**
+
+- The webapp's test client must be validated against the same test suites defined in this document (smoke, routing, LLM). The webapp is not a replacement for `test-operational.mjs` — it is an interactive companion.
+- A `docs/webapp-smoke-checklist.md` manual test matrix must be created when the webapp reaches initial implementation. It should mirror the structure of Suite 1 (Smoke) and Suite 2 (Routing) above.
+- Any tool invoked via the webapp must produce identical responses to the same tool invoked via `test-operational.mjs`. If they differ, the transport layer (bridge or SSETransport) has a bug.
+- The webapp's log panel must be validated against the log output from `locallama-test.log` — spot-check that the same lines appear in both, in the same order.
+- Benchmark results triggered via the webapp must be queryable via `test-operational.mjs` in the same session (verifying DB write-through, not webapp-local state).
+
+---
+
+## Session Continuity Checklist
+
+If you are an AI agent picking this up in a new session, run these checks first:
+
+> **Windows note (Issue 34):** Prefer the Node or PowerShell commands below. They work on native Windows and avoid the old `curl`/`python3`/`tail` assumptions.
+
+```bash
+# 1. Verify Ollama is running
+# Cross-platform Node:
+node -e "fetch('http://localhost:11434/api/tags').then(r=>r.json()).then(d=>{for (const m of (d.models||[])) console.log(m.name);}).catch(err=>{console.error(err); process.exit(1);})"
+# Windows PowerShell:
+# (Invoke-RestMethod http://localhost:11434/api/tags).models | ForEach-Object { $_.name }
+
+# 2. Verify the build is current
+npm run build
+
+# 3. Quick smoke test
+node test-operational.mjs --suite smoke --verbose
+
+# 4. Check for lock file remnants
+node -e "const fs=require('fs'); if (fs.existsSync('locallama.lock')) console.log('LOCK EXISTS — delete if no server running');"
+# Windows PowerShell:
+# if (Test-Path locallama.lock) { Write-Host "LOCK EXISTS — delete if no server running" }
+```
+
+If smoke passes, continue from the "Known Issues" section above or extend the suite
+for whichever tool is being developed.

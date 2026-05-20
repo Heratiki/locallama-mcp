@@ -19,6 +19,7 @@ export default {
       },
     ],
   },
+  testPathIgnorePatterns: ['/node_modules/', '/.claude/'],
   injectGlobals: true,
   moduleDirectories: ['node_modules', 'dist']
 }

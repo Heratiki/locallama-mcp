@@ -1,7 +1,19 @@
-import { describe, expect, it, jest } from '@jest/globals';
-import { simulateOpenAiApi, simulateGenericApi } from '../../../../dist/modules/benchmark/api/simulation.js';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
-jest.mock('../../../../dist/utils/logger.js'); // Changed path to dist and extension to .js
+jest.unstable_mockModule('../../../../dist/utils/logger.js', () => ({
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
+const { simulateOpenAiApi, simulateGenericApi } = await import('../../../../dist/modules/benchmark/api/simulation.js');
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 describe('simulateOpenAiApi', () => {
   it('should return a successful response with token usage', async () => {

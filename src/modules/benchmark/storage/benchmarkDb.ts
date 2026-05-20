@@ -2,10 +2,13 @@ import { Database, open } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import { logger } from '../../../utils/logger.js';
 import { BenchmarkResult } from '../../../types/index.js';
+import { config } from '../../../config/index.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
-const DB_PATH = process.env.BENCHMARK_DB_PATH || './data/benchmark-results.db';
+const DB_PATH = process.env.BENCHMARK_DB_PATH
+  ? path.resolve(process.env.BENCHMARK_DB_PATH)
+  : path.join(config.rootDir, 'data', 'benchmarks.db');
 
 /**
  * Normalize task name to a consistent format (lowercase with hyphens)

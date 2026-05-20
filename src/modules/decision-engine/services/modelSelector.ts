@@ -6,6 +6,7 @@ import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 // import { modelProfiles } from '../utils/modelProfiles.js';
 import { isOpenRouterConfigured } from '../../api-integration/tool-definition/index.js';
+import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
 
 /**
  * Model Selector Service
@@ -50,8 +51,8 @@ export const modelSelector = {
       
       // Get local models
       const localModels = await costMonitor.getAvailableModels();
-      const filteredLocalModels = localModels.filter(model => 
-        (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') &&
+      const filteredLocalModels = localModels.filter(model =>
+        isProviderLocal(model.provider) &&
         (model.contextWindow === undefined || model.contextWindow >= totalTokens)
       );
       
@@ -105,7 +106,7 @@ export const modelSelector = {
           
           // For local models, we also consider system resource usage
           // This is a local-specific optimization
-          if (model.provider === 'local' || model.provider === 'lm-studio') {
+          if (isProviderId(model.provider, 'local') || isProviderId(model.provider, 'lm-studio')) {
             // Prefer models that use fewer resources for the same quality
             // This is a heuristic based on model size
             if (model.id.toLowerCase().includes('1.5b') || 
@@ -121,35 +122,54 @@ export const modelSelector = {
           if (model.id.toLowerCase().includes('instruct')) {
             score += 0.1;
           }
-          
+
+          // Normalise the model id for size-pattern matching.
+          // Gemma 3n uses "e2b" / "e4b" (Efficient N-Billion) — treat them as
+          // equivalent to plain "2b" / "4b" for scoring purposes.
+          const normalizedId = model.id.toLowerCase()
+            .replace(/:e(\d+)b\b/, ':$1b')   // gemma3n:e2b → gemma3n:2b
+            .replace(/\be(\d+)b\b/, '$1b');   // standalone e2b → 2b
+
           // For complex tasks, prefer larger models
           if (complexity >= COMPLEXITY_THRESHOLDS.MEDIUM) {
             // Check for model size indicators in the name
-            if (model.id.toLowerCase().includes('70b') || 
-                model.id.toLowerCase().includes('65b') || 
-                model.id.toLowerCase().includes('40b')) {
+            if (normalizedId.includes('70b') || 
+                normalizedId.includes('65b') || 
+                normalizedId.includes('40b') ||
+                normalizedId.includes('32b') ||
+                normalizedId.includes('27b') ||
+                normalizedId.includes('20b')) {
               score += 0.3; // Very large models
-            } else if (model.id.toLowerCase().includes('13b') || 
-                       model.id.toLowerCase().includes('14b') || 
-                       model.id.toLowerCase().includes('7b') ||
-                       model.id.toLowerCase().includes('8b')) {
+            } else if (normalizedId.includes('13b') || 
+                       normalizedId.includes('14b') || 
+                       normalizedId.includes('7b') ||
+                       normalizedId.includes('8b') ||
+                       normalizedId.includes('9b') ||
+                       normalizedId.includes('12b')) {
               score += 0.2; // Medium-sized models
-            } else if (model.id.toLowerCase().includes('3b') || 
-                       model.id.toLowerCase().includes('1.5b') || 
-                       model.id.toLowerCase().includes('1b')) {
+            } else if (normalizedId.includes('3b') || 
+                       normalizedId.includes('4b') || 
+                       normalizedId.includes('2b') || 
+                       normalizedId.includes('1.5b') || 
+                       normalizedId.includes('1b')) {
               score += 0.1; // Smaller models
             }
           } else {
             // For simpler tasks, prefer smaller, more efficient models
-            if (model.id.toLowerCase().includes('1.5b') || 
-                model.id.toLowerCase().includes('1b') ||
-                model.id.toLowerCase().includes('3b')) {
+            if (normalizedId.includes('1.5b') || 
+                normalizedId.includes('1b') ||
+                normalizedId.includes('2b') ||
+                normalizedId.includes('3b') ||
+                normalizedId.includes('4b')) {
               score += 0.3; // Smaller models are more efficient
-            } else if (model.id.toLowerCase().includes('7b') || 
-                       model.id.toLowerCase().includes('8b')) {
+            } else if (normalizedId.includes('7b') || 
+                       normalizedId.includes('8b') ||
+                       normalizedId.includes('9b') ||
+                       normalizedId.includes('12b')) {
               score += 0.2; // Medium models
             } else {
-              score += 0.1; // Larger models
+              // Large models (20b+) get 0.1 — usable but not preferred for simple tasks
+              score += 0.1;
             }
           }
           

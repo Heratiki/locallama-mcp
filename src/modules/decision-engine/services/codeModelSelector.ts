@@ -7,6 +7,8 @@ import { CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
 import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { config } from '../../../config/index.js';
+import { isProviderId, isProviderLocal, getProviderRegistry } from '../../core/provider/index.js';
+import { getModelRegistry } from '../../core/model/index.js';
 
 /**
  * Interface for the model performance tracker methods
@@ -167,38 +169,51 @@ export const codeModelSelector = {
           // Apply language boost here as well
           score += languageBoost;
           
+          // Normalise the model id for size-pattern matching (e2b → 2b, e4b → 4b).
+          const normalizedIdFallback = model.id.toLowerCase()
+            .replace(/:e(\d+)b\b/, ':$1b')
+            .replace(/\be(\d+)b\b/, '$1b');
+
           // Consider complexity - larger/remote models for complex tasks
           if (subtask.complexity > 0.7) {
               // For complex tasks, prefer larger models
-              if (model.id.toLowerCase().match(/70b|40b|34b|13b|14b|claude|gpt/)) {
+              if (normalizedIdFallback.match(/70b|65b|40b|34b|32b|27b|20b|13b|14b|claude|gpt/)) {
                   score += 0.15;
               }
               
               // For complex tasks, slightly prefer non-local models
-              if (model.provider !== 'local' && model.provider !== 'lm-studio' && model.provider !== 'ollama') {
+              if (!isProviderLocal(model.provider)) {
                   score += 0.1;
               }
           } else if (subtask.complexity < 0.4) {
               // For simple tasks, smaller models are fine
-              if (model.id.toLowerCase().match(/1\\.5b|1b|3b|6b|7b|mini|tiny/)) {
+              if (normalizedIdFallback.match(/1\.5b|1b|2b|3b|4b|6b|7b|mini|tiny/)) {
                   score += 0.1;
               }
               
               // For simple tasks, slightly prefer local models for efficiency
-              if (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') {
+              if (isProviderLocal(model.provider)) {
                   score += 0.05;
               }
           }
-          
+
           // Consider model provider variety
-          if (model.provider === 'openrouter') {
+          if (isProviderId(model.provider, 'openrouter')) {
               score += 0.15; // Boost OpenRouter models to increase their selection chance
           }
           
           // Add randomness to prevent always choosing the same models
           score += Math.random() * 0.1;
           
-          logger.debug(`Fallback score for ${model.id} (${model.provider}): ${score.toFixed(2)}`);
+            logger.debug('Fallback scoring breakdown', {
+              modelId: model.id,
+              providerId: model.provider,
+              subtaskId: subtask.id,
+              subtaskComplexity: Number(subtask.complexity.toFixed(3)),
+              languageBoost: Number(languageBoost.toFixed(3)),
+              finalScore: Number(Math.min(score, 1.0).toFixed(3)),
+              hasPerformanceData,
+            });
           return Math.min(score, 1.0);
       }
 
@@ -229,110 +244,69 @@ export const codeModelSelector = {
     score += languageBoost;
     
     // Boost OpenRouter models to encourage their selection
-    if (model.provider === 'openrouter') {
+    if (isProviderId(model.provider, 'openrouter')) {
       score += 0.05;
     }
     
     // Add small randomization factor to avoid always selecting the same model
     score += Math.random() * 0.05;
     
-    logger.debug(`Full score for ${model.id} (${model.provider}): ${score.toFixed(2)}`);
+    logger.debug('Full scoring breakdown', {
+      modelId: model.id,
+      providerId: model.provider,
+      subtaskId: subtask.id,
+      subtaskComplexity: Number(subtask.complexity.toFixed(3)),
+      complexityScore: Number(complexityScore.toFixed(3)),
+      historyScore: Number(historyScore.toFixed(3)),
+      efficiencyScore: Number(efficiencyScore.toFixed(3)),
+      costScore: Number(costScore.toFixed(3)),
+      languageBoost: Number(languageBoost.toFixed(3)),
+      hasModelStats: Boolean(modelStats),
+      finalScore: Number(Math.min(score, 1.0).toFixed(3)),
+    });
     return Math.min(score, 1.0);
   },
 
   async getFallbackModel(subtask: CodeSubtask): Promise<Model | null> {
     logger.debug('Using fallback model selection for subtask');
-    
+
     try {
-      // Use size-based selection as a fallback
+      const localModels = await costMonitor.getAvailableModels();
+      const freeModels = await costMonitor.getFreeModels();
+
       switch (subtask.recommendedModelSize) {
         case 'small':
-          return {
-            id: config.defaultLocalModel,
-            name: 'Default Local Model',
-            provider: 'local',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0,
-              completion: 0
-            }
-          };
-        
         case 'medium': {
-          // Try to find a medium-sized local model
-          const localModels = await costMonitor.getAvailableModels();
-          const mediumModel = localModels.find(m => 
-            m.provider === 'local' || 
-            m.provider === 'lm-studio' || 
-            m.provider === 'ollama'
-          );
-          
-          return mediumModel || {
-            id: config.defaultLocalModel,
-            name: 'Default Local Model',
-            provider: 'local',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0,
-              completion: 0
-            }
-          };
+          const localModel = localModels.find(m => isProviderLocal(m.provider));
+          return localModel ?? null;
         }
-        
+
         case 'large':
-        case 'remote':
-          return {
-            id: 'gpt-3.5-turbo',
-            name: 'GPT-3.5 Turbo',
-            provider: 'openai',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0.000001,
-              completion: 0.000002
+        case 'remote': {
+          if (freeModels.length > 0) return freeModels[0];
+          for (const p of getProviderRegistry().listByCostClass('paid')) {
+            const models = await p.listModels();
+            if (models.length > 0) {
+              return {
+                id: models[0].id,
+                name: models[0].displayName ?? models[0].id,
+                provider: p.id,
+                capabilities: { chat: true, completion: true },
+                costPerToken: p.getCost(models[0].id),
+              };
             }
-          };
-            
-        default:
-          return {
-            id: config.defaultLocalModel,
-            name: 'Default Local Model',
-            provider: 'local',
-            capabilities: {
-              chat: true,
-              completion: true
-            },
-            costPerToken: {
-              prompt: 0,
-              completion: 0
-            }
-          };
+          }
+          return null;
+        }
+
+        default: {
+          const localModel = localModels.find(m => isProviderLocal(m.provider));
+          return localModel ?? null;
+        }
       }
     } catch (error) {
       logger.error('Error getting fallback model:', error);
-      
-      // Ultimate fallback - just return whatever config says is the default
-      return {
-        id: config.defaultLocalModel,
-        name: 'Default Local Model',
-        provider: 'local',
-        capabilities: {
-          chat: true,
-          completion: true
-        },
-        costPerToken: {
-          prompt: 0,
-          completion: 0
-        }
-      };
+      return null;
     }
   },
 
@@ -433,18 +407,31 @@ export const codeModelSelector = {
       score += 1 - Math.abs(modelStats.complexityScore - subtask.complexity);
     }
 
+    // Normalise the model id for size-pattern matching.
+    // Gemma 3n uses "e2b" / "e4b" (Efficient N-Billion) — treat them as
+    // equivalent to plain "2b" / "4b" for scoring purposes.
+    const normalizedId = model.id.toLowerCase()
+      .replace(/:e(\d+)b\b/, ':$1b')   // gemma3n:e2b → gemma3n:2b
+      .replace(/\be(\d+)b\b/, '$1b');  // standalone e2b → 2b
+
     // Model size appropriateness
     if (subtask.recommendedModelSize === 'small') {
-      if (model.id.toLowerCase().match(/1\.5b|1b|3b|mini|tiny/)) {
+      if (normalizedId.match(/1\.5b|1b|2b|3b|4b|mini|tiny/)) {
         score += 0.3;
+      } else if (normalizedId.match(/7b|8b|9b|12b|13b|14b/)) {
+        score += 0.1; // medium models acceptable but not ideal for small tasks
       }
     } else if (subtask.recommendedModelSize === 'medium') {
-      if (model.id.toLowerCase().match(/7b|8b|13b/)) {
+      if (normalizedId.match(/7b|8b|9b|12b|13b|14b/)) {
         score += 0.3;
+      } else if (normalizedId.match(/2b|3b|4b/)) {
+        score += 0.1; // small models can handle medium tasks
       }
     } else if (subtask.recommendedModelSize === 'large') {
-      if (model.id.toLowerCase().match(/70b|40b|34b/)) {
+      if (normalizedId.match(/70b|65b|40b|34b|32b|27b|20b/)) {
         score += 0.3;
+      } else if (normalizedId.match(/13b|14b/)) {
+        score += 0.1; // medium models can try large tasks
       }
     }
 
@@ -520,7 +507,7 @@ export const codeModelSelector = {
     }
 
     // Provider-based efficiency
-    if (model.provider === 'local' || model.provider === 'lm-studio' || model.provider === 'ollama') {
+    if (isProviderLocal(model.provider)) {
       score += 0.3; // Local models are generally more resource-efficient
 
       // Additional optimizations for local models
@@ -557,9 +544,17 @@ export const codeModelSelector = {
   },
 
   applyCapabilityBoosts(score: number, model: Model, subtask: CodeSubtask): number {
-    // Boost for specialized code models
-    if (model.id.toLowerCase().match(/code|coder|starcoder|deepseek/)) {
-      score += 0.1;
+    const caps = getModelRegistry().getModel(model.id)?.capabilities;
+
+    // Code capability boost — prefer empirical scores from benchmarks, then
+    // registry-declared caps, then fall back to heuristic model-name regex.
+    if (caps?.scores?.code !== undefined) {
+      // Scale measured score (0..1) to a boost of up to +0.15.
+      score += caps.scores.code * 0.15;
+    } else if (caps?.code) {
+      score += 0.1; // registry declares code-capable
+    } else if (model.id.toLowerCase().match(/code|coder|starcoder|deepseek/)) {
+      score += 0.05; // heuristic fallback
     }
 
     // Task-specific boosts

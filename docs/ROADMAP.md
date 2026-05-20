@@ -11,9 +11,9 @@ The project should support current MCP-capable tools such as Codex, Claude Code,
 ## Current Baseline
 
 - TypeScript source type-checks with `npx tsc --project tsconfig.json --noEmit`.
-- `npm run build` fails on native Windows after TypeScript compilation because it uses Unix `cp`.
+- `npm run build` now succeeds on native Windows after TypeScript compilation because it uses a Node copy step.
 - `npm run lint` fails because `eslint-plugin-import` is referenced but not installed.
-- `npm run benchmark` and `npm run benchmark:comprehensive` reference missing `run-benchmarks.js`.
+- `npm run benchmark` and `npm run benchmark:comprehensive` now use the root benchmark CLI.
 - Tool definitions include duplication and some stale descriptions.
 - Benchmarking still contains simulated paid-model paths.
 - Routing still relies on hardcoded model-name heuristics and stale fallback models.
@@ -25,9 +25,9 @@ The project should support current MCP-capable tools such as Codex, Claude Code,
 
 Status: in progress
 
-- Update `AGENTS.md` as the primary agent-neutral operating guide.
-- Keep `CLAUDE.md` as a thin Claude Code pointer to shared docs.
-- Add a multi-author memory convention under `memory-bank/`.
+- Update `docs/AGENTS.md` as the primary agent-neutral operating guide.
+- Keep `docs/CLAUDE.md` as a thin Claude Code pointer to shared docs.
+- Maintain a multi-author historical memory convention under `docs/history/memory-bank/`.
 - Add this roadmap as the implementation source of truth.
 - Update README positioning away from Cline/Roo-specific language.
 
@@ -39,9 +39,9 @@ Exit criteria:
 
 Status: pending
 
-- Make `npm run build` cross-platform by replacing `cp` with a Node script or `cpy`-style package.
+- Keep `npm run build` cross-platform and document the Node-based copy step.
 - Fix lint by installing `eslint-plugin-import` or removing the unused import rule.
-- Restore or remove benchmark npm scripts so package commands are truthful.
+- Keep benchmark npm scripts and the root runner aligned with the built dist output.
 - Run `npm test` after build script repair.
 - Document any environment-specific requirements for Windows, WSL, macOS, and Linux.
 
@@ -119,7 +119,7 @@ Status: pending
 - Rewrite README into a current quickstart plus architecture overview.
 - Add `docs/CONFIGURATION.md`, `docs/MCP_CLIENTS.md`, and `docs/BENCHMARKING.md` if the README grows too large.
 - Update `.env.example` with current provider and benchmark settings.
-- Add troubleshooting for local model servers, OpenRouter failures, Python/Retriv setup, and lock-file issues.
+- Add troubleshooting for local model servers, OpenRouter failures, BM25 code-search setup, and lock-file issues.
 - Decide whether old Roo-specific files should remain, be archived, or be removed.
 
 Exit criteria:
@@ -136,7 +136,7 @@ Exit criteria:
 
 ## Working Agreement
 
-- Keep `AGENTS.md` and this roadmap aligned when project direction changes.
-- Append meaningful decisions to `memory-bank/decisionLog.md`.
-- Update `memory-bank/progress.md` when finishing a roadmap item.
-- Update `memory-bank/activeContext.md` when the current focus changes.
+- Keep `docs/AGENTS.md` and this roadmap aligned when project direction changes.
+- Append meaningful historical decisions to `docs/history/memory-bank/decisionLog.md`.
+- Update `docs/history/memory-bank/progress.md` when finishing a roadmap item.
+- Update `docs/history/memory-bank/activeContext.md` when the current focus changes.

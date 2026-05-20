@@ -27,12 +27,41 @@ export enum LMStudioErrorType {
   AUTHENTICATION = 'authentication',
   RATE_LIMIT = 'rate_limit',
   INVALID_REQUEST = 'invalid_request',
+  TIMEOUT = 'timeout',
   CONTENT_FILTER = 'content_filter',
   CONTEXT_LENGTH_EXCEEDED = 'context_length_exceeded',
   SERVER_ERROR = 'server_error',
   MODEL_NOT_FOUND = 'model_not_found',
   UNSUPPORTED_MODEL = 'unsupported_model',
   UNKNOWN = 'unknown'
+}
+
+/**
+ * Structured diagnostics captured for LM Studio API failures.
+ */
+export interface LMStudioErrorDiagnostics {
+  modelId: string;
+  endpoint?: string;
+  statusCode?: number;
+  axiosCode?: string;
+  isTimeout?: boolean;
+  isConnectionRefused?: boolean;
+  responseBodySnippet?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Standardized result shape for LM Studio task API calls.
+ */
+export interface LMStudioApiCallResult {
+  success: boolean;
+  text?: string;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+  };
+  error?: LMStudioErrorType;
+  diagnostics?: LMStudioErrorDiagnostics;
 }
 
 /**

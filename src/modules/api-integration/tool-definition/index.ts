@@ -3,47 +3,16 @@ import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { IToolDefinitionProvider, ITool } from './types.js';
 import { logger } from '../../../utils/logger.js';
 import { config } from '../../../config/index.js';
-import { execSync } from 'child_process';
+import { getProviderRegistry } from '../../core/provider/index.js';
 
 /**
- * Check if Python is installed and available
- */
-function isPythonAvailable(): boolean {
-  try {
-    execSync('python --version', { stdio: 'pipe' });
-    return true;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Python not available: ${errorMessage}`);
-    try {
-      execSync('python3 --version', { stdio: 'pipe' });
-      return true;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Python3 not available: ${errorMessage}`);
-      return false;
-    }
-  }
-}
-
-/**
- * Check if a Python module is installed
- */
-function isPythonModuleInstalled(moduleName: string): boolean {
-  try {
-    execSync(`python -c "import ${moduleName}"`, { stdio: 'pipe' });
-    return true;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Python module ${moduleName} not installed: ${errorMessage}`);
-    return false;
-  }
-}
-
-/**
- * Check if OpenRouter API key is configured
+ * Whether OpenRouter is available as a provider. Prefers the runtime
+ * provider registry (set up by `LocalLamaMcpServer.run()`); falls back to the
+ * raw env config so that callers running before bootstrap (e.g. unit tests
+ * that import this module directly) still get a sensible answer.
  */
 export function isOpenRouterConfigured(): boolean {
+  if (getProviderRegistry().has('openrouter')) return true;
   return !!config.openRouterApiKey;
 }
 
@@ -59,79 +28,47 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
   }
 
   getAvailableTools(): ITool[] {
-    // Check if retriv-related tools should be included based on Python availability
-    const pythonAvailable = isPythonAvailable();
-    const retrivAvailable = pythonAvailable && isPythonModuleInstalled('retriv');
-    
     const tools: ITool[] = [
       {
         name: 'route_task',
-        description: 'Processes a coding task: decomposes if necessary, executes subtasks using appropriate models (local/free/paid based on routing), synthesizes the results, and returns the final code.',
+        description:
+          'Queue a coding task for execution by the most cost-effective LLM available and return immediately with a task_id. ' +
+          'Prefers local models (LM Studio / Ollama) when they are capable enough, ' +
+          'falling back to free or paid API models only when needed. ' +
+          'The caller should poll get_task_status with the returned task_id to track progress and retrieve the final result. ' +
+          'When live job monitoring is available, the response also includes a monitoring.websocketUrl link ' +
+          'plus MCP job resource URIs for active jobs and per-job progress. ' +
+          'Use this tool when you want the task actually executed asynchronously, not just planned.',
         inputSchema: {
           type: 'object',
           properties: {
             task: {
               type: 'string',
-              description: 'The coding task to route'
+              description: 'The coding task to execute (free-form natural language or code prompt).'
             },
             context_length: {
               type: 'number',
-              description: 'The length of the context in tokens'
+              description: 'Number of tokens in the prompt / context being sent.'
             },
             expected_output_length: {
               type: 'number',
-              description: 'The expected length of the output in tokens'
+              description: 'Estimated number of tokens in the desired output (helps cost estimation and model selection). Omit if unknown.'
             },
             complexity: {
               type: 'number',
-              description: 'The complexity of the task (0-1)'
+              description: 'Task complexity score from 0.0 (trivial) to 1.0 (very hard). Omit to let the router estimate it automatically.'
             },
             priority: {
               type: 'string',
               enum: ['speed', 'cost', 'quality'],
-              description: 'The priority for this task'
+              description: '"speed" – pick the fastest responding model. "cost" – minimise API spend (prefers local/free). "quality" – pick the highest quality model regardless of cost. Default: "quality".'
             },
             preemptive: {
               type: 'boolean',
-              description: 'Whether to use preemptive routing (faster but less accurate)'
+              description: 'If true, use a fast heuristic pre-check for routing instead of full analysis. Faster but less accurate; useful when latency matters more than optimality.'
             }
           },
           required: ['task', 'context_length']
-        },
-        outputSchema: {
-          type: 'object',
-          properties: {
-            model: {
-              type: 'string',
-              description: 'The final model used for the last step or synthesis.'
-            },
-            provider: {
-              type: 'string',
-              description: 'The provider of the final model used.'
-            },
-            reason: {
-              type: 'string',
-              description: 'Explanation of the routing and execution process.'
-            },
-            resultCode: {
-              type: 'string',
-              description: 'The final synthesized code result.'
-            },
-            estimatedCost: {
-              type: 'number',
-              description: 'Estimated cost in USD for the task execution (optional).'
-            },
-            details: {
-              type: 'object',
-              description: 'Optional details about the execution process (e.g., cost breakdown, subtask analysis).',
-              properties: {
-                // Define specific details properties if needed, e.g.:
-                // costEstimate: { type: 'object' },
-                // taskAnalysis: { type: 'object' }
-              }
-            }
-          },
-          required: ['model', 'provider', 'reason', 'resultCode']
         }
       },
       {
@@ -165,10 +102,6 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             bm25_options: {
               type: 'object',
               description: 'Options for the BM25 algorithm'
-            },
-            install_dependencies: {
-              type: 'boolean',
-              description: 'Whether to automatically install required Python dependencies'
             }
           },
           required: ['directories']
@@ -176,7 +109,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'cancel_job',
-        description: 'Cancel a running job',
+        description: 'Cancel a running background job. Returns the job id, whether cancellation succeeded, and the final status.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -189,87 +122,92 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         }
       },
       {
+        name: 'get_task_status',
+        description:
+          'Poll a non-blocking route_task submission. Returns aggregate task status, progress, retry hint, and per-job summaries including inline result content when completed.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            task_id: {
+              type: 'string',
+              description: 'The task_id returned by route_task.'
+            }
+          },
+          required: ['task_id']
+        }
+      },
+      {
+        name: 'cancel_task',
+        description:
+          'Cancel all queued or in-progress jobs belonging to a non-blocking route_task submission.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            task_id: {
+              type: 'string',
+              description: 'The task_id returned by route_task.'
+            }
+          },
+          required: ['task_id']
+        }
+      },
+      {
         name: 'preemptive_route_task',
-        description: 'Quickly route a coding task without making API calls (faster but less accurate)',
+        description:
+          'Cheap model-selection check that returns a routing recommendation WITHOUT executing the task. ' +
+          'Call this when you only need to know which model and provider would be chosen (for UI feedback, ' +
+          'cost planning, or logging) and will call route_task separately for actual execution. ' +
+          'Much faster than route_task because it uses a heuristic scoring model with no LLM API calls. ' +
+          'Returns structured JSON with costClass, providerId, modelId and reason — same shape as route_task ' +
+          'but content is always empty.',
         inputSchema: {
           type: 'object',
           properties: {
             task: {
               type: 'string',
-              description: 'The coding task to route'
+              description: 'The coding task description (used for complexity estimation).'
             },
             context_length: {
               type: 'number',
-              description: 'The length of the context in tokens'
+              description: 'Number of tokens in the prompt / context.'
             },
             expected_output_length: {
               type: 'number',
-              description: 'The expected length of the output in tokens'
+              description: 'Estimated output length in tokens. Omit if unknown.'
             },
             complexity: {
               type: 'number',
-              description: 'The complexity of the task (0-1)'
+              description: 'Task complexity from 0.0 (trivial) to 1.0 (very hard). Omit to estimate automatically.'
             },
             priority: {
               type: 'string',
               enum: ['speed', 'cost', 'quality'],
-              description: 'The priority for this task'
+              description: 'Routing priority. Default: "quality".'
             }
           },
           required: ['task', 'context_length']
-        }, // <<< Add comma here
-        outputSchema: { // <<< Add outputSchema here
-          type: 'object',
-          properties: {
-            model: {
-              type: 'string',
-              description: 'The final model used for the last step or synthesis.'
-            },
-            provider: {
-              type: 'string',
-              description: 'The provider of the final model used.'
-            },
-            reason: {
-              type: 'string',
-              description: 'Explanation of the routing and execution process.'
-            },
-            resultCode: {
-              type: 'string',
-              description: 'The final synthesized code result.'
-            },
-            estimatedCost: {
-              type: 'number',
-              description: 'Estimated cost in USD for the task execution.'
-            },
-            details: {
-              type: 'object',
-              description: 'Optional details about the execution process.',
-              properties: {
-                // Add properties from RouteTaskResult['details'] if needed
-                // e.g., costEstimate, retrivResults, taskAnalysis
-              }
-            }
-          },
-          required: ['model', 'provider', 'reason', 'resultCode']
         }
       },
       {
         name: 'get_cost_estimate',
-        description: 'Get an estimate of the cost for a task',
+        description:
+          'Returns a structured JSON cost estimate for running a given number of tokens through the router. ' +
+          'Use this before calling route_task to decide whether to proceed or reduce the request size. ' +
+          'All cost fields are in USD; local and free-tier models report 0.',
         inputSchema: {
           type: 'object',
           properties: {
             context_length: {
               type: 'number',
-              description: 'The length of the context in tokens'
+              description: 'Number of tokens in the prompt / context.'
             },
             expected_output_length: {
               type: 'number',
-              description: 'The expected length of the output in tokens'
+              description: 'Estimated output length in tokens. Omit if unknown; defaults to 0.'
             },
             model: {
               type: 'string',
-              description: 'The model to use (optional)'
+              description: 'Specific model id to estimate cost for. Omit to estimate for all registered models.'
             }
           },
           required: ['context_length']
@@ -277,7 +215,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'benchmark_task',
-        description: 'Benchmark the performance of local LLMs vs paid APIs for a specific task',
+        description: 'Benchmark the performance of local LLMs vs paid APIs for a specific task. When live job monitoring is available, the response includes monitoring.websocketUrl and MCP job resource URIs.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -319,7 +257,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'benchmark_tasks',
-        description: 'Benchmark the performance of local LLMs vs paid APIs for multiple tasks',
+        description: 'Benchmark the performance of local LLMs vs paid APIs for multiple tasks. When live job monitoring is available, the response includes monitoring.websocketUrl and MCP job resource URIs.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -376,15 +314,38 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
           },
           required: ['tasks']
         }
+      },
+      {
+        name: 'benchmark_model',
+        description: 'Run built-in benchmark suites against a specific model identified by its model id. ' +
+          'Uses the provider abstraction so it works with any registered provider (LM Studio, Ollama, OpenRouter, etc.). ' +
+          'Results are persisted to the benchmark database and immediately update the ModelRegistry capability scores.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            model_id: {
+              type: 'string',
+              description: 'The model id to benchmark (e.g. "qwen2.5-coder-7b")'
+            },
+            task_categories: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ['code', 'chat', 'tool-use', 'long-context']
+              },
+              description: 'Which task categories to run. Defaults to ["code", "chat"] when omitted.'
+            }
+          },
+          required: ['model_id']
+        }
       }
     ];
-    
-    // Add retriv-specific tools if Python and retriv module are available
-    if (retrivAvailable) {
-      tools.push(
-        {
-          name: 'retriv_init',
-          description: 'Initialize and configure Retriv for code search and indexing',
+
+    // retriv_init and retriv_search use the native TypeScript BM25 engine — always available
+    tools.push(
+      {
+        name: 'retriv_init',
+        description: 'Initialize and configure code search indexing (native BM25, no Python required)',
           inputSchema: {
             type: 'object',
             properties: {
@@ -413,10 +374,6 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
               bm25_options: {
                 type: 'object',
                 description: 'Options for the BM25 algorithm'
-              },
-              install_dependencies: {
-                type: 'boolean',
-                description: 'Whether to automatically install required Python dependencies'
               }
             },
             required: ['directories']
@@ -424,7 +381,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         },
         {
           name: 'retriv_search',
-          description: 'Search code using Retriv search engine',
+          description: 'Search code using native BM25 engine',
           inputSchema: {
             type: 'object',
             properties: {
@@ -441,8 +398,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
           }
         }
       );
-    }
-    
+
     // Add OpenRouter-specific tools if API key is configured
     if (isOpenRouterConfigured()) {
       tools.push(
@@ -574,42 +530,66 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         },
         {
           name: 'set_model_prompting_strategy',
-          description: 'Update the prompting strategy for an OpenRouter model',
+          description: 'Update the prompting strategy used for a specific OpenRouter model. Allows callers to supply a custom system prompt, user prompt template, and assistant prompt template that will be used on subsequent task executions for that model.',
           inputSchema: {
             type: 'object',
             properties: {
-              task: {
+              model_id: {
                 type: 'string',
-                description: 'The ID of the model to update'
+                description: 'The OpenRouter model ID to update (e.g. "mistralai/mistral-7b-instruct")'
               },
-              context_length: {
-                type: 'number',
-                description: 'Unused but required for type compatibility'
-              },
-              expected_output_length: {
-                type: 'number',
-                description: 'The system prompt to use'
-              },
-              priority: {
+              system_prompt: {
                 type: 'string',
-                enum: ['speed', 'cost', 'quality'],
-                description: 'The user prompt template to use'
+                description: 'System prompt to inject before every request to this model'
               },
-              complexity: {
-                type: 'number',
-                description: 'The assistant prompt template to use'
+              user_prompt: {
+                type: 'string',
+                description: 'User prompt template (use {{task}} as the placeholder for the task text)'
               },
-              preemptive: {
+              assistant_prompt: {
+                type: 'string',
+                description: 'Optional assistant prompt template to prime the model response'
+              },
+              use_chat: {
                 type: 'boolean',
-                description: 'Whether to use chat format'
+                description: 'Whether to use the chat completion API format (true) or the completion API format (false)'
+              },
+              success_rate: {
+                type: 'number',
+                description: 'Observed success rate for this strategy (0–1). Used to score the strategy in future routing decisions. Defaults to 0.7 if omitted.'
+              },
+              quality_score: {
+                type: 'number',
+                description: 'Observed quality score for this strategy (0–1). Used to score the strategy in future routing decisions. Defaults to 0.7 if omitted.'
               }
             },
-            required: ['task', 'context_length', 'expected_output_length', 'priority', 'complexity', 'preemptive']
+            required: ['model_id', 'system_prompt', 'user_prompt', 'use_chat']
           }
         }
       );
     }
-    
+
+    tools.push(
+      {
+        name: 'check_for_updates',
+        description: 'Check whether the running locallama-mcp server is up to date with the latest commit on the future-testing branch on GitHub. Returns upToDate status, local SHA, remote SHA, and any error.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'update_server',
+        description: 'Pull the latest changes from GitHub and rebuild the server. Runs git pull, npm install, and npm run build in sequence. IMPORTANT: The server must be manually restarted after this completes for changes to take effect.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }
+    );
+
     return tools;
   }
 }

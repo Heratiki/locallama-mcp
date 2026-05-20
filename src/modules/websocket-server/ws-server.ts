@@ -348,7 +348,7 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
       if (command === 'getBenchmarkedModels') {
         try {
           // Get all benchmark directories from the file system
-          const benchmarkDir = path.resolve(process.cwd(), 'benchmark-results');
+          const benchmarkDir = config.benchmark.resultsPath;
           const benchmarkFiles = await fs.promises.readdir(benchmarkDir);
           
           // Filter for model directories (ignore .json files and other non-directories)
@@ -421,7 +421,7 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
           }
           
           // Find the most recent comprehensive results file
-          const benchmarkDir = path.resolve(process.cwd(), 'benchmark-results');
+          const benchmarkDir = config.benchmark.resultsPath;
           const files = await fs.promises.readdir(benchmarkDir);
           const comprFiles = files.filter(file => file.startsWith('comprehensive-results-')).sort().reverse();
           
@@ -600,7 +600,7 @@ async function handleRpcMessage(message: RpcMessage, ws: WebSocket): Promise<voi
               // Remove existing benchmark results for this model to force a re-benchmark
               // This is the key step: we need to delete existing benchmark files for this model
               try {
-                const benchmarkDir = path.resolve(process.cwd(), 'benchmark-results');
+                const benchmarkDir = config.benchmark.resultsPath;
                 
                 // Need to sanitize the model ID for directory name
                 // Replace both slashes and colons with hyphens

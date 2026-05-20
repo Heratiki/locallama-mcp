@@ -1,161 +1,38 @@
-import fs from 'fs';
-import path from 'path';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite'; // Removed Database, ISqlite due to not being used.
-import { logger } from '../../utils/logger.js';
+/**
+ * Re-export job store functions under the names expected by ws-server.ts.
+ * Previously this module contained its own SQLite implementation;
+ * it is now a thin adapter over the canonical job-store module.
+ */
+export { initJobStore as initDatabase } from '../job-store/index.js';
 
-interface Job {
+import { getAllJobs } from '../job-store/index.js';
+import type { PersistedJob } from '../job-store/index.js';
+
+// ws-server.ts uses getAllJobsFromDb() and filters by status === 'pending' | 'in_progress'.
+// The persisted store uses lowercase status values ('queued', 'in_progress', etc.),
+// so we map 'queued' → 'pending' here to keep ws-server.ts working unchanged.
+interface WsJob {
   id: string;
-  description: string;
   status: string;
-  progress: number;
-  parent_task_id: string | null;
-  created_at: string;
-  updated_at: string;
+  [key: string]: unknown;
 }
 
-interface DbRunResult {
-  lastID: number;
-  changes: number;
+function mapPersistedToWs(job: PersistedJob): WsJob {
+  const statusMap: Record<string, string> = {
+    queued: 'pending',
+    in_progress: 'in_progress',
+    completed: 'completed',
+    failed: 'failed',
+    permanently_failed: 'failed',
+    cancelled: 'cancelled'
+  };
+  return {
+    ...job,
+    status: statusMap[job.status] ?? job.status
+  };
 }
 
-type SafeDB = {
-  run(sql: string, params?: unknown[]): Promise<DbRunResult>;
-  all<T>(sql: string, params?: unknown[]): Promise<T[]>;
-  exec(sql: string): Promise<void>;
-};
-
-const DB_PATH = process.env.DB_PATH || './data/jobs.db';
-
-async function initDatabase(): Promise<SafeDB | null> {
-  if (!fs.existsSync(path.dirname(DB_PATH))) {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  }
-
-  let dbConnection;
-  try {
-    dbConnection = await open({
-      filename: DB_PATH,
-      driver: sqlite3.Database
-    });
-
-    if (!dbConnection) {
-      return null;
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Failed to initialize database:', error.message);
-    } else {
-      logger.error('Failed to initialize database:', String(error));
-    }
-    return null;
-  }
-
-  try {
-    await dbConnection.exec(`
-      CREATE TABLE IF NOT EXISTS jobs (
-        id TEXT PRIMARY KEY,
-        description TEXT,
-        status TEXT,
-        progress INTEGER,
-        parent_task_id TEXT,
-        created_at TEXT,
-        updated_at TEXT
-      )
-    `);
-  } catch (execError) {
-    if (execError instanceof Error) {
-      logger.error('Failed to create table:', execError.message);
-    } else {
-      logger.error('Failed to create table:', String(execError));
-    }
-    return null;
-  }
-
-  return dbConnection as SafeDB;
+export async function getAllJobsFromDb(): Promise<WsJob[]> {
+  const jobs = await getAllJobs();
+  return jobs.map(mapPersistedToWs);
 }
-
-async function insertJob(job: Job): Promise<void> {
-  const db = await initDatabase();
-  if (!db) {
-    logger.error('Database not initialized');
-    return;
-  }
-
-  try {
-    await db.run(
-      'INSERT INTO jobs (id, description, status, progress, parent_task_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [job.id, job.description, job.status, job.progress, job.parent_task_id, job.created_at, job.updated_at]
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Failed to insert job:', error.message);
-    } else {
-      logger.error('Failed to insert job:', String(error));
-    }
-    throw error;
-  }
-}
-
-async function updateJob(job: Partial<Job> & { id: string }): Promise<void> {
-  const db = await initDatabase();
-  if (!db) {
-    logger.error('Database not initialized');
-    return;
-  }
-
-  try {
-    await db.run(
-      'UPDATE jobs SET status = ?, progress = ?, updated_at = ? WHERE id = ?',
-      [job.status, job.progress, job.updated_at, job.id]
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Failed to update job:', error.message);
-    } else {
-      logger.error('Failed to update job:', String(error));
-    }
-  }
-}
-
-async function getAllJobsFromDb(): Promise<Job[]> {
-  const db = await initDatabase();
-  if (!db) {
-    logger.error('Database not initialized');
-    return [];
-  }
-
-  try {
-    const rows = await db.all<Job>('SELECT * FROM jobs');
-    return rows;
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Failed to get all jobs:', error.message);
-    } else {
-      logger.error('Failed to get all jobs:', String(error));
-    }
-    return [];
-  }
-}
-
-async function cleanupOldJobs(): Promise<void> {
-  const db = await initDatabase();
-  if (!db) {
-    logger.error('Database not initialized');
-    return;
-  }
-
-  try {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - 7);
-    await db.run('DELETE FROM jobs WHERE created_at < ?', [cutoffDate.toISOString()]);
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Failed to cleanup old jobs:', error.message);
-    } else {
-      logger.error('Failed to cleanup old jobs:', String(error));
-    }
-  }
-}
-
-export { initDatabase, insertJob, updateJob, getAllJobsFromDb, cleanupOldJobs };

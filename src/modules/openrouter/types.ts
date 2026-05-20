@@ -128,6 +128,29 @@ export interface OpenRouterModelTracking {
   
   /** Free models available */
   freeModels: string[];
+
+  /** Runtime health state for free-model selection */
+  freeModelHealth?: Record<string, OpenRouterFreeModelHealth>;
+}
+
+/**
+ * Health tracking metadata for free OpenRouter models.
+ */
+export interface OpenRouterFreeModelHealth {
+  /** Consecutive routing/execution failures for this model */
+  consecutiveFailures: number;
+
+  /** Last seen failure type */
+  lastErrorType?: OpenRouterErrorType;
+
+  /** ISO timestamp for the last failure */
+  lastFailureAt?: string;
+
+  /** ISO timestamp for the last success */
+  lastSuccessAt?: string;
+
+  /** Model is temporarily excluded until this timestamp */
+  quarantinedUntil?: string;
 }
 
 /**
@@ -171,6 +194,9 @@ export enum OpenRouterErrorType {
   
   /** Invalid request */
   INVALID_REQUEST = 'invalid_request',
+
+  /** Request timed out */
+  TIMEOUT = 'timeout',
   
   /** Model not found */
   MODEL_NOT_FOUND = 'model_not_found',

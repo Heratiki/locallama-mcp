@@ -4,6 +4,16 @@ import { WebSocketServer } from 'ws';
 import type { BroadcastJobsFunction } from '../../websocket-server/ws-server-types.js';
 import net from 'net';
 import EventEmitter from 'events';
+import {
+  initJobStore,
+  insertJob as dbInsertJob,
+  updateJob as dbUpdateJob,
+  getJob as dbGetJob,
+  getAllJobs as dbGetAllJobs,
+  getActiveJobs as dbGetActiveJobs,
+  deleteOldJobs as dbDeleteOldJobs
+} from '../../job-store/index.js';
+import { refreshAlertState } from '../../job-store/alert.js';
 
 // Job status enum for better type safety
 export enum JobStatus {
@@ -39,14 +49,22 @@ export interface Job {
   results?: string[]; // Array to store generated code blocks
 }
 
+export interface JobTrackerMonitoringInfo {
+  websocketUrl: string;
+  activeJobsUri: string;
+  jobProgressUriTemplate: string;
+}
+
 /**
  * JobTracker - Manages and tracks the status of all tasks in the system
  */
 export class JobTracker extends EventEmitter {
+  // In-memory cache for synchronous read access; kept in sync with DB writes.
   private activeJobs: Map<string, Job> = new Map();
-  private static instance: JobTracker;
+  private static instance: JobTracker | null = null;
   private initialized = false;
   private wss: WebSocketServer | null = null;
+  private websocketPort: number | null = null;
   private readonly BASE_PORT = 8080;
   private readonly MAX_PORT = 8180;
   // Store broadcast function dynamically to avoid circular dependency
@@ -54,6 +72,29 @@ export class JobTracker extends EventEmitter {
 
   private constructor() {
     super();
+  }
+
+  /** Map a PersistedJob row back to the in-memory Job interface. */
+  private persistedToJob(p: import('../../job-store/index.js').PersistedJob): Job {
+    const statusMap: Record<string, JobStatus> = {
+      queued: JobStatus.QUEUED,
+      in_progress: JobStatus.IN_PROGRESS,
+      completed: JobStatus.COMPLETED,
+      failed: JobStatus.FAILED,
+      permanently_failed: JobStatus.FAILED,
+      cancelled: JobStatus.CANCELLED
+    };
+    return {
+      id: p.id,
+      task: p.task_text,
+      status: statusMap[p.status] ?? JobStatus.QUEUED,
+      progress: p.progress_pct === 100 ? '100%' : p.progress_pct > 0 ? `${p.progress_pct}%` : 'Pending',
+      estimated_time_remaining: p.status === 'completed' ? '0' : 'N/A',
+      startTime: p.created_at,
+      model: p.model_id ?? undefined,
+      error: p.error ?? undefined,
+      results: p.result ? (JSON.parse(p.result) as string[]) : undefined
+    };
   }
 
   static async getInstance(): Promise<JobTracker> {
@@ -64,6 +105,12 @@ export class JobTracker extends EventEmitter {
       await JobTracker.instance.initializeTracker();
     }
     return JobTracker.instance;
+  }
+
+  static async shutdownInstance(): Promise<void> {
+    if (!JobTracker.instance) return;
+    await JobTracker.instance.shutdown();
+    JobTracker.instance = null;
   }
 
   // Method to set the broadcast function after initialization to avoid circular dependency
@@ -99,17 +146,35 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
+    // Initialize the persistent job store and hydrate in-memory cache
+    try {
+      await initJobStore();
+      logger.info('Persistent job store initialized');
+      // Reload any existing jobs from the DB into the in-memory cache
+      const existingJobs = await dbGetAllJobs();
+      for (const persisted of existingJobs) {
+        this.activeJobs.set(persisted.id, this.persistedToJob(persisted));
+      }
+      logger.info(`Loaded ${existingJobs.length} existing job(s) from persistent store`);
+      await refreshAlertState();
+    } catch (storeError) {
+      logger.error('Failed to initialize persistent job store:', storeError);
+      // Continue — the tracker can still function (with degraded persistence)
+    }
+
     try {
       const port = await this.findAvailablePort();
       try {
         this.wss = new WebSocketServer({ port, noServer: false });
+        this.websocketPort = port;
         logger.info(`Job tracker WebSocket server started on port ${port}`);
       } catch (wsError) {
         logger.error('Failed to create WebSocket server:', wsError);
         // Continue without WebSocket server
         this.wss = null;
+        this.websocketPort = null;
       }
-      
+
       // Mark as initialized even if WebSocket creation fails
       // This allows the system to function without job tracking
       this.initialized = true;
@@ -127,14 +192,37 @@ export class JobTracker extends EventEmitter {
       // Mark as initialized to allow operations to continue
       this.initialized = true;
     }
-    
+
+    const now = Date.now();
+    try {
+      await dbInsertJob({
+        id,
+        task_id: id,
+        status: 'queued',
+        provider_id: null,
+        model_id: model ?? null,
+        task_text: task,
+        result: null,
+        error: null,
+        queue_position: null,
+        progress_pct: 0,
+        poll_again_after_ms: null,
+        retry_count: 0,
+        created_at: now,
+        started_at: null,
+        completed_at: null
+      });
+    } catch (dbError) {
+      logger.warn(`Failed to persist job ${id} to store:`, dbError);
+    }
+
     const job: Job = {
       id,
       task,
       status: JobStatus.QUEUED,
       progress: 'Pending',
       estimated_time_remaining: 'N/A',
-      startTime: Date.now(),
+      startTime: now,
       model
     };
 
@@ -158,23 +246,37 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    const job = this.activeJobs.get(id);
-    if (job) {
-      job.status = JobStatus.IN_PROGRESS;
-      job.progress = `${Math.round(progress)}%`;
-      job.estimated_time_remaining = estimatedTimeRemaining ? 
-        `${Math.round(estimatedTimeRemaining / 60000)} minutes` : 
-        'Calculating...';
-      
-      this.activeJobs.set(id, job);
-      logger.debug(`Updated job ${id} progress: ${job.progress}`);
-      try {
-        await this.broadcastUpdate();
-      } catch (error) {
-        logger.warn(`Failed to broadcast progress update for job ${id}:`, error);
-      }
-      this.emit('jobProgress', job);
+    const progressPct = Math.round(progress);
+    try {
+      await dbUpdateJob({
+        id,
+        status: 'in_progress',
+        progress_pct: progressPct,
+        started_at: Date.now()
+      });
+    } catch (dbError) {
+      logger.warn(`Failed to persist progress update for job ${id}:`, dbError);
     }
+
+    const progressStr = `${progressPct}%`;
+    const etaStr = estimatedTimeRemaining
+      ? `${Math.round(estimatedTimeRemaining / 60000)} minutes`
+      : 'Calculating...';
+
+    // Update in-memory cache
+    const existing = this.activeJobs.get(id);
+    const job: Job = existing
+      ? { ...existing, status: JobStatus.IN_PROGRESS, progress: progressStr, estimated_time_remaining: etaStr }
+      : { id, task: '', status: JobStatus.IN_PROGRESS, progress: progressStr, estimated_time_remaining: etaStr, startTime: Date.now() };
+    this.activeJobs.set(id, job);
+
+    logger.debug(`Updated job ${id} progress: ${progressStr}`);
+    try {
+      await this.broadcastUpdate();
+    } catch (error) {
+      logger.warn(`Failed to broadcast progress update for job ${id}:`, error);
+    }
+    this.emit('jobProgress', job);
   }
 
   async completeJob(id: string, results?: string[]): Promise<void> {
@@ -186,27 +288,41 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    const job = this.activeJobs.get(id);
-    if (job) {
-      job.status = JobStatus.COMPLETED;
-      job.progress = '100%';
-      job.estimated_time_remaining = '0';
-      
-      // Store results if provided
-      if (results && results.length > 0) {
-        job.results = results;
-        logger.debug(`Stored ${results.length} code blocks for job ${id}`);
-      }
-      
-      this.activeJobs.set(id, job);
-      logger.debug(`Completed job ${id}`);
-      try {
-        await this.broadcastUpdate();
-      } catch (error) {
-        logger.warn(`Failed to broadcast job completion for ${id}:`, error);
-      }
-      this.emit('jobCompleted', job);
+    const now = Date.now();
+    try {
+      await dbUpdateJob({
+        id,
+        status: 'completed',
+        progress_pct: 100,
+        result: results ? JSON.stringify(results) : null,
+        completed_at: now
+      });
+    } catch (dbError) {
+      logger.warn(`Failed to persist completion for job ${id}:`, dbError);
     }
+
+    const existing = this.activeJobs.get(id);
+    const job: Job = {
+      ...(existing ?? { task: '', startTime: now }),
+      id,
+      status: JobStatus.COMPLETED,
+      progress: '100%',
+      estimated_time_remaining: '0',
+      results: results ?? existing?.results
+    };
+    this.activeJobs.set(id, job);
+
+    if (results && results.length > 0) {
+      logger.debug(`Stored ${results.length} code blocks for job ${id}`);
+    }
+
+    logger.debug(`Completed job ${id}`);
+    try {
+      await this.broadcastUpdate();
+    } catch (error) {
+      logger.warn(`Failed to broadcast job completion for ${id}:`, error);
+    }
+    this.emit('jobCompleted', job);
   }
 
   async cancelJob(id: string): Promise<void> {
@@ -218,20 +334,30 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    const job = this.activeJobs.get(id);
-    if (job) {
-      job.status = JobStatus.CANCELLED;
-      job.estimated_time_remaining = 'N/A';
-      
-      this.activeJobs.set(id, job);
-      logger.debug(`Cancelled job ${id}`);
-      try {
-        await this.broadcastUpdate();
-      } catch (error) {
-        logger.warn(`Failed to broadcast job cancellation for ${id}:`, error);
-      }
-      this.emit('jobCancelled', job);
+    try {
+      await dbUpdateJob({ id, status: 'cancelled' });
+    } catch (dbError) {
+      logger.warn(`Failed to persist cancellation for job ${id}:`, dbError);
     }
+
+    const existing = this.activeJobs.get(id);
+    const job: Job = {
+      ...(existing ?? { task: '', startTime: Date.now() }),
+      id,
+      status: JobStatus.CANCELLED,
+      progress: 'Cancelled',
+      estimated_time_remaining: 'N/A'
+    };
+    this.activeJobs.set(id, job);
+
+    logger.debug(`Cancelled job ${id}`);
+    try {
+      await this.broadcastUpdate();
+    } catch (error) {
+      logger.warn(`Failed to broadcast job cancellation for ${id}:`, error);
+    }
+    this.emit('jobCancelled', job);
+    await refreshAlertState();
   }
 
   async failJob(id: string, error?: string): Promise<void> {
@@ -243,21 +369,31 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    const job = this.activeJobs.get(id);
-    if (job) {
-      job.status = JobStatus.FAILED;
-      job.estimated_time_remaining = 'N/A';
-      job.error = error;
-      
-      this.activeJobs.set(id, job);
-      logger.error(`Job ${id} failed: ${error || 'Unknown error'}`);
-      try {
-        await this.broadcastUpdate();
-      } catch (broadcastError) {
-        logger.warn(`Failed to broadcast job failure for ${id}:`, broadcastError);
-      }
-      this.emit('jobFailed', job);
+    try {
+      await dbUpdateJob({ id, status: 'failed', error: error ?? null });
+    } catch (dbError) {
+      logger.warn(`Failed to persist failure for job ${id}:`, dbError);
     }
+
+    const existing = this.activeJobs.get(id);
+    const job: Job = {
+      ...(existing ?? { task: '', startTime: Date.now() }),
+      id,
+      status: JobStatus.FAILED,
+      progress: 'Failed',
+      estimated_time_remaining: 'N/A',
+      error
+    };
+    this.activeJobs.set(id, job);
+
+    logger.error(`Job ${id} failed: ${error || 'Unknown error'}`);
+    try {
+      await this.broadcastUpdate();
+    } catch (broadcastError) {
+      logger.warn(`Failed to broadcast job failure for ${id}:`, broadcastError);
+    }
+    this.emit('jobFailed', job);
+    await refreshAlertState();
   }
 
   getJob(id: string): Job | undefined {
@@ -306,7 +442,8 @@ export class JobTracker extends EventEmitter {
       this.initialized = true;
       return;
     }
-    
+
+    // Prune from in-memory cache
     const now = Date.now();
     for (const [id, job] of this.activeJobs.entries()) {
       if (
@@ -317,6 +454,11 @@ export class JobTracker extends EventEmitter {
         this.emit('jobRemoved', id);
       }
     }
+
+    // Prune from persistent store (fire-and-forget; errors already logged inside)
+    dbDeleteOldJobs(maxAgeMs).catch((err: unknown) => {
+      logger.warn('Failed to prune old jobs from persistent store:', err);
+    });
   }
 
   private async broadcastUpdate(): Promise<void> {
@@ -363,6 +505,52 @@ export class JobTracker extends EventEmitter {
   isInitialized(): boolean {
     return this.initialized;
   }
+
+  getWebSocketUrl(host: string = '127.0.0.1'): string | null {
+    if (!this.initialized || !this.wss) return null;
+
+    const address = this.wss.address();
+    const port = typeof address === 'object' && address !== null
+      ? address.port
+      : this.websocketPort;
+
+    if (!port) return null;
+    return `ws://${host}:${port}`;
+  }
+
+  getMonitoringInfo(): JobTrackerMonitoringInfo | null {
+    const websocketUrl = this.getWebSocketUrl();
+    if (!websocketUrl) return null;
+
+    return {
+      websocketUrl,
+      activeJobsUri: 'locallama://jobs/active',
+      jobProgressUriTemplate: 'locallama://jobs/progress/{jobId}',
+    };
+  }
+
+  async shutdown(): Promise<void> {
+    const server = this.wss;
+    this.wss = null;
+    this.websocketPort = null;
+    this.initialized = false;
+    this.activeJobs.clear();
+    this.removeAllListeners();
+
+    if (!server) return;
+
+    for (const client of server.clients) {
+      try {
+        client.close();
+      } catch {
+        // Best-effort shutdown; ignore individual client close failures.
+      }
+    }
+
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  }
 }
 
 // Initialize singleton instance immediately but safely
@@ -390,4 +578,10 @@ export const getJobTracker = async (): Promise<JobTracker> => {
 // Export synchronous function to get instance without initialization
 export const getJobTrackerSync = (): JobTracker | null => {
   return jobTrackerInstance;
+};
+
+export const shutdownJobTracker = async (): Promise<void> => {
+  await JobTracker.shutdownInstance();
+  jobTrackerInstance = null;
+  initializationPromise = null;
 };

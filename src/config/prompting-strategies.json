@@ -1,0 +1,87 @@
+{
+  "strategies": [
+    {
+      "id": "default",
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "coding",
+      "appliesTo": {
+        "families": [
+          "codellama", "qwen-coder", "starcoder", "codestral",
+          "codegemma", "deepseek-coder", "wizardcoder"
+        ],
+        "modelIdPatterns": ["coder", "code"]
+      },
+      "systemPrompt": "You are a helpful coding assistant specializing in writing clean, correct, and efficient code. Focus on the task at hand and produce working solutions.",
+      "useChat": true
+    },
+    {
+      "id": "llama",
+      "appliesTo": {
+        "families": ["llama", "vicuna"]
+      },
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "mistral",
+      "appliesTo": {
+        "families": ["mistral", "mixtral"]
+      },
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "qwen",
+      "appliesTo": {
+        "families": ["qwen"]
+      },
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "phi",
+      "appliesTo": {
+        "families": ["phi"]
+      },
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "gemma",
+      "appliesTo": {
+        "families": ["gemma"]
+      },
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "anthropic",
+      "appliesTo": {
+        "providerIds": ["openrouter"],
+        "families": ["claude"]
+      },
+      "systemPrompt": "You are Claude, a helpful AI assistant made by Anthropic.",
+      "useChat": true
+    },
+    {
+      "id": "openai",
+      "appliesTo": {
+        "families": ["gpt", "openai", "o1", "o3"]
+      },
+      "systemPrompt": "You are a helpful assistant.",
+      "useChat": true
+    },
+    {
+      "id": "google",
+      "appliesTo": {
+        "families": ["gemini", "palm", "google"]
+      },
+      "systemPrompt": "You are a helpful AI assistant.",
+      "useChat": true
+    }
+  ],
+  "defaultStrategyId": "default"
+}

@@ -5,11 +5,16 @@ import { ApiUsage, Model } from '../../types/index.js';
 import { openRouterModule } from '../openrouter/index.js';
 import { calculateTokenEstimates, modelContextWindows } from './utils.js';
 import { RetrieverType } from './codeSearch.js';
+import { getModelRegistry } from '../core/model/registry.js';
 
 // Define response types
 interface OpenRouterCreditsResponse {
-  used: number;
-  remaining: number;
+  data?: {
+    total_credits?: number;
+    total_usage?: number;
+  };
+  used?: number;
+  remaining?: number;
 }
 
 interface LMStudioModel {
@@ -55,7 +60,7 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
   try {
     // Query OpenRouter for usage statistics
     const response = await axios.get<OpenRouterCreditsResponse>(
-      'https://openrouter.ai/api/v1/auth/credits',
+      'https://openrouter.ai/api/v1/credits',
       {
         headers: {
           Authorization: `Bearer ${config.openRouterApiKey}`,
@@ -68,8 +73,12 @@ export async function getOpenRouterUsage(): Promise<ApiUsage> {
     if (response.data) {
       logger.debug('Successfully retrieved OpenRouter usage data');
 
-      const creditsUsed = response.data.used || 0;
-      const creditsRemaining = response.data.remaining || 0;
+      const totalCredits = response.data.data?.total_credits;
+      const totalUsage = response.data.data?.total_usage;
+      const creditsUsed = totalUsage ?? response.data.used ?? 0;
+      const creditsRemaining = totalCredits !== undefined && totalUsage !== undefined
+        ? Math.max(totalCredits - totalUsage, 0)
+        : response.data.remaining ?? 0;
 
       // Fix: Use the correct parameter structure for calculateTokenEstimates
       const tokenEstimate = calculateTokenEstimates(
@@ -255,13 +264,16 @@ export async function getAvailableModels(): Promise<Model[]> {
           })
         );
 
-        // Process the results
-        const confirmedModels = models.concat(detailedModels);
-        models.push(...confirmedModels);
+        // Process the results — only push the (possibly-enriched) Ollama models,
+        // not a concat with the current `models` array (which would duplicate any
+        // LM Studio models that were added earlier).
+        models.push(...detailedModels);
         logger.debug(`Found ${detailedModels.length} models from Ollama`);
       } catch (batchError) {
-        // If batch processing fails, just use the basic models
+        // If batch processing fails, fall back to the basic (unenriched) models
+        // so Ollama models are still surfaced rather than triggering the llama3 fallback.
         logger.warn('Failed to get detailed info for Ollama models:', batchError);
+        models.push(...ollamaModels);
       }
     }
   } catch (error) {
@@ -289,7 +301,34 @@ export async function getAvailableModels(): Promise<Model[]> {
     logger.warn('Failed to get models from OpenRouter:', error);
   }
 
-  // If no models were found, return some default models
+  // If no models were found from live HTTP calls, fall back to the ModelRegistry
+  // (which is seeded from provider modules during startup, using cached data on disk).
+  if (models.length === 0) {
+    try {
+      const registry = getModelRegistry();
+      const registryModels = registry.listAll();
+      if (registryModels.length > 0) {
+        for (const meta of registryModels) {
+          models.push({
+            id: meta.id,
+            name: meta.displayName ?? meta.id,
+            provider: meta.providerId,
+            capabilities: {
+              chat: meta.capabilities.chat,
+              completion: true,
+            },
+            costPerToken: meta.cost ?? { prompt: 0, completion: 0 },
+            contextWindow: meta.contextWindow,
+          });
+        }
+        logger.info(`No live provider responses — fell back to ${models.length} model(s) from ModelRegistry`);
+      }
+    } catch {
+      logger.debug('ModelRegistry not yet populated, skipping registry fallback');
+    }
+  }
+
+  // Last-resort hardcoded sentinel — only if registry is also empty
   if (models.length === 0) {
     models.push({
       id: 'llama3',
@@ -303,9 +342,9 @@ export async function getAvailableModels(): Promise<Model[]> {
         prompt: 0,
         completion: 0,
       },
-      contextWindow: 8192, // Default context window for Llama 3
+      contextWindow: 8192,
     });
-    logger.warn('No models found from any provider, using default model');
+    logger.warn('No models found from any provider or registry, using last-resort default model');
   } else {
     // Only log model count at debug level to reduce log spam
     logger.debug(`Found a total of ${models.length} models from all providers`);
