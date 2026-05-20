@@ -7,6 +7,25 @@ import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 // import { modelProfiles } from '../utils/modelProfiles.js';
 import { isOpenRouterConfigured } from '../../api-integration/tool-definition/index.js';
 import { isProviderId, isProviderLocal } from '../../core/provider/index.js';
+import { getModelRegistry } from '../../core/model/index.js';
+
+function getTaskCategoryScore(modelId: string, taskCategory?: string): number | undefined {
+  if (!taskCategory) return undefined;
+
+  const scores = getModelRegistry().getModel(modelId)?.benchmarkSummary?.scores;
+  if (!scores) return undefined;
+
+  switch (taskCategory) {
+    case 'code':
+      return scores.code;
+    case 'reasoning':
+      return scores.reasoning;
+    case 'speed':
+      return scores.speed;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Model Selector Service
@@ -45,6 +64,7 @@ export const modelSelector = {
     complexity: number,
     totalTokens: number,
     excludeId?: string,
+    taskCategory?: string,
   ): Promise<Model | null> {
     try {
       // Get the models database
@@ -89,9 +109,12 @@ export const modelSelector = {
           
           // Success rate factor (0-1)
           score += modelData.successRate * successRateWeight;
-          
-          // Quality score factor (0-1)
-          score += modelData.qualityScore * qualityScoreWeight;
+
+          // Prefer task-category benchmark score when available; otherwise use
+          // the generic quality score from modelsDb.
+          const taskCategoryScore = getTaskCategoryScore(model.id, taskCategory);
+          const qualitySignal = taskCategoryScore ?? modelData.qualityScore;
+          score += qualitySignal * qualityScoreWeight;
           
           // Response time factor (0-1, inversely proportional)
           // Normalize response time: faster is better
@@ -104,7 +127,7 @@ export const modelSelector = {
           const complexityMatchFactor = 1 - Math.abs(modelData.complexityScore - complexity);
           score += complexityMatchFactor * complexityMatchWeight;
           
-          logger.debug(`Local model ${model.id} has performance data: success=${modelData.successRate.toFixed(2)}, quality=${modelData.qualityScore.toFixed(2)}, time=${modelData.avgResponseTime}ms, score=${score.toFixed(2)}`);
+          logger.debug(`Local model ${model.id} has performance data: success=${modelData.successRate.toFixed(2)}, quality=${qualitySignal.toFixed(2)}${taskCategoryScore !== undefined ? ` (task:${taskCategory})` : ''}, time=${modelData.avgResponseTime}ms, score=${score.toFixed(2)}`);
           
           // For local models, we also consider system resource usage
           // This is a local-specific optimization

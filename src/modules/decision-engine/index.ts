@@ -336,6 +336,7 @@ export const decisionEngine = {
     let provider: 'local' | 'paid';
     let confidence: number;
     let model: string;
+    const taskCategory = isCodeTask(params.task) ? 'code' : undefined;
     
     // If free models are available and have the highest score, use them
     if (hasFreeModels && freeScore > localScore && freeScore > paidScore) {
@@ -349,10 +350,10 @@ export const decisionEngine = {
     } else {
       provider = localScore > paidScore ? 'local' : 'paid';
       confidence = Math.min(Math.abs(localScore - paidScore), 1.0);
-      model = await this.selectModelForProvider(provider, complexity, totalTokens);
+      model = await this.selectModelForProvider(provider, complexity, totalTokens, taskCategory);
 
       if (provider === 'local') {
-        model = await this.applyCodeCapabilityFilter(model, params.task, complexity, totalTokens);
+        model = await this.applyCodeCapabilityFilter(model, params.task, complexity, totalTokens, taskCategory);
       }
     }
 
@@ -375,6 +376,7 @@ export const decisionEngine = {
     task: string,
     complexity: number,
     totalTokens: number,
+    taskCategory?: string,
   ): Promise<string> {
     if (!isCodeTask(task)) return selectedModel;
     try {
@@ -384,7 +386,7 @@ export const decisionEngine = {
         logger.debug(
           `Preemptive routing: ${selectedModel} code score ${caps.scores.code} < threshold ${threshold}, seeking alternative`,
         );
-        const alt = await modelSelector.getBestLocalModel(complexity, totalTokens, selectedModel);
+        const alt = await modelSelector.getBestLocalModel(complexity, totalTokens, selectedModel, taskCategory);
         if (alt && alt.id !== selectedModel) {
           logger.debug(`Preemptive routing: capability filter replaced ${selectedModel} with ${alt.id}`);
           return alt.id;
@@ -584,10 +586,11 @@ export const decisionEngine = {
   async selectModelForProvider(
     provider: 'local' | 'paid',
     complexity: number,
-    totalTokens: number
+    totalTokens: number,
+    taskCategory?: string,
   ): Promise<string> {
     if (isProviderLocal(provider)) {
-      const bestModel = await modelSelector.getBestLocalModel(complexity, totalTokens);
+      const bestModel = await modelSelector.getBestLocalModel(complexity, totalTokens, undefined, taskCategory);
       return bestModel?.id || config.defaultLocalModel;
     } else {
       const preferredModelIds = complexity >= COMPLEXITY_THRESHOLDS.COMPLEX
