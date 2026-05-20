@@ -103,3 +103,22 @@ Verification:
 
 Follow-ups:
 - Add/live-run an operational MCP concurrency harness for simultaneous local/local and local/remote `route_task` calls.
+
+## 2026-05-20 - Non-blocking route_task Rework
+
+Author: Codex
+
+Summary:
+- Confirmed PR #35 was merged to `main`, not `future-testing`, and contained no implementation diff for Issue #32.
+- Implemented a fresh `future-testing` change where `route_task` creates a persistent Task/Job, returns `task_id` immediately, and background execution writes the final result.
+- Added `get_task_status` and `cancel_task` routing/dispatcher paths and updated client-facing response docs.
+
+Verification:
+- `npm run build` passes.
+- Focused Jest run passes: `test/dispatcher.test.ts`, `test/modules/api-integration/routing/index.test.ts`, `test/modules/job-store/db.test.ts`, and `test/modules/api-integration/tool-definition/index.test.ts`.
+- `npm test` passes: 37 suites / 257 tests.
+- `node test-operational.mjs --suite routing` passes: 18 passed / 0 failed.
+- `node test-operational.mjs --suite smoke` passes: 32 passed / 0 failed.
+
+Follow-ups:
+- Live LLM poll-to-completion acceptance is still blocked in this environment because the configured Ollama endpoint is unavailable.

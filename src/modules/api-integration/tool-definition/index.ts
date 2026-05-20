@@ -32,15 +32,13 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       {
         name: 'route_task',
         description:
-          'Delegate a coding task to the most cost-effective LLM available. ' +
+          'Queue a coding task for execution by the most cost-effective LLM available and return immediately with a task_id. ' +
           'Prefers local models (LM Studio / Ollama) when they are capable enough, ' +
           'falling back to free or paid API models only when needed. ' +
-          'Decomposes complex tasks into subtasks, executes them, synthesises the result, ' +
-          'and returns structured JSON with the code, the model used, its cost class ' +
-          '("local" | "free" | "paid"), and the estimated cost. ' +
-          'When live job monitoring is available, the response includes a monitoring.websocketUrl link ' +
+          'The caller should poll get_task_status with the returned task_id to track progress and retrieve the final result. ' +
+          'When live job monitoring is available, the response also includes a monitoring.websocketUrl link ' +
           'plus MCP job resource URIs for active jobs and per-job progress. ' +
-          'Use this tool when you want the task actually executed, not just planned.',
+          'Use this tool when you want the task actually executed asynchronously, not just planned.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -121,6 +119,36 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             }
           },
           required: ['job_id']
+        }
+      },
+      {
+        name: 'get_task_status',
+        description:
+          'Poll a non-blocking route_task submission. Returns aggregate task status, progress, retry hint, and per-job summaries including inline result content when completed.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            task_id: {
+              type: 'string',
+              description: 'The task_id returned by route_task.'
+            }
+          },
+          required: ['task_id']
+        }
+      },
+      {
+        name: 'cancel_task',
+        description:
+          'Cancel all queued or in-progress jobs belonging to a non-blocking route_task submission.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            task_id: {
+              type: 'string',
+              description: 'The task_id returned by route_task.'
+            }
+          },
+          required: ['task_id']
         }
       },
       {

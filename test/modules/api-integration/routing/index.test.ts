@@ -52,6 +52,7 @@ jest.unstable_mockModule('../../../../dist/modules/api-integration/task-executio
 const mockCreateJob = jest.fn().mockResolvedValue('job-id');
 const mockCompleteJob = jest.fn().mockResolvedValue(undefined);
 const mockFailJob = jest.fn().mockResolvedValue(undefined);
+const mockCancelJob = jest.fn().mockResolvedValue(undefined);
 
 jest.unstable_mockModule('../../../../dist/modules/decision-engine/services/jobTracker.js', () => ({
   JobStatus: {
@@ -64,8 +65,32 @@ jest.unstable_mockModule('../../../../dist/modules/decision-engine/services/jobT
     completeJob: mockCompleteJob,
     failJob: mockFailJob,
     getJob: jest.fn(),
-    cancelJob: jest.fn(),
+    cancelJob: mockCancelJob,
   }),
+}));
+
+const mockInsertTask = jest.fn().mockResolvedValue(undefined);
+const mockUpdateTask = jest.fn().mockResolvedValue(undefined);
+const mockUpdateJob = jest.fn().mockResolvedValue(undefined);
+const mockGetActiveJobs = jest.fn().mockResolvedValue([]);
+const mockGetTask = jest.fn();
+const mockGetJobsByTaskId = jest.fn();
+const mockCancelJobsForTask = jest.fn();
+
+jest.unstable_mockModule('../../../../dist/modules/job-store/index.js', () => ({
+  insertTask: mockInsertTask,
+  updateTask: mockUpdateTask,
+  updateJob: mockUpdateJob,
+  getActiveJobs: mockGetActiveJobs,
+  getTask: mockGetTask,
+  getJobsByTaskId: mockGetJobsByTaskId,
+  cancelJobsForTask: mockCancelJobsForTask,
+}));
+
+const mockRefreshAlertState = jest.fn().mockResolvedValue(undefined);
+
+jest.unstable_mockModule('../../../../dist/modules/job-store/alert.js', () => ({
+  refreshAlertState: mockRefreshAlertState,
 }));
 
 const mockProcessCodeTask = jest.fn();
@@ -114,11 +139,18 @@ jest.unstable_mockModule('../../../../dist/modules/core/provider/index.js', () =
   providerCostClass: jest.fn((providerId: string) => (providerId === 'openrouter' || providerId === 'paid' ? 'paid' : 'local')),
 }));
 
-const { routeTask, preemptiveRouteTask } = await import('../../../../dist/modules/api-integration/routing/index.js');
+const { routeTask, preemptiveRouteTask, getTaskStatus, cancelTask, router } = await import('../../../../dist/modules/api-integration/routing/index.js');
+const executeRouteTaskBlocking = (params: Parameters<typeof routeTask>[0]) =>
+  (router as unknown as { executeRouteTaskBlocking(params: Parameters<typeof routeTask>[0]): Promise<unknown> })
+    .executeRouteTaskBlocking(params);
 
 describe('api-integration routing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetTask.mockResolvedValue(undefined);
+    mockGetJobsByTaskId.mockResolvedValue([]);
+    mockGetActiveJobs.mockResolvedValue([]);
+    mockCancelJobsForTask.mockResolvedValue(0);
     mockGetAvailableModels.mockResolvedValue([]);
     mockRegistry.list.mockReturnValue([mockOpenRouterProvider]);
     mockRegistry.has.mockImplementation((providerId: string) => providerId === 'openrouter' || providerId === 'ollama' || providerId === 'lm-studio');
@@ -131,8 +163,145 @@ describe('api-integration routing', () => {
     });
   });
 
-  it('preserves a paid routing decision and executes the selected OpenRouter model directly', async () => {
+  it('route_task returns immediately with a queued task id', async () => {
+    mockRouteTaskDecision.mockResolvedValueOnce({
+      provider: 'paid',
+      model: 'openai/gpt-4o',
+      explanation: 'Queued paid task.',
+    });
+    mockGetActiveJobs.mockResolvedValueOnce([
+      { id: 'active-1', status: 'queued' },
+      { id: 'active-2', status: 'in_progress' },
+    ]);
+    mockExecuteTask.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return 'background result';
+    });
+
     const result = await routeTask({
+      task: 'Generate a short implementation plan.',
+      contextLength: 64,
+      expectedOutputLength: 128,
+      complexity: 0.7,
+      priority: 'quality',
+    });
+
+    expect(result.status).toBe('queued');
+    expect(result.task_id).toEqual(expect.any(String));
+    expect(result.job_count).toBe(1);
+    expect(result.queue_position).toBe(3);
+    expect(result.poll_again_after_ms).toBe(5000);
+    expect(result.provider).toBe('openrouter');
+    expect(result.model).toBe('openai/gpt-4o');
+    expect(mockInsertTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: result.task_id,
+      status: 'queued',
+      job_count: 1,
+    }));
+    expect(mockCreateJob).toHaveBeenCalledWith(result.task_id, expect.stringContaining('implementation plan'), 'openai/gpt-4o');
+  });
+
+  it('get_task_status returns aggregate task status and inline completed results', async () => {
+    mockGetTask.mockResolvedValueOnce({
+      id: 'task-1',
+      status: 'in_progress',
+      job_count: 2,
+      completed_count: 0,
+      failed_count: 0,
+      created_at: Date.now(),
+    });
+    mockGetJobsByTaskId.mockResolvedValueOnce([
+      {
+        id: 'job-1',
+        task_id: 'task-1',
+        status: 'completed',
+        provider_id: 'ollama',
+        model_id: 'qwen2.5-coder:7b',
+        task_text: 'first',
+        result: JSON.stringify(['done']),
+        error: null,
+        queue_position: 1,
+        progress_pct: 100,
+        poll_again_after_ms: null,
+        retry_count: 0,
+        created_at: Date.now(),
+        started_at: Date.now(),
+        completed_at: Date.now(),
+      },
+      {
+        id: 'job-2',
+        task_id: 'task-1',
+        status: 'in_progress',
+        provider_id: 'openrouter',
+        model_id: 'openai/gpt-4o',
+        task_text: 'second',
+        result: null,
+        error: null,
+        queue_position: 2,
+        progress_pct: 50,
+        poll_again_after_ms: 15000,
+        retry_count: 0,
+        created_at: Date.now(),
+        started_at: Date.now(),
+        completed_at: null,
+      },
+    ]);
+
+    const result = await getTaskStatus('task-1');
+
+    expect(result).toMatchObject({
+      task_id: 'task-1',
+      status: 'in_progress',
+      job_count: 2,
+      completed_count: 1,
+      failed_count: 0,
+      progress_pct: 75,
+      poll_again_after_ms: 15000,
+    });
+    expect(result.jobs[0]).toMatchObject({
+      job_id: 'job-1',
+      status: 'completed',
+      result: 'done',
+    });
+  });
+
+  it('cancel_task cancels all non-terminal jobs for the task', async () => {
+    mockGetTask
+      .mockResolvedValueOnce({
+        id: 'task-cancel',
+        status: 'in_progress',
+        job_count: 2,
+        completed_count: 0,
+        failed_count: 0,
+        created_at: Date.now(),
+      })
+      .mockResolvedValueOnce({
+        id: 'task-cancel',
+        status: 'cancelled',
+        job_count: 2,
+        completed_count: 0,
+        failed_count: 0,
+        created_at: Date.now(),
+      });
+    mockCancelJobsForTask.mockResolvedValueOnce(2);
+    mockGetJobsByTaskId.mockResolvedValueOnce([
+      { id: 'job-1', status: 'cancelled' },
+      { id: 'job-2', status: 'cancelled' },
+    ]);
+
+    const result = await cancelTask('task-cancel');
+
+    expect(mockCancelJobsForTask).toHaveBeenCalledWith('task-cancel');
+    expect(result).toMatchObject({
+      success: true,
+      task_id: 'task-cancel',
+      cancelled_count: 2,
+      status: 'cancelled',
+    });
+  });
+
+  it('preserves a paid routing decision and executes the selected OpenRouter model directly', async () => {
+    const result = await executeRouteTaskBlocking({
       task: 'Design a secure OAuth2 token refresh flow. Return three concise bullets.',
       contextLength: 120,
       expectedOutputLength: 80,
@@ -224,7 +393,7 @@ describe('api-integration routing', () => {
     });
     mockSynthesizeFinalResult.mockResolvedValueOnce('final-synthesized-output');
 
-    const result = await routeTask({
+    const result = await executeRouteTaskBlocking({
       task: 'Write a TypeScript debounce utility function.',
       contextLength: 90,
       expectedOutputLength: 180,
@@ -327,7 +496,7 @@ describe('api-integration routing', () => {
     });
     mockSynthesizeFinalResult.mockResolvedValueOnce('multi-subtask-final-output');
 
-    const result = await routeTask({
+    const result = await executeRouteTaskBlocking({
       task: 'Build a retry helper and adapter wrapper in TypeScript.',
       contextLength: 140,
       expectedOutputLength: 260,

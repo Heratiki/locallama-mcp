@@ -92,7 +92,7 @@ REMOVE_STALE_LOCK_FILES=true
 | Test | What it checks | Expected |
 |---|---|---|
 | Connect | stdio handshake completes | Client connects without error |
-| List tools | All 13 tools are registered | Exact tool names present |
+| List tools | Core tools are registered | Exact tool names present, including async task polling tools |
 | List resources | Resources are registered | `locallama://status`, `locallama://models` |
 | Read `locallama://status` | Returns parseable content | JSON with `version`, `status`, or `server` fields |
 | Read `locallama://models` | Returns model list | Array or `{models:[...]}` |
@@ -111,7 +111,7 @@ REMOVE_STALE_LOCK_FILES=true
 
 | Test | Input | Expected |
 |---|---|---|
-| `route_task` tiny prompt | "Write a JS `add` function" | Code in response; model identified; costClass present |
+| `route_task` tiny prompt | "Write a JS `add` function" | Immediate `task_id`; `get_task_status` eventually returns completed result inline |
 
 ---
 

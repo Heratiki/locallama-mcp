@@ -175,6 +175,8 @@ async function runSuite(client, serverEnv) {
         'preemptive_route_task',
         'get_cost_estimate',
         'cancel_job',
+        'get_task_status',
+        'cancel_task',
         'benchmark_task',
         'benchmark_tasks',
         'benchmark_model',
@@ -498,7 +500,7 @@ async function runSuite(client, serverEnv) {
     hdr('LLM: Real model calls via Ollama (may be slow)');
     info('Using model: gemma3n:e2b (5.6GB — smallest available)');
 
-    await runTest('route_task — tiny prompt via Ollama', async () => {
+    await runTest('route_task — tiny prompt queues and can be polled', async () => {
       const result = await client.callTool(
         {
           name: 'route_task',
@@ -514,22 +516,39 @@ async function runSuite(client, serverEnv) {
       );
       const text = extractText(result);
       dim(`route_task response (first 500 chars): ${text?.substring(0, 500)}`);
-      assert(!!text, 'route_task returns content');
+      assert(!!text, 'route_task returns queued task content');
 
       let parsed;
       try { parsed = JSON.parse(text); } catch { /* plain text */ }
-      if (parsed) {
-        assert(!!parsed.code || !!parsed.result || !!parsed.content, 'Response contains code or result');
-        assert(!!parsed.modelUsed || !!parsed.provider || !!parsed.costClass, 'Response identifies which model was used');
-        if (parsed.modelUsed) info(`Model used: ${parsed.modelUsed}`);
-        if (parsed.costClass) info(`Cost class: ${parsed.costClass}`);
-      } else {
-        // Plain text response: just verify it looks like code
-        assert(
-          text.includes('function') || text.includes('add') || text.includes('=>'),
-          'Plain text response looks like JavaScript code'
-        );
+      assert(!!parsed?.task_id, 'route_task returns task_id immediately');
+      assert(parsed?.status === 'queued', 'route_task initial status is queued');
+      assert(Number.isFinite(parsed?.poll_again_after_ms), 'route_task includes poll_again_after_ms');
+      assert(!!parsed?.provider && !!parsed?.model, 'route_task identifies queued provider and model');
+
+      let statusPayload = null;
+      const deadline = Date.now() + 180_000;
+      while (Date.now() < deadline) {
+        const statusResult = await client.callTool({
+          name: 'get_task_status',
+          arguments: { task_id: parsed.task_id },
+        });
+        const statusText = extractText(statusResult);
+        statusPayload = JSON.parse(statusText);
+        dim(`get_task_status response: ${statusText?.substring(0, 500)}`);
+        assert(statusPayload.task_id === parsed.task_id, 'get_task_status returns matching task_id');
+        if (['completed', 'failed', 'partially_failed', 'cancelled'].includes(statusPayload.status)) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(statusPayload.poll_again_after_ms ?? 5000, 5000)));
       }
+
+      assert(statusPayload?.status === 'completed', 'Task reaches completed status');
+      const completedJob = statusPayload.jobs?.find((job) => job.status === 'completed');
+      assert(!!completedJob?.result, 'Completed task exposes job result inline');
+      assert(
+        completedJob.result.includes('function') || completedJob.result.includes('add') || completedJob.result.includes('=>'),
+        'Completed task result looks like JavaScript code',
+      );
     });
   }
 }

@@ -36,6 +36,8 @@ const version = packageJson.version;
 
 const MONITORED_TOOL_NAMES = new Set([
   'route_task',
+  'get_task_status',
+  'cancel_task',
   'benchmark_task',
   'benchmark_tasks',
   'benchmark_model',
@@ -315,14 +317,7 @@ export class LocalLamaMcpServer {
               switch (name) {
                 case 'route_task': {
                   const routeResult = await routingModule.routeTask(ensureRouteTaskParams(args));
-                  return {
-                    costClass: routeResult.costClass,
-                    providerId: routeResult.providerId,
-                    modelId: routeResult.model,
-                    content: routeResult.resultCode,
-                    reason: routeResult.reason,
-                    estimatedCost: routeResult.estimatedCost,
-                  };
+                  return routeResult;
                 }
                 case 'preemptive_route_task': {
                   const preemptiveResult = await routingModule.preemptiveRouteTask(ensureRouteTaskParams(args));
@@ -341,6 +336,20 @@ export class LocalLamaMcpServer {
                     throw new Error('Invalid job_id for cancel_job');
                   }
                   return await routingModule.cancelJob(jobId);
+                }
+                case 'get_task_status': {
+                  const taskId = args?.task_id;
+                  if (typeof taskId !== 'string' || !taskId) {
+                    throw new Error('Invalid task_id for get_task_status');
+                  }
+                  return await routingModule.getTaskStatus(taskId);
+                }
+                case 'cancel_task': {
+                  const taskId = args?.task_id;
+                  if (typeof taskId !== 'string' || !taskId) {
+                    throw new Error('Invalid task_id for cancel_task');
+                  }
+                  return await routingModule.cancelTask(taskId);
                 }
                 case 'get_free_models':
                   return await import('./modules/api-integration/openrouter-integration/index.js')
