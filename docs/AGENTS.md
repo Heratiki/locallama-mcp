@@ -70,6 +70,9 @@ The project is a TypeScript ESM MCP server built around these areas:
 - `src/modules/benchmark/` - benchmark execution, scoring, summaries, storage
 - `src/modules/lm-studio/`, `src/modules/ollama/`, `src/modules/openrouter/` - provider integrations
 
+### Decision engine: two model data stores
+`ModelRegistry` + `CapabilityDetector` is canonical for benchmark-derived capability scores — written by `benchmark_model`, read by `taskRouter` and `codeModelSelector` (full routing path). `modelsDbService` holds heuristic performance data — seeded from `ModelRegistry` at startup via `seedModelRegistry()`, but the reverse path (`benchmark_model` → `modelsDb`) does not exist. `preemptiveRouting()` reads `modelsDb` via `getBestLocalModel()`, not `CapabilityDetector`. See issue #49.
+
 ## Modernization Priorities
 
 1. Restore reliable local development: cross-platform build, lint dependencies, tests, benchmark entrypoints.
