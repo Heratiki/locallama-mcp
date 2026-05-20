@@ -135,7 +135,7 @@ export const decisionEngine = {
       
       while (mpRetries < maxRetries) {
         try {
-          await modelPerformanceTracker.initialize(codeModelSelector);
+          modelPerformanceTracker.initialize(codeModelSelector);
           break;
         } catch (e) {
           mpRetries++;
@@ -154,6 +154,7 @@ export const decisionEngine = {
       // so adding a new local provider Just Works (Section 6 of PLAN.md).
       const targets = config.startupBenchmarkTargets;
       if (targets.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- fire-and-forget startup benchmark; errors are caught inside
         const startupBenchmarkTimer = setTimeout(async () => {
           try {
             const { getProviderRegistry } = await import('../core/provider/index.js');

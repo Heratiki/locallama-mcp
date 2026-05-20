@@ -27,7 +27,6 @@ const mapStatus = (status: string): 'pending' | 'in_progress' | 'completed' | 'f
 
 // Will be initialized later to avoid circular dependency
 let jobTracker: IJobManager | null = null;
-let initializationPromise: Promise<void> | null = null;
 
 const PORT_RANGE_START = 4000;
 const PORT_RANGE_END = 4100;
@@ -308,7 +307,7 @@ async function cancelJob(jobId: string): Promise<void> {
             }
             
             // Call cancelJob and wait for operation to complete
-            jobTracker.cancelJob(jobId);
+            void jobTracker.cancelJob(jobId);
             await new Promise(resolve => setTimeout(resolve, 100)); // Allow job state to update
         }
 

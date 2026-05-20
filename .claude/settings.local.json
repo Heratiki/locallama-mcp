@@ -1,22 +1,25 @@
 {
   "permissions": {
     "allow": [
-      "Bash(gh issue *)",
-      "Bash(gh label *)",
-      "Bash(git add *)",
+      "Bash(git merge *)",
+      "Bash(git stash *)",
+      "Bash(git rm *)",
       "Bash(git commit *)",
       "Bash(git push *)",
+      "Bash(gh api *)",
+      "Bash(npm list *)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); ['ws','hono','fast-uri','ip-address','uuid','brace-expansion'].forEach\\(p => { const pkg = d.packages['node_modules/'+p]; if\\(pkg\\) console.log\\(p+'@'+pkg.version\\); }\\)\")",
+      "Bash(npm audit *)",
+      "Bash(node *)",
+      "Bash(npm show *)",
+      "Bash(npm why *)",
+      "Bash(npm install *)",
+      "Bash(npm --version)",
+      "Bash(git add *)",
+      "Bash(git branch *)",
+      "Bash(gh issue *)",
       "Bash(npm run *)",
-      "Bash(npm test *)",
-      "Bash(node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs --testPathPattern=\"job-store\")",
-      "Bash(node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs)",
-      "Bash(git *)",
-      "PowerShell(git -C $wt log --oneline main..worktree-agent-a13d8e398a91a98c9 2>&1)",
-      "PowerShell(git -C $wt diff --stat HEAD 2>&1)",
-      "PowerShell($wt = \"C:\\\\Users\\\\herat\\\\source\\\\locallama-mcp\\\\.claude\\\\worktrees\\\\agent-a13d8e398a91a98c9\")",
-      "PowerShell(git -C $wt status --short)",
-      "Bash(1a50f87)",
-      "Bash(future-testing)"
+      "Bash(npm test *)"
     ]
   }
 }

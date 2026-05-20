@@ -24,9 +24,7 @@ function importFreshModule(modulePath: string, cacheKey: string) {
 
 let tempDbDir: string;
 // Hold references so afterAll can close the connections and prevent EBUSY on Windows
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let dbModule1: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let dbModule2: any;
 
 beforeAll(async () => {
