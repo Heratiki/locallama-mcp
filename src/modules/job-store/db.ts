@@ -175,6 +175,19 @@ export async function getJob(id: string): Promise<PersistedJob | undefined> {
   }
 }
 
+export async function getJobsByTaskId(taskId: string): Promise<PersistedJob[]> {
+  const db = getDb();
+  try {
+    return await db.all<PersistedJob[]>(
+      'SELECT * FROM jobs WHERE task_id = ? ORDER BY created_at ASC',
+      [taskId]
+    );
+  } catch (error) {
+    logger.error(`Failed to get jobs for task ${taskId}:`, error);
+    return [];
+  }
+}
+
 export async function getAllJobs(): Promise<PersistedJob[]> {
   const db = getDb();
   try {
@@ -182,6 +195,22 @@ export async function getAllJobs(): Promise<PersistedJob[]> {
   } catch (error) {
     logger.error('Failed to get all jobs:', error);
     return [];
+  }
+}
+
+export async function cancelJobsForTask(taskId: string, completedAt: number = Date.now()): Promise<number> {
+  const db = getDb();
+  try {
+    const result = await db.run(
+      `UPDATE jobs
+       SET status = 'cancelled', completed_at = ?
+       WHERE task_id = ? AND status IN ('queued', 'in_progress')`,
+      [completedAt, taskId]
+    );
+    return result.changes ?? 0;
+  } catch (error) {
+    logger.error(`Failed to cancel jobs for task ${taskId}:`, error);
+    throw error;
   }
 }
 

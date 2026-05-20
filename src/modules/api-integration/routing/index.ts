@@ -3,7 +3,15 @@ import { getJobTracker, JobStatus } from '../../decision-engine/services/jobTrac
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
-import { IRouter, RouteTaskParams, RouteTaskResult, CancelJobResult } from './types.js';
+import {
+  IRouter,
+  RouteTaskParams,
+  RouteTaskResult,
+  CancelJobResult,
+  QueuedRouteTaskResult,
+  TaskStatusResult,
+  CancelTaskResult,
+} from './types.js';
 import { getProviderRegistry, providerCostClass, isProviderLocal } from '../../core/provider/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../../utils/logger.js';
@@ -16,6 +24,17 @@ import { Model } from '../../../types/index.js'; // Import Model type
 import { getModelRegistry } from '../../core/model/index.js';
 import { countTokens } from '../../utils/tokenCount.js';
 import { ContextWindowError } from '../../utils/contextWindow.js';
+import {
+  cancelJobsForTask,
+  getActiveJobs,
+  getTask,
+  getJobsByTaskId,
+  insertTask,
+  updateJob,
+  updateTask,
+} from '../../job-store/index.js';
+import { refreshAlertState } from '../../job-store/alert.js';
+import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus } from '../../job-store/types.js';
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -135,11 +154,78 @@ export class Router implements IRouter {
     return fallbackProviderId === 'paid' ? 'openrouter' : fallbackProviderId;
   }
 
+  private assertTaskWithinLargestKnownContextWindow(task: string): void {
+    const modelWindows = getModelRegistry()
+      .listAll()
+      .map((model) => model.contextWindow)
+      .filter((contextWindow): contextWindow is number => Number.isFinite(contextWindow) && contextWindow > 0);
+    const maxKnownContextWindow = modelWindows.length > 0 ? Math.max(...modelWindows) : undefined;
+    if (maxKnownContextWindow !== undefined) {
+      const estimatedPromptTokens = countTokens(task);
+      if (estimatedPromptTokens > maxKnownContextWindow) {
+        throw new ContextWindowError('registered_models', estimatedPromptTokens, maxKnownContextWindow);
+      }
+    }
+  }
+
+  private calculatePollAgainAfterMs(jobs: Array<{ status: PersistedJobStatus; poll_again_after_ms: number | null }>): number {
+    const activeHints = jobs
+      .filter((job) => job.status === 'queued' || job.status === 'in_progress')
+      .map((job) => job.poll_again_after_ms)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+    if (activeHints.length > 0) return Math.max(...activeHints);
+    return jobs.some((job) => job.status === 'queued' || job.status === 'in_progress') ? 5_000 : 0;
+  }
+
+  private deriveTaskStatus(jobs: Array<{ status: PersistedJobStatus }>): PersistedTaskStatus {
+    if (jobs.length === 0) return 'failed';
+    if (jobs.every((job) => job.status === 'cancelled')) return 'cancelled';
+    if (jobs.some((job) => job.status === 'in_progress')) return 'in_progress';
+    if (jobs.some((job) => job.status === 'queued')) return 'queued';
+    const completed = jobs.filter((job) => job.status === 'completed').length;
+    const failed = jobs.filter((job) => job.status === 'failed' || job.status === 'permanently_failed').length;
+    if (completed === jobs.length) return 'completed';
+    if (failed === jobs.length) return 'failed';
+    if (failed > 0) return 'partially_failed';
+    return 'completed';
+  }
+
+  private async updateTaskFromJobs(taskId: string): Promise<void> {
+    const jobs = await getJobsByTaskId(taskId);
+    const completedCount = jobs.filter((job) => job.status === 'completed').length;
+    const failedCount = jobs.filter((job) => job.status === 'failed' || job.status === 'permanently_failed').length;
+    await updateTask({
+      id: taskId,
+      status: this.deriveTaskStatus(jobs),
+      job_count: jobs.length,
+      completed_count: completedCount,
+      failed_count: failedCount,
+    });
+  }
+
+  private async runQueuedRouteTask(taskId: string, params: RouteTaskParams): Promise<void> {
+    const tracker = await getJobTracker();
+    try {
+      await updateJob({ id: taskId, status: 'in_progress', progress_pct: 1, started_at: Date.now(), poll_again_after_ms: 15_000 });
+      await updateTask({ id: taskId, status: 'in_progress' });
+      const result = await this.executeRouteTaskBlocking(params, taskId);
+      await tracker.completeJob(taskId, [result.resultCode]);
+      await updateTask({ id: taskId, status: 'completed', completed_count: 1, failed_count: 0 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await tracker.failJob(taskId, message);
+      await updateTask({ id: taskId, status: 'failed', completed_count: 0, failed_count: 1 });
+    } finally {
+      await refreshAlertState();
+    }
+  }
+
   private async executePaidDecisionDirectly(
     params: RouteTaskParams,
     decision: { provider: string; model: string; explanation?: string },
     costEstimate: Awaited<ReturnType<typeof costEstimator.estimateCost>>,
     retrivResults: RetrivSearchResult[],
+    existingJobId?: string,
   ): Promise<RouteTaskResult | null> {
     if (decision.provider !== 'paid') return null;
     if (!config.openRouterApiKey) return null;
@@ -164,13 +250,17 @@ export class Router implements IRouter {
     }
 
     const providerId = await this.resolveProviderIdForModel(decision.model, decision.provider);
-    const jobId = `route-${uuidv4()}`;
+    const jobId = existingJobId ?? `route-${uuidv4()}`;
     const tracker = await getJobTracker();
-    await tracker.createJob(jobId, params.task, decision.model);
+    if (!existingJobId) {
+      await tracker.createJob(jobId, params.task, decision.model);
+    }
 
     try {
       const resultCode = await taskExecutor.executeTask(decision.model, params.task, jobId);
-      await tracker.completeJob(jobId, [resultCode]);
+      if (!existingJobId) {
+        await tracker.completeJob(jobId, [resultCode]);
+      }
 
       return {
         model: decision.model,
@@ -196,7 +286,56 @@ export class Router implements IRouter {
   /**
    * Route a coding task to either a local LLM, Free API LLM, or paid API LLM based on cost and complexity
    */
-  async routeTask(params: RouteTaskParams): Promise<RouteTaskResult> {
+  async routeTask(params: RouteTaskParams): Promise<QueuedRouteTaskResult> {
+    this.assertTaskWithinLargestKnownContextWindow(params.task);
+
+    const decision = await decisionEngine.routeTask({
+      task: params.task,
+      contextLength: params.contextLength,
+      expectedOutputLength: params.expectedOutputLength || 0,
+      complexity: params.complexity || 0.5,
+      priority: params.priority || 'quality',
+    });
+
+    const providerId = await this.resolveProviderIdForModel(decision.model, decision.provider);
+    const taskId = uuidv4();
+    const tracker = await getJobTracker();
+    const activeJobs = await getActiveJobs();
+    const queuePosition = activeJobs.filter((job) => job.status === 'queued' || job.status === 'in_progress').length + 1;
+    const now = Date.now();
+
+    await insertTask({
+      id: taskId,
+      status: 'queued',
+      job_count: 1,
+      completed_count: 0,
+      failed_count: 0,
+      created_at: now,
+    });
+    await tracker.createJob(taskId, params.task, decision.model);
+    await updateJob({
+      id: taskId,
+      task_id: taskId,
+      provider_id: providerId,
+      model_id: decision.model,
+      queue_position: queuePosition,
+      poll_again_after_ms: 5_000,
+    });
+
+    void this.runQueuedRouteTask(taskId, params);
+
+    return {
+      task_id: taskId,
+      status: 'queued',
+      job_count: 1,
+      queue_position: queuePosition,
+      poll_again_after_ms: 5_000,
+      provider: providerId,
+      model: decision.model,
+    };
+  }
+
+  private async executeRouteTaskBlocking(params: RouteTaskParams, existingJobId?: string): Promise<RouteTaskResult> {
     try {
       const routeTraceId = `route-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       logger.info(`Routing task with complexity ${params.complexity || 0.5}, context length ${params.contextLength}, priority ${params.priority || 'quality'}`);
@@ -207,17 +346,7 @@ export class Router implements IRouter {
         priority: params.priority || 'quality',
       });
 
-      const modelWindows = getModelRegistry()
-        .listAll()
-        .map((model) => model.contextWindow)
-        .filter((contextWindow): contextWindow is number => Number.isFinite(contextWindow) && contextWindow > 0);
-      const maxKnownContextWindow = modelWindows.length > 0 ? Math.max(...modelWindows) : undefined;
-      if (maxKnownContextWindow !== undefined) {
-        const estimatedPromptTokens = countTokens(params.task);
-        if (estimatedPromptTokens > maxKnownContextWindow) {
-          throw new ContextWindowError('registered_models', estimatedPromptTokens, maxKnownContextWindow);
-        }
-      }
+      this.assertTaskWithinLargestKnownContextWindow(params.task);
 
       // Load user preferences
       const userPreferences = await loadUserPreferences();
@@ -285,6 +414,7 @@ export class Router implements IRouter {
         decision,
         costEstimate,
         retrivResults,
+        existingJobId,
       );
 
       if (paidResult) return paidResult;
@@ -507,6 +637,112 @@ export class Router implements IRouter {
       };
     }
   }
+
+  async getTaskStatus(taskId: string): Promise<TaskStatusResult> {
+    const task = await getTask(taskId);
+    if (!task) {
+      return {
+        task_id: taskId,
+        status: 'not_found',
+        job_count: 0,
+        completed_count: 0,
+        failed_count: 0,
+        progress_pct: 0,
+        poll_again_after_ms: 0,
+        jobs: [],
+      };
+    }
+
+    const jobs = await getJobsByTaskId(taskId);
+    const completedCount = jobs.filter((job) => job.status === 'completed').length;
+    const failedCount = jobs.filter((job) => job.status === 'failed' || job.status === 'permanently_failed').length;
+    const progressPct = jobs.length === 0
+      ? 0
+      : Math.round(jobs.reduce((sum, job) => sum + job.progress_pct, 0) / jobs.length);
+    const status = this.deriveTaskStatus(jobs);
+    if (
+      task.status !== status ||
+      task.job_count !== jobs.length ||
+      task.completed_count !== completedCount ||
+      task.failed_count !== failedCount
+    ) {
+      await updateTask({
+        id: taskId,
+        status,
+        job_count: jobs.length,
+        completed_count: completedCount,
+        failed_count: failedCount,
+      });
+    }
+
+    return {
+      task_id: taskId,
+      status,
+      job_count: jobs.length,
+      completed_count: completedCount,
+      failed_count: failedCount,
+      progress_pct: progressPct,
+      poll_again_after_ms: this.calculatePollAgainAfterMs(jobs),
+      jobs: jobs.map((job) => {
+        let result: string | undefined;
+        if (job.result) {
+          try {
+            const parsed = JSON.parse(job.result) as unknown;
+            result = Array.isArray(parsed) ? parsed.join('\n') : String(parsed);
+          } catch {
+            result = job.result;
+          }
+        }
+        return {
+          job_id: job.id,
+          status: job.status,
+          provider: job.provider_id ?? undefined,
+          model: job.model_id ?? undefined,
+          result,
+          error: job.error ?? undefined,
+          progress_pct: job.progress_pct,
+        };
+      }),
+    };
+  }
+
+  async cancelTask(taskId: string): Promise<CancelTaskResult> {
+    try {
+      const task = await getTask(taskId);
+      if (!task) {
+        return {
+          success: false,
+          task_id: taskId,
+          cancelled_count: 0,
+          status: 'not_found',
+          message: `Task with ID ${taskId} not found`,
+        };
+      }
+
+      const cancelledCount = await cancelJobsForTask(taskId);
+      await this.updateTaskFromJobs(taskId);
+      await refreshAlertState();
+      const updatedTask = await getTask(taskId);
+
+      return {
+        success: cancelledCount > 0,
+        task_id: taskId,
+        cancelled_count: cancelledCount,
+        status: updatedTask?.status ?? task.status,
+        message: cancelledCount > 0
+          ? `Cancelled ${cancelledCount} queued or in-progress job(s) for task ${taskId}`
+          : `No queued or in-progress jobs found for task ${taskId}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        task_id: taskId,
+        cancelled_count: 0,
+        status: 'error',
+        message: `Error cancelling task: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
 }
 
 /**
@@ -563,3 +799,5 @@ export { router };
 export const routeTask = router.routeTask.bind(router);
 export const preemptiveRouteTask = router.preemptiveRouting.bind(router);
 export const cancelJob = router.cancelJob.bind(router);
+export const getTaskStatus = router.getTaskStatus.bind(router);
+export const cancelTask = router.cancelTask.bind(router);

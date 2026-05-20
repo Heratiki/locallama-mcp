@@ -6,7 +6,9 @@ This document tracks which MCP clients can successfully call the LocaLLama MCP t
 
 | Tool | Purpose | Returns |
 |---|---|---|
-| `route_task` | Execute a coding task using the best available model | `{ costClass, providerId, modelId, content, reason, estimatedCost? }` |
+| `route_task` | Queue a coding task using the best available model | `{ task_id, status, job_count, queue_position, poll_again_after_ms, provider, model }` |
+| `get_task_status` | Poll a queued task and retrieve completed job results | `{ task_id, status, progress_pct, jobs: [...] }` |
+| `cancel_task` | Cancel all queued/in-progress jobs for a task | `{ success, task_id, cancelled_count, status, message }` |
 | `preemptive_route_task` | Model-selection pre-check without executing | `{ costClass, providerId, modelId, reason }` |
 | `get_cost_estimate` | Token-level cost estimate | `{ localCost, paidCost, ... }` |
 | `cancel_job` | Cancel a background job | `{ success, status, message, jobId }` |
@@ -18,17 +20,32 @@ This document tracks which MCP clients can successfully call the LocaLLama MCP t
 
 All tool results are returned as MCP `content[0].text` (type `"text"`) containing JSON-serialized output.  Schema-aware clients can parse `content[0].text` as JSON; plain-text clients receive readable output.
 
-## Response shape (route_task / preemptive_route_task)
+## Response Shape
 
 ```jsonc
 // route_task response (parsed from content[0].text)
 {
-  "costClass": "local",          // "local" | "free" | "paid"
-  "providerId": "lm-studio",     // normalised provider id
-  "modelId": "qwen2.5-coder-7b", // model that ran the task
-  "content": "// the generated code...",
-  "reason": "Routed to local model because complexity 0.3 is below threshold.",
-  "estimatedCost": 0             // USD; 0 for local/free
+  "task_id": "uuid",
+  "status": "queued",
+  "job_count": 1,
+  "queue_position": 1,
+  "poll_again_after_ms": 5000,
+  "provider": "ollama",
+  "model": "qwen2.5-coder:7b"
+}
+
+// get_task_status response
+{
+  "task_id": "uuid",
+  "status": "completed",
+  "job_count": 1,
+  "completed_count": 1,
+  "failed_count": 0,
+  "progress_pct": 100,
+  "poll_again_after_ms": 0,
+  "jobs": [
+    { "job_id": "uuid", "status": "completed", "result": "// generated code..." }
+  ]
 }
 
 // preemptive_route_task response

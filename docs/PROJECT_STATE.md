@@ -36,6 +36,7 @@ and this file for the current snapshot.
 - Task 4 in `docs/ROADMAP_ACTIVE.md` is complete as of 2026-05-19: routing now uses `js-tiktoken`-backed prompt token counting and returns structured `context_overflow` errors before dispatch when prompts exceed declared model context windows. Latest verification: `npm run build`, `npm test`, and `node test-operational.mjs --suite routing` pass.
 - Issue #30 provider execution queuing is partially implemented as of 2026-05-20: the provider registry path enforces one shared local execution slot by default and one independent slot per remote provider by default. Caps are configurable via `PROVIDER_MAX_CONCURRENT_LOCAL` and `PROVIDER_MAX_CONCURRENT_REMOTE`. Unit coverage exists for local serialization and local+remote parallelism; live MCP concurrency validation is still pending.
 - OpenRouter Axios error logging now redacts credential-bearing request details as of 2026-05-20; logs keep response status/body summaries without serializing the original Axios request config.
+- Issue #32 was accidentally merged to `main` via PR #35 with no implementation diff. A fresh `future-testing` implementation was completed as of 2026-05-20: `route_task` queues a persistent Task/Job and returns `task_id` immediately; callers poll `get_task_status` or use `cancel_task`.
 
 ## What to keep out of docs
 

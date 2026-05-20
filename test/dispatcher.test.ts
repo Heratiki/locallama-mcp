@@ -49,6 +49,14 @@ jest.unstable_mockModule('../dist/modules/api-integration/resources.js', () => (
   setupResourceHandlers: jest.fn(),
 }));
 
+const mockIsAlertActive = jest.fn(() => false);
+const mockBuildQueueAlert = jest.fn().mockResolvedValue(null);
+
+jest.unstable_mockModule('../dist/modules/job-store/alert.js', () => ({
+  isAlertActive: mockIsAlertActive,
+  buildQueueAlert: mockBuildQueueAlert,
+}));
+
 // ---------------------------------------------------------------------------
 // Lock-file (no-op — avoids filesystem side effects)
 // ---------------------------------------------------------------------------
@@ -64,13 +72,14 @@ jest.unstable_mockModule('../dist/utils/lock-file.js', () => ({
 // Routing module (KEY — the dispatcher delegates to these)
 // ---------------------------------------------------------------------------
 
-const mockRouteTask = jest.fn<() => Promise<{ costClass: string; providerId: string; model: string; resultCode: string; reason: string; estimatedCost: number }>>().mockResolvedValue({
-  costClass: 'local',
-  providerId: 'lm-studio',
+const mockRouteTask = jest.fn<() => Promise<{ task_id: string; status: string; job_count: number; queue_position: number; poll_again_after_ms: number; provider: string; model: string }>>().mockResolvedValue({
+  task_id: 'task-queued-123',
+  status: 'queued',
+  job_count: 1,
+  queue_position: 2,
+  poll_again_after_ms: 5000,
+  provider: 'lm-studio',
   model: 'llama-3.2-3b',
-  resultCode: 'console.log("hello");',
-  reason: 'simple task',
-  estimatedCost: 0,
 });
 
 const mockPreemptiveRouteTask = jest.fn<() => Promise<{ costClass: string; providerId: string; model: string; reason: string }>>().mockResolvedValue({
@@ -81,11 +90,30 @@ const mockPreemptiveRouteTask = jest.fn<() => Promise<{ costClass: string; provi
 });
 
 const mockCancelJob = jest.fn<() => Promise<{ cancelled: boolean }>>().mockResolvedValue({ cancelled: true });
+const mockGetTaskStatus = jest.fn<() => Promise<{ task_id: string; status: string; job_count: number; completed_count: number; failed_count: number; progress_pct: number; poll_again_after_ms: number; jobs: unknown[] }>>().mockResolvedValue({
+  task_id: 'task-queued-123',
+  status: 'completed',
+  job_count: 1,
+  completed_count: 1,
+  failed_count: 0,
+  progress_pct: 100,
+  poll_again_after_ms: 0,
+  jobs: [{ job_id: 'task-queued-123', status: 'completed', result: 'console.log("hello");' }],
+});
+const mockCancelTask = jest.fn<() => Promise<{ success: boolean; task_id: string; cancelled_count: number; status: string; message: string }>>().mockResolvedValue({
+  success: true,
+  task_id: 'task-queued-123',
+  cancelled_count: 1,
+  status: 'cancelled',
+  message: 'cancelled',
+});
 
 jest.unstable_mockModule('../dist/modules/api-integration/routing/index.js', () => ({
   routeTask: mockRouteTask,
   preemptiveRouteTask: mockPreemptiveRouteTask,
   cancelJob: mockCancelJob,
+  getTaskStatus: mockGetTaskStatus,
+  cancelTask: mockCancelTask,
   router: {},
 }));
 
@@ -247,10 +275,14 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     mockRouteTask.mockClear();
     mockPreemptiveRouteTask.mockClear();
     mockCancelJob.mockClear();
+    mockGetTaskStatus.mockClear();
+    mockCancelTask.mockClear();
     mockEstimateCost.mockClear();
     mockBenchmarkTask.mockClear();
     mockBenchmarkTasks.mockClear();
     mockGetMonitoringInfo.mockClear();
+    mockIsAlertActive.mockReturnValue(false);
+    mockBuildQueueAlert.mockResolvedValue(null);
   });
 
   it('registers a tool call handler with the MCP Server', () => {
@@ -275,8 +307,10 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     const typed = result as { content: { type: string; text: string }[] };
     expect(typed.content[0].type).toBe('text');
     const parsed = JSON.parse(typed.content[0].text);
-    expect(parsed.costClass).toBe('local');
-    expect(parsed.modelId).toBe('llama-3.2-3b');
+    expect(parsed.task_id).toBe('task-queued-123');
+    expect(parsed.status).toBe('queued');
+    expect(parsed.model).toBe('llama-3.2-3b');
+    expect(parsed.provider).toBe('lm-studio');
     expect(parsed.monitoring).toMatchObject({
       websocketUrl: 'ws://127.0.0.1:8081',
       activeJobsUri: 'locallama://jobs/active',
@@ -367,6 +401,91 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     expect(mockCancelJob).toHaveBeenCalledWith('test-job-123');
     const typed = result as { content: { type: string; text: string }[] };
     expect(typed.content[0].type).toBe('text');
+  });
+
+  it('routes get_task_status to the routing module', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'get_task_status',
+          arguments: { task_id: 'task-queued-123' },
+        },
+      },
+      {},
+    );
+
+    expect(mockGetTaskStatus).toHaveBeenCalledWith('task-queued-123');
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed.status).toBe('completed');
+    expect(parsed.jobs[0].result).toContain('hello');
+  });
+
+  it('routes cancel_task to the routing module', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'cancel_task',
+          arguments: { task_id: 'task-queued-123' },
+        },
+      },
+      {},
+    );
+
+    expect(mockCancelTask).toHaveBeenCalledWith('task-queued-123');
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed).toMatchObject({ success: true, cancelled_count: 1 });
+  });
+
+  it('includes _queue_alert when failed jobs are present', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    mockIsAlertActive.mockReturnValueOnce(true);
+    mockBuildQueueAlert.mockResolvedValueOnce({
+      failed: 1,
+      permanently_failed: 0,
+      task_ids: ['task-failed'],
+    });
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'get_cost_estimate',
+          arguments: { context_length: 200 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed._queue_alert).toEqual({
+      failed: 1,
+      permanently_failed: 0,
+      task_ids: ['task-failed'],
+    });
+  });
+
+  it('omits _queue_alert when no failed jobs are present', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'get_cost_estimate',
+          arguments: { context_length: 200 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed._queue_alert).toBeUndefined();
   });
 
   it('routes benchmark_task to the benchmark module with realistic client arguments', async () => {

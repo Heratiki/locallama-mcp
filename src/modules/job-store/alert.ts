@@ -19,7 +19,7 @@ export function isAlertActive(): boolean {
   return alertActive;
 }
 
-export async function buildQueueAlert(): Promise<{ failed: number; permanently_failed: number } | null> {
+export async function buildQueueAlert(): Promise<{ failed: number; permanently_failed: number; task_ids: string[] } | null> {
   try {
     const db = await getDb();
     if (!db) return null;
@@ -34,7 +34,12 @@ export async function buildQueueAlert(): Promise<{ failed: number; permanently_f
     const failed = row.failed ?? 0;
     const permanently_failed = row.permanently_failed ?? 0;
     if (failed === 0 && permanently_failed === 0) return null;
-    return { failed, permanently_failed };
+    const taskRows = await db.all<Array<{ task_id: string }>>(
+      `SELECT DISTINCT task_id FROM jobs
+       WHERE status IN ('failed', 'permanently_failed')
+       ORDER BY task_id ASC`
+    );
+    return { failed, permanently_failed, task_ids: taskRows.map((row) => row.task_id) };
   } catch {
     return null;
   }
