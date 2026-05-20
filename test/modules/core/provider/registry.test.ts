@@ -1,12 +1,14 @@
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 
+const mockLogger = {
+  error: jest.fn(),
+  warn: jest.fn(),
+  info: jest.fn(),
+  debug: jest.fn(),
+};
+
 jest.unstable_mockModule('../../../../dist/utils/logger.js', () => ({
-  logger: {
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
-  },
+  logger: mockLogger,
 }));
 
 const providerModule = await import('../../../../dist/modules/core/provider/index.js');
@@ -109,6 +111,59 @@ describe('ProviderRegistry', () => {
     await registry.initAll();
     await registry.initAll();
     expect(p.init).toHaveBeenCalledTimes(1);
+  });
+
+  describe('API Version Compatibility', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('logs warning if provider version is below minimum', async () => {
+      const p = makeProvider({ id: 'ollama', costClass: 'local', isLocal: true });
+      (p as any).getVersion = jest.fn(() => Promise.resolve('0.2.0'));
+      registry.register(p);
+
+      await registry.initAll();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Provider 'ollama' version '0.2.0' is below the minimum required version")
+      );
+    });
+
+    it('does not log warning if provider version is at or above minimum', async () => {
+      const p = makeProvider({ id: 'ollama', costClass: 'local', isLocal: true });
+      (p as any).getVersion = jest.fn(() => Promise.resolve('0.3.0'));
+      registry.register(p);
+
+      await registry.initAll();
+      const calls = mockLogger.warn.mock.calls as string[][];
+      const compatWarnings = calls.filter(c => c[0] && c[0].includes('[Provider Compatibility]'));
+      expect(compatWarnings.length).toBe(0);
+    });
+
+    it('logs warning but continues initialization if version check fails or is unreachable', async () => {
+      const p = makeProvider({ id: 'ollama', costClass: 'local', isLocal: true });
+      (p as any).getVersion = jest.fn(() => Promise.resolve(null));
+      registry.register(p);
+
+      const ready = await registry.initAll();
+      expect(ready).toContain('ollama');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Could not determine version for provider 'ollama'")
+      );
+    });
+
+    it('logs warning but continues if getVersion throws an error', async () => {
+      const p = makeProvider({ id: 'ollama', costClass: 'local', isLocal: true });
+      (p as any).getVersion = jest.fn(() => Promise.reject(new Error('Network error')));
+      registry.register(p);
+
+      const ready = await registry.initAll();
+      expect(ready).toContain('ollama');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Error checking version for provider 'ollama'")
+      );
+    });
   });
 
   it('unregister removes the provider and clears init state', async () => {

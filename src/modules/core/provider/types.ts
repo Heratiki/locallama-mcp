@@ -63,4 +63,6 @@ export interface LLMProvider {
   }): Promise<void>;
 
   getCost(modelId: string): { prompt: number; completion: number };
+
+  getVersion?(): Promise<string | null>;
 }
