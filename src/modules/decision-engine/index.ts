@@ -16,7 +16,14 @@ import { modelPerformanceTracker } from './services/modelPerformance.js';
 import { lmStudioModule } from '../lm-studio/index.js';
 import { ollamaModule } from '../ollama/index.js';
 import { getProviderRegistry, isProviderLocal } from '../core/provider/index.js';
+import { getCapabilityDetector } from '../core/capability-detector.js';
 // import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
+
+const CODE_TASK_PATTERN = /\b(code|function|class|implement|debug|test|refactor|fix|bug|method|module|api|script|parse|algorithm|compile)\b/i;
+
+function isCodeTask(task: string): boolean {
+  return CODE_TASK_PATTERN.test(task);
+}
 /**
  * Represents a single factor in the routing decision.
  */
@@ -343,8 +350,12 @@ export const decisionEngine = {
       provider = localScore > paidScore ? 'local' : 'paid';
       confidence = Math.min(Math.abs(localScore - paidScore), 1.0);
       model = await this.selectModelForProvider(provider, complexity, totalTokens);
+
+      if (provider === 'local') {
+        model = await this.applyCodeCapabilityFilter(model, params.task, complexity, totalTokens);
+      }
     }
-    
+
     return {
       provider,
       model,
@@ -357,6 +368,33 @@ export const decisionEngine = {
       },
       preemptive: true
     };
+  },
+
+  async applyCodeCapabilityFilter(
+    selectedModel: string,
+    task: string,
+    complexity: number,
+    totalTokens: number,
+  ): Promise<string> {
+    if (!isCodeTask(task)) return selectedModel;
+    try {
+      const caps = getCapabilityDetector().detectCapabilities(selectedModel);
+      const threshold = config.codeScoreThreshold;
+      if (caps.scores?.code !== undefined && caps.scores.code < threshold) {
+        logger.debug(
+          `Preemptive routing: ${selectedModel} code score ${caps.scores.code} < threshold ${threshold}, seeking alternative`,
+        );
+        const alt = await modelSelector.getBestLocalModel(complexity, totalTokens, selectedModel);
+        if (alt && alt.id !== selectedModel) {
+          logger.debug(`Preemptive routing: capability filter replaced ${selectedModel} with ${alt.id}`);
+          return alt.id;
+        }
+        logger.debug(`Preemptive routing: no capable alternative found, keeping ${selectedModel}`);
+      }
+    } catch {
+      // CapabilityDetector not initialized — skip filter silently
+    }
+    return selectedModel;
   },
 
   /**

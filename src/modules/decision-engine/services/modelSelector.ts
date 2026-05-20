@@ -43,17 +43,19 @@ export const modelSelector = {
    */
   async getBestLocalModel(
     complexity: number,
-    totalTokens: number
+    totalTokens: number,
+    excludeId?: string,
   ): Promise<Model | null> {
     try {
       // Get the models database
       const modelsDb = modelsDbService.getDatabase();
-      
+
       // Get local models
       const localModels = await costMonitor.getAvailableModels();
       const filteredLocalModels = localModels.filter(model =>
         isProviderLocal(model.provider) &&
-        (model.contextWindow === undefined || model.contextWindow >= totalTokens)
+        (model.contextWindow === undefined || model.contextWindow >= totalTokens) &&
+        model.id !== excludeId
       );
       
       if (filteredLocalModels.length === 0) {
