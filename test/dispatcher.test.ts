@@ -703,6 +703,42 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     });
   });
 
+  it('keeps _server_reminder reachability fields on handled-error responses', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    const { InferenceTimeoutError } = await import('../dist/modules/utils/inferenceTimeout.js');
+    mockGetCachedMonitoringReachability.mockReturnValueOnce({
+      status: 'reachable',
+      url: 'http://127.0.0.1:8081/',
+      lastCheckedAt: 6789,
+    });
+    mockRouteTask.mockRejectedValueOnce(
+      new InferenceTimeoutError('openrouter', 45000, 'OpenRouter inference timed out after 45000ms.'),
+    );
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'route_task',
+          arguments: { task: 'timeout prompt', context_length: 200 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[]; isError?: boolean };
+    expect(typed.isError).toBe(true);
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed.error).toBe('inference_timeout');
+    expect(parsed._server_reminder).toMatchObject({
+      schemaVersion: 1,
+      kind: 'monitoring-reminder',
+      status: 'reachable',
+      scope: 'server-local',
+      monitoringUrl: 'http://127.0.0.1:8081/',
+      lastCheckedAt: 6789,
+    });
+  });
+
   it('routes benchmark_task to the benchmark module with realistic client arguments', async () => {
     if (!capturedHandler) throw new Error('handler not registered');
 

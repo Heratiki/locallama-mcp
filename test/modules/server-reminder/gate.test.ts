@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { ServerReminderGate } from '../../../dist/modules/server-reminder/gate.js';
+import { ServerReminderGate, claimServerReminderIfDue, _resetServerReminderGateForTests } from '../../../dist/modules/server-reminder/gate.js';
 
 describe('ServerReminderGate', () => {
   it('allows a fresh process instance to emit immediately', () => {
@@ -40,5 +40,17 @@ describe('ServerReminderGate', () => {
     );
 
     expect(claims.filter(Boolean)).toHaveLength(1);
+  });
+
+  it('resets singleton gate state to allow immediate emission after restart', () => {
+    let now = 1_000;
+    _resetServerReminderGateForTests({ now: () => now, intervalMs: 5_000 });
+
+    expect(claimServerReminderIfDue()).toBe(true);
+    now += 1_000;
+    expect(claimServerReminderIfDue()).toBe(false);
+
+    _resetServerReminderGateForTests({ now: () => now, intervalMs: 5_000 });
+    expect(claimServerReminderIfDue()).toBe(true);
   });
 });
