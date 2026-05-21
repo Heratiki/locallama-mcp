@@ -526,6 +526,41 @@ Interpret the fields as follows:
 - `monitoring.jobProgressUriTemplate`: MCP resource URI template for per-job progress. Replace `{jobId}` with the returned job ID.
 - `monitoring.note`: Human-readable reminder to use either the WebSocket side channel or the MCP resources.
 
+#### Server Reminder Metadata Example
+
+The server can attach a `_server_reminder` ambient metadata field to any tool response (both success and handled-error paths). This field surfaces low-frequency, non-critical information to the user or agent.
+
+```json
+{
+  "result": { "...": "..." },
+  "_server_reminder": {
+    "schemaVersion": 1,
+    "kind": "monitoring-reminder",
+    "status": "reachable",
+    "scope": "server-local",
+    "message": "Optional monitoring is available from the MCP server host. If you are working remotely, use server-local port forwarding before opening monitoring URLs.",
+    "monitoringUrl": "http://127.0.0.1:3001",
+    "lastCheckedAt": 1747699200000
+  }
+}
+```
+
+- `_server_reminder`: The top-level field name for the ambient metadata.
+- `schemaVersion`: Currently `1`.
+- `kind`: Currently `monitoring-reminder`.
+- `status`: The reachability of the monitoring dashboard URL. One of `reachable`, `unreachable`, or `unknown`.
+- `scope`: Always `server-local`, indicating the `monitoringUrl` is resolved from the server's host.
+- `message`: A human-readable explanation of the reminder.
+- `monitoringUrl`: The URL for the web dashboard. Only present when `status` is `reachable`.
+- `lastCheckedAt`: A Unix millisecond timestamp of when the reachability probe last ran.
+
+**Behavior:**
+
+- **Cadence**: The reminder is emitted at most once every 30 minutes per server process instance. An atomic, in-memory gate prevents spamming. The cadence timer resets on server restart.
+- **Delivery**: The reminder is attached to both successful and handled-error tool responses when it is due. It is not guaranteed to be delivered if the server crashes or the transport connection fails fatally.
+- **Non-blocking**: The reachability probe for the dashboard URL is non-blocking and uses a cached status. A tool call will not be delayed waiting for a probe to complete.
+- **Remote Access**: As with the `monitoring.websocketUrl`, the `monitoringUrl` is `scope: server-local`. Clients on different machines (SSH, containers, Codespaces, WSL) may need to forward the port (default `3001`) before the URL is accessible.
+
 #### Remote Access Troubleshooting
 
 If your MCP client is not running on the same machine as the server, use one of these patterns:
