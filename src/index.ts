@@ -22,6 +22,7 @@ import { InferenceTimeoutError } from './modules/utils/inferenceTimeout.js';
 import { BenchmarkProviderError } from './modules/benchmark/core/runner.js';
 import { reloadConfig } from './config/index.js';
 import { claimServerReminderIfDue } from './modules/server-reminder/gate.js';
+import { getCachedMonitoringReachability } from './modules/server-reminder/reachability.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -64,15 +65,40 @@ type ServerReminderMetadata = {
   status: 'reachable' | 'unreachable' | 'unknown';
   scope: 'server-local';
   message: string;
+  monitoringUrl?: string;
+  lastCheckedAt?: number;
+  reason?: string;
 };
 
+function monitoringWebsiteUrlFromWebSocket(websocketUrl: string | undefined): string | undefined {
+  if (!websocketUrl) return undefined;
+
+  try {
+    const parsed = new URL(websocketUrl);
+    if (parsed.protocol === 'ws:') parsed.protocol = 'http:';
+    if (parsed.protocol === 'wss:') parsed.protocol = 'https:';
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function getMonitoringWebsiteUrl(): string | undefined {
+  const monitoring = getJobTrackerSync()?.getMonitoringInfo();
+  return monitoringWebsiteUrlFromWebSocket(monitoring?.websocketUrl);
+}
+
 function buildServerReminder(): ServerReminderMetadata {
+  const reachability = getCachedMonitoringReachability(getMonitoringWebsiteUrl());
   return {
     schemaVersion: 1,
     kind: 'monitoring-reminder',
-    status: 'unknown',
+    status: reachability.status,
     scope: 'server-local',
     message: 'Optional monitoring is available from the MCP server host. If you are working remotely, use server-local port forwarding before opening monitoring URLs.',
+    ...(reachability.status === 'reachable' && reachability.url ? { monitoringUrl: reachability.url } : {}),
+    ...(reachability.lastCheckedAt !== undefined ? { lastCheckedAt: reachability.lastCheckedAt } : {}),
+    ...(reachability.reason ? { reason: reachability.reason } : {}),
   };
 }
 

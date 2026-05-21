@@ -287,6 +287,12 @@ jest.unstable_mockModule('../dist/modules/server-reminder/gate.js', () => ({
   claimServerReminderIfDue: mockClaimServerReminderIfDue,
 }));
 
+const mockGetCachedMonitoringReachability = jest.fn<() => { status: 'reachable' | 'unreachable' | 'unknown'; url?: string; lastCheckedAt?: number; reason?: string }>(() => ({ status: 'unknown', reason: 'probe_pending' }));
+
+jest.unstable_mockModule('../dist/modules/server-reminder/reachability.js', () => ({
+  getCachedMonitoringReachability: mockGetCachedMonitoringReachability,
+}));
+
 // ---------------------------------------------------------------------------
 // Module under test
 // ---------------------------------------------------------------------------
@@ -339,6 +345,8 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     mockBuildQueueAlert.mockResolvedValue(null);
     mockClaimServerReminderIfDue.mockReset();
     mockClaimServerReminderIfDue.mockReturnValue(true);
+    mockGetCachedMonitoringReachability.mockReset();
+    mockGetCachedMonitoringReachability.mockReturnValue({ status: 'unknown', reason: 'probe_pending' });
   });
 
   it('registers a tool call handler with the MCP Server', () => {
@@ -618,6 +626,34 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
       scope: 'server-local',
     });
     expect(parsed._server_reminder.message).toContain('monitoring');
+  });
+
+  it('attaches _server_reminder with cached reachable monitoring URL when available', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    mockGetCachedMonitoringReachability.mockReturnValue({
+      status: 'reachable',
+      url: 'http://127.0.0.1:8081/',
+      lastCheckedAt: 1234,
+    });
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'get_cost_estimate',
+          arguments: { context_length: 200 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(mockGetCachedMonitoringReachability).toHaveBeenCalledWith('http://127.0.0.1:8081/');
+    expect(parsed._server_reminder).toMatchObject({
+      status: 'reachable',
+      monitoringUrl: 'http://127.0.0.1:8081/',
+      lastCheckedAt: 1234,
+    });
   });
 
   it('omits _server_reminder when the reminder cadence gate is not due', async () => {
