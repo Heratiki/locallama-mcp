@@ -53,5 +53,3 @@ The stdio transport ties the MCP host connection to the server process lifetime.
 ### `npm link` is Not Supported
 
 Do not use `npm link` to manage this project. The server relies on `import.meta.url` to resolve its root directory for configuration and artifacts, which `npm link` breaks by creating symlinks. Always point your MCP client directly to the `dist/index.js` file in your repository.
-
-```
