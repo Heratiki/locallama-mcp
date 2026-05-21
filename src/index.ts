@@ -729,7 +729,7 @@ export class LocalLamaMcpServer {
         logger.info(`MCP client identified: ${clientImpl.name} ${clientImpl.version ?? ''}`.trim());
       }
 
-      logger.info(`${connectionInfo} (PID: ${process.pid})`);
+      logger.info(`LocalLama MCP Server v${version} running on stdio (PID: ${process.pid})`);
       // Fire-and-forget startup update check — never blocks startup
       runStartupCheck().catch(() => undefined);
     } catch (error: unknown) {
