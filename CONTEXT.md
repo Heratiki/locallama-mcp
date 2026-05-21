@@ -70,6 +70,22 @@ _Avoid_: Resume, restart, replay
 A notification surfaced to the user or MCP client at startup when the Job Queue contains Jobs that need attention (recovering, queued-but-stale, or permanently failed). Lets the agent decide early whether to cancel, re-queue, or wait. Also triggered mid-session when any Job transitions to `failed` or `permanently_failed`, so the agent is notified on the next tool call without explicit polling. The alert clears automatically when no `failed` or `permanently_failed` Jobs remain — healthy queued/in_progress Jobs do not sustain it. Future: explicit acknowledgement via tool call for sessions with large decomposed refactors.
 _Avoid_: Startup warning, notification, banner
 
+**Ambient metadata field**:
+A top-level response field attached to MCP tool results when server context must be surfaced without a separate polling call. Ambient metadata fields are additive and optional, and should remain top-level for consistency (for example `_queue_alert`).
+_Avoid_: Nested metadata envelope, inline prose-only warning
+
+**Server reminder**:
+An ambient metadata field that surfaces a low-frequency prompt about optional monitoring setup. The reminder is cadence-gated per server process instance, emitted by a single winner under concurrent calls, and attached to both successful and handled-error tool responses across all tools when eligible.
+_Avoid_: Per-call spam, transport-level crash guarantees
+
+**Monitoring reachability state**:
+The reminder's normalized status for monitoring endpoint checks: `reachable`, `unreachable`, or `unknown` when no conclusive probe result exists yet.
+_Avoid_: Boolean-only status, ad-hoc freeform strings
+
+**Non-blocking reminder path**:
+Reminder attachment behavior that must not wait on outbound reachability probes before returning a tool response.
+_Avoid_: Synchronous probe on request path, latency-coupled reminder injection
+
 **WebSocket side channel**:
 The secondary real-time channel (ws://localhost:808x) that broadcasts Job progress updates. Complements, but does not replace, the primary MCP tool response path.
 _Avoid_: WebSocket server (ambiguous — the side channel is a specific role, not just a server)
