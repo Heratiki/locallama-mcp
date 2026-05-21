@@ -281,6 +281,12 @@ jest.unstable_mockModule('../dist/modules/benchmark/core/runner.js', () => ({
   },
 }));
 
+const mockClaimServerReminderIfDue = jest.fn(() => true);
+
+jest.unstable_mockModule('../dist/modules/server-reminder/gate.js', () => ({
+  claimServerReminderIfDue: mockClaimServerReminderIfDue,
+}));
+
 // ---------------------------------------------------------------------------
 // Module under test
 // ---------------------------------------------------------------------------
@@ -331,6 +337,8 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     mockGetMonitoringInfo.mockClear();
     mockIsAlertActive.mockReturnValue(false);
     mockBuildQueueAlert.mockResolvedValue(null);
+    mockClaimServerReminderIfDue.mockReset();
+    mockClaimServerReminderIfDue.mockReturnValue(true);
   });
 
   it('registers a tool call handler with the MCP Server', () => {
@@ -610,6 +618,26 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
       scope: 'server-local',
     });
     expect(parsed._server_reminder.message).toContain('monitoring');
+  });
+
+  it('omits _server_reminder when the reminder cadence gate is not due', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    mockClaimServerReminderIfDue.mockReturnValue(false);
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'get_cost_estimate',
+          arguments: { context_length: 200 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(mockClaimServerReminderIfDue).toHaveBeenCalledTimes(1);
+    expect(parsed._server_reminder).toBeUndefined();
   });
 
   it('attaches _server_reminder to handled-error tool responses', async () => {

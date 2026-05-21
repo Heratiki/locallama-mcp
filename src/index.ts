@@ -21,6 +21,7 @@ import { ContextWindowError } from './modules/api-integration/task-execution/ind
 import { InferenceTimeoutError } from './modules/utils/inferenceTimeout.js';
 import { BenchmarkProviderError } from './modules/benchmark/core/runner.js';
 import { reloadConfig } from './config/index.js';
+import { claimServerReminderIfDue } from './modules/server-reminder/gate.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -76,6 +77,7 @@ function buildServerReminder(): ServerReminderMetadata {
 }
 
 function attachServerReminder(result: unknown): unknown {
+  if (!claimServerReminderIfDue()) return result;
   const reminder = buildServerReminder();
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     return { ...result, _server_reminder: reminder };
