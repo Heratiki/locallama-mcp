@@ -387,6 +387,8 @@ The server now provides job tracking resources:
 - **Job Progress**: Track the progress of a specific job via `locallama://jobs/progress/{jobId}`
 - **Job Cancellation**: Cancel a running job using the `cancel_job` tool
 
+When live monitoring is enabled, task-executing MCP tools also attach a `monitoring` object to the tool result. The URL values in that object are `scope: server-local`: they are generated from the machine running the MCP server, not from the machine running your MCP client. In local setups those are usually the same machine. In SSH, container, Codespaces, or WSL setups, you may need to forward ports before the `websocketUrl` or dashboard URL is reachable from your client.
+
 ### Using with Modern MCP Clients
 
 Build the server, then configure your MCP client to launch `node dist/index.js` with the environment variables relevant to your local setup.
@@ -501,6 +503,45 @@ The MCP server provides several ways to monitor and understand its usage:
     *   `locallama://models`: List of detected local models (LM Studio, Ollama).
     *   `locallama://openrouter/status`: Status of the OpenRouter integration.
 
+#### Monitoring Metadata Example
+
+When the JobTracker WebSocket server is running, task-executing tools can include monitoring metadata like this:
+
+```json
+{
+  "task_id": "task-123",
+  "monitoring": {
+    "websocketUrl": "ws://127.0.0.1:8081",
+    "activeJobsUri": "locallama://jobs/active",
+    "jobProgressUriTemplate": "locallama://jobs/progress/{jobId}",
+    "note": "Connect to websocketUrl for live job updates, or read activeJobsUri / jobProgressUriTemplate through MCP resources."
+  }
+}
+```
+
+Interpret the fields as follows:
+
+- `monitoring.websocketUrl`: `scope: server-local`. This is the WebSocket side channel as seen from the MCP server host. A remote client may need port forwarding before it can connect.
+- `monitoring.activeJobsUri`: MCP resource URI for the currently active job list. This is transport-stable and does not depend on HTTP/WebSocket reachability.
+- `monitoring.jobProgressUriTemplate`: MCP resource URI template for per-job progress. Replace `{jobId}` with the returned job ID.
+- `monitoring.note`: Human-readable reminder to use either the WebSocket side channel or the MCP resources.
+
+#### Remote Access Troubleshooting
+
+If your MCP client is not running on the same machine as the server, use one of these patterns:
+
+- SSH host: forward the server-local WebSocket port, and optionally the dashboard port, to your local machine.
+
+```bash
+ssh -L 8081:127.0.0.1:8081 -L 3001:127.0.0.1:3001 your-user@your-server
+```
+
+- Dev Containers or Codespaces: forward port `8081` for live job updates and optionally port `3001` for the dashboard. Use the VS Code Ports view or your Codespaces port-forwarding workflow.
+- WSL: if the MCP client runs inside the same WSL distro as the server, use the returned `websocketUrl` directly. If the client runs on Windows while the server runs in WSL, forward port `8081` and optionally `3001` through VS Code or another local tunnel before connecting.
+- Containerized server: treat `127.0.0.1` as container-local. Publish or forward the WebSocket port from the container namespace before trying to connect from outside the container.
+
+The WebSocket side channel is optional. You can always fall back to `locallama://jobs/active` and `locallama://jobs/progress/{jobId}` through MCP resources even when no forwarded WebSocket path is available.
+
 By utilizing these resources and checking the logs, users and LLMs interacting with the server can gain insights into its operation, costs, and performance, including the advanced optimizations happening within the local model modules.
 
 ### Running Benchmarks
@@ -526,6 +567,8 @@ Benchmark results are stored in the `benchmark-results` directory and include:
 When the server is running, a dashboard is available at:
 
 `http://localhost:3001`
+
+This dashboard is optional. It consumes the same server-local monitoring surfaces as the WebSocket side channel, but the MCP resources remain the primary transport-neutral monitoring path. In remote setups, treat `http://localhost:3001` as `scope: server-local` and forward port `3001` if you want to open it from another machine.
 
 The dashboard provides:
 

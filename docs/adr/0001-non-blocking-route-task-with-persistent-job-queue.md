@@ -10,6 +10,8 @@ Jobs found in `in_progress` state at startup are automatically retried once. The
 
 At startup, if any Jobs are queued, recovering, or permanently failed, the server emits a Boot-time Alert so the user or MCP client can decide early what to do with them. The Alert surfaces on two channels: a terminal log line (visible when the server is run manually) and a `_queue_alert` metadata field on every subsequent MCP tool response until the queue is clear. The ambient metadata approach ensures MCP clients (Claude Code, OpenCode, etc.) cannot miss it without requiring them to call a dedicated status tool.
 
+When live monitoring metadata is attached to tool responses, `monitoring.websocketUrl` is server-local by contract. It is emitted from the MCP server host and commonly uses `127.0.0.1`, so remote clients may need SSH, container, Codespaces, or WSL port forwarding before they can connect to it directly. The MCP resources (`locallama://jobs/active` and `locallama://jobs/progress/{jobId}`) remain the transport-neutral fallback, and the optional dashboard website follows the same server-local reachability rules.
+
 ## Considered options
 
 **Synchronous with hard cap** — keep blocking, fail tasks over ~90 s with a "break into smaller subtasks" error. Rejected: forces callers to decompose work the server should handle, and breaks legitimate long tasks.
