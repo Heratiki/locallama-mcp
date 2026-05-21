@@ -185,6 +185,14 @@ function parseNumber(value: string | undefined, defaultValue: number, min?: numb
   return num;
 }
 
+function resolvePath(envPath: string | undefined, defaultPath: string): string {
+    const p = envPath || defaultPath;
+    if (path.isAbsolute(p)) {
+        return p;
+    }
+    return path.join(rootDir, p);
+}
+
 function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
   return {
     // Server configuration
@@ -231,16 +239,16 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
       maxParallelTasks: parseInt(env.BENCHMARK_MAX_PARALLEL_TASKS || '2', 10),
       taskTimeout: parseInt(env.BENCHMARK_TASK_TIMEOUT || '60000', 10),
       saveResults: parseBool(env.BENCHMARK_SAVE_RESULTS, true),
-      resultsPath: env.BENCHMARK_RESULTS_PATH || path.join(rootDir, 'benchmark-results'),
+      resultsPath: resolvePath(env.BENCHMARK_RESULTS_PATH, 'benchmark-results'),
     },
 
     // Logging configuration
     logLevel: (env.LOG_LEVEL || 'info') as Config['logLevel'],
-    logFile: env.LOG_FILE,
+    logFile: env.LOG_FILE ? resolvePath(env.LOG_FILE, '') : undefined,
 
     // Cache settings
     cacheEnabled: parseBool(env.CACHE_ENABLED, true),
-    cacheDir: env.CACHE_DIR || path.join(rootDir, '.cache'),
+    cacheDir: resolvePath(env.CACHE_DIR, '.cache'),
     maxCacheSize: parseInt(env.MAX_CACHE_SIZE || '1073741824', 10),
 
     // Startup benchmark targets
