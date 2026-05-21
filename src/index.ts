@@ -631,8 +631,10 @@ export class LocalLamaMcpServer {
         const registry = getProviderRegistry();
         const { lmStudioProvider } = await import('./modules/lm-studio/provider.js');
         const { ollamaProvider } = await import('./modules/ollama/provider.js');
+        const { llamaCppProvider } = await import('./modules/llama-cpp/provider.js');
         registry.register(lmStudioProvider);
         registry.register(ollamaProvider);
+        registry.register(llamaCppProvider);
         const { config: cfg } = await import('./config/index.js');
         if (cfg.openRouterApiKey) {
           const { openRouterProvider } = await import('./modules/openrouter/provider.js');
