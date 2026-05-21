@@ -57,6 +57,43 @@ async function attachQueueAlert(result: unknown): Promise<unknown> {
   return { result, _queue_alert: alert };
 }
 
+type ServerReminderMetadata = {
+  schemaVersion: 1;
+  kind: 'monitoring-reminder';
+  status: 'reachable' | 'unreachable' | 'unknown';
+  scope: 'server-local';
+  message: string;
+};
+
+function buildServerReminder(): ServerReminderMetadata {
+  return {
+    schemaVersion: 1,
+    kind: 'monitoring-reminder',
+    status: 'unknown',
+    scope: 'server-local',
+    message: 'Optional monitoring is available from the MCP server host. If you are working remotely, use server-local port forwarding before opening monitoring URLs.',
+  };
+}
+
+function attachServerReminder(result: unknown): unknown {
+  const reminder = buildServerReminder();
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return { ...result, _server_reminder: reminder };
+  }
+  return { result, _server_reminder: reminder };
+}
+
+function serializeToolPayload(result: unknown): string {
+  return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+}
+
+function toolResponse(result: unknown, isError = false) {
+  return {
+    content: [{ type: 'text' as const, text: serializeToolPayload(result) }],
+    ...(isError ? { isError: true } : {}),
+  };
+}
+
 function attachMonitoringInfo(toolName: string, result: unknown): unknown {
   if (!MONITORED_TOOL_NAMES.has(toolName)) return result;
 
@@ -464,57 +501,35 @@ export class LocalLamaMcpServer {
             // get a readable string.
             const resultWithMonitoring = attachMonitoringInfo(name, result);
             const resultWithAlert = await attachQueueAlert(resultWithMonitoring);
-            const textContent = typeof resultWithAlert === 'string'
-              ? resultWithAlert
-              : JSON.stringify(resultWithAlert, null, 2);
-            return {
-              content: [{ type: 'text' as const, text: textContent }],
-            };
+            const resultWithReminder = attachServerReminder(resultWithAlert);
+            return toolResponse(resultWithReminder);
           } catch (error) {
             logger.error(`Error executing tool ${name}:`, error);
             if (error instanceof ContextWindowError) {
-              return {
-                content: [{
-                  type: 'text' as const,
-                  text: JSON.stringify({
-                    error: 'context_overflow',
-                    message: error.message,
-                    modelId: error.modelId,
-                    estimatedTokens: error.estimatedTokens,
-                    modelContextWindow: error.modelContextWindow,
-                  }),
-                }],
-                isError: true,
-              };
+              return toolResponse(attachServerReminder({
+                error: 'context_overflow',
+                message: error.message,
+                modelId: error.modelId,
+                estimatedTokens: error.estimatedTokens,
+                modelContextWindow: error.modelContextWindow,
+              }), true);
             }
             if (error instanceof InferenceTimeoutError) {
-              return {
-                content: [{
-                  type: 'text' as const,
-                  text: JSON.stringify({
-                    error: 'inference_timeout',
-                    message: error.message,
-                    providerId: error.providerId,
-                    timeoutMs: error.timeoutMs,
-                  }),
-                }],
-                isError: true,
-              };
+              return toolResponse(attachServerReminder({
+                error: 'inference_timeout',
+                message: error.message,
+                providerId: error.providerId,
+                timeoutMs: error.timeoutMs,
+              }), true);
             }
             if (error instanceof BenchmarkProviderError) {
-              return {
-                content: [{
-                  type: 'text' as const,
-                  text: JSON.stringify({
-                    error: error.code,
-                    message: error.message,
-                    providerId: error.providerId,
-                    modelId: error.modelId,
-                    retryAfterMs: error.retryAfterMs,
-                  }),
-                }],
-                isError: true,
-              };
+              return toolResponse(attachServerReminder({
+                error: error.code,
+                message: error.message,
+                providerId: error.providerId,
+                modelId: error.modelId,
+                retryAfterMs: error.retryAfterMs,
+              }), true);
             }
             throw error;
           }
