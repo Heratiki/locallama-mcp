@@ -93,6 +93,7 @@ insert-variables.sh
 .locallama_port
 locallama.log                 # Log file path (optional, logs to console if not set)
 data/jobs.db
+data/benchmarks.db
 .env.backup
 bridge.js
 locallama.lock

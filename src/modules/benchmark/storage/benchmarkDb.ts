@@ -10,6 +10,8 @@ const DB_PATH = process.env.BENCHMARK_DB_PATH
   ? path.resolve(process.env.BENCHMARK_DB_PATH)
   : path.join(config.rootDir, 'data', 'benchmarks.db');
 
+export const benchmarkDbPath = DB_PATH;
+
 /**
  * Normalize task name to a consistent format (lowercase with hyphens)
  * This ensures consistent naming across benchmark runs

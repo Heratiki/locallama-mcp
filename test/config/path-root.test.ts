@@ -224,3 +224,79 @@ describe('root path resolution', () => {
     expect(parsed.providerTimeoutMs).toBe(45000);
   });
 });
+
+describe('runtime artifact path anchoring', () => {
+  it('benchmarkDb default DB_PATH is under rootDir, not caller cwd', async () => {
+    const tempRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-bench-root-'));
+    const foreignCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-bench-cwd-'));
+    const distBenchmarkDbHref = pathToFileURL(
+      path.resolve(originalCwd, 'dist/modules/benchmark/storage/benchmarkDb.js')
+    ).href;
+
+    const script = [
+      `import { benchmarkDbPath } from '${distBenchmarkDbHref}';`,
+      'console.log(benchmarkDbPath);',
+    ].join('\n');
+
+    try {
+      const output = execFileSync(
+        process.execPath,
+        ['--input-type=module', '-e', script],
+        {
+          cwd: foreignCwd,
+          env: { ...process.env, LOCALLAMA_ROOT_DIR: tempRootDir, BENCHMARK_DB_PATH: '' },
+          encoding: 'utf8',
+        },
+      );
+
+      const resolvedPath = output.trim().split(/\r?\n/).pop()!;
+      expect(resolvedPath.startsWith(tempRootDir)).toBe(true);
+      expect(resolvedPath.startsWith(foreignCwd)).toBe(false);
+    } finally {
+      fs.rmSync(tempRootDir, { recursive: true, force: true });
+      fs.rmSync(foreignCwd, { recursive: true, force: true });
+    }
+  });
+
+  it('modelsDb default DB path is under cacheDir, not caller cwd', async () => {
+    const tempRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-models-root-'));
+    const foreignCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-models-cwd-'));
+    const distModelsDbHref = pathToFileURL(
+      path.resolve(originalCwd, 'dist/modules/decision-engine/services/modelsDb.js')
+    ).href;
+    const distConfigHref = pathToFileURL(
+      path.resolve(originalCwd, 'dist/config/index.js')
+    ).href;
+
+    const script = [
+      `import { getModelsDbPath } from '${distModelsDbHref}';`,
+      `import { config } from '${distConfigHref}';`,
+      'console.log(JSON.stringify({ dbPath: getModelsDbPath(), cacheDir: config.cacheDir }));',
+    ].join('\n');
+
+    try {
+      const output = execFileSync(
+        process.execPath,
+        ['--input-type=module', '-e', script],
+        {
+          cwd: foreignCwd,
+          env: { ...process.env, LOCALLAMA_ROOT_DIR: tempRootDir, DB_DIR: '' },
+          encoding: 'utf8',
+        },
+      );
+
+      const jsonLine = output
+        .trim()
+        .split(/\r?\n/)
+        .filter(line => line.startsWith('{'))
+        .pop()!;
+
+      const { dbPath, cacheDir } = JSON.parse(jsonLine) as { dbPath: string; cacheDir: string };
+      expect(dbPath.startsWith(cacheDir)).toBe(true);
+      expect(dbPath.startsWith(foreignCwd)).toBe(false);
+    } finally {
+      fs.rmSync(tempRootDir, { recursive: true, force: true });
+      fs.rmSync(foreignCwd, { recursive: true, force: true });
+    }
+  });
+});
