@@ -59,7 +59,7 @@ _Avoid_: Evaluation, test run, assessment
 ### Monitoring
 
 **Dashboard**:
-A planned web interface for observing the Job Queue, reviewing Benchmark results, and submitting Tasks manually. Not yet built; monitoring currently flows through the WebSocket side channel.
+A web interface for observing the Job Queue, reviewing Benchmark results, and submitting Tasks manually. It is optional and server-local like the WebSocket side channel, so remote users may need port forwarding before opening it from another machine.
 _Avoid_: UI, frontend, portal, monitor
 
 **Job Recovery**:
@@ -82,12 +82,16 @@ _Avoid_: Per-call spam, transport-level crash guarantees
 The reminder's normalized status for monitoring endpoint checks: `reachable`, `unreachable`, or `unknown` when no conclusive probe result exists yet.
 _Avoid_: Boolean-only status, ad-hoc freeform strings
 
+**Server-local monitoring endpoint**:
+A monitoring URL emitted in MCP metadata that is resolved from the machine running the MCP server, not the machine running the MCP client. Typical examples are `monitoring.websocketUrl` and the optional dashboard URL. In remote environments, callers may need SSH, container, Codespaces, or WSL port forwarding before these URLs are reachable.
+_Avoid_: Globally reachable URL, client-local URL
+
 **Non-blocking reminder path**:
 Reminder attachment behavior that must not wait on outbound reachability probes before returning a tool response.
 _Avoid_: Synchronous probe on request path, latency-coupled reminder injection
 
 **WebSocket side channel**:
-The secondary real-time channel (ws://localhost:808x) that broadcasts Job progress updates. Complements, but does not replace, the primary MCP tool response path.
+The secondary real-time channel (ws://localhost:808x) that broadcasts Job progress updates. It is a server-local monitoring endpoint: remote clients may need forwarding before the URL is reachable. Complements, but does not replace, the primary MCP tool response path.
 _Avoid_: WebSocket server (ambiguous — the side channel is a specific role, not just a server)
 
 ## Example dialogue
