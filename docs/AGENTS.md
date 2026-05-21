@@ -32,6 +32,13 @@ Do not rewrite another contributor's historical notes unless the user explicitly
 
 Do not store secrets, API keys, private prompts, or sensitive logs in tracked docs or memory files.
 
+## Platform Notes (Windows)
+
+Use the PowerShell tool (not Bash) for directory listing on Windows — Bash interprets
+backslashes in absolute paths as escape characters and silently fails. Use the dedicated
+Grep, Glob, and Read tools for file operations; never pipe through `grep`/`ls` in Bash
+with Windows paths.
+
 ## Development Commands
 
 ### Build and Run
