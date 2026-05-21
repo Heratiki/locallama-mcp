@@ -58,6 +58,10 @@ class ModelsDbService {
     this.dbFilePath = path.join(dbDir, 'models-db.json');
   }
 
+  getDbFilePath(): string {
+    return this.dbFilePath;
+  }
+
   static getInstance(): ModelsDbService {
     if (!ModelsDbService.instance) {
       ModelsDbService.instance = new ModelsDbService();
@@ -261,3 +265,7 @@ class ModelsDbService {
 }
 
 export const modelsDbService = ModelsDbService.getInstance();
+
+export function getModelsDbPath(): string {
+  return modelsDbService.getDbFilePath();
+}
