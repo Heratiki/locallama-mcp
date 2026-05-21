@@ -588,6 +588,57 @@ describe('LocalLamaMcpServer tool dispatcher', () => {
     expect(parsed._queue_alert).toBeUndefined();
   });
 
+  it('attaches _server_reminder to successful tool responses', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'get_cost_estimate',
+          arguments: { context_length: 200 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[] };
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed._server_reminder).toMatchObject({
+      schemaVersion: 1,
+      kind: 'monitoring-reminder',
+      status: 'unknown',
+      scope: 'server-local',
+    });
+    expect(parsed._server_reminder.message).toContain('monitoring');
+  });
+
+  it('attaches _server_reminder to handled-error tool responses', async () => {
+    if (!capturedHandler) throw new Error('handler not registered');
+    const { ContextWindowError } = await import('../dist/modules/api-integration/task-execution/index.js');
+    mockRouteTask.mockRejectedValueOnce(new ContextWindowError('tiny-model', 42, 32));
+
+    const result = await capturedHandler(
+      {
+        params: {
+          name: 'route_task',
+          arguments: { task: 'oversized prompt', context_length: 42 },
+        },
+      },
+      {},
+    );
+
+    const typed = result as { content: { type: string; text: string }[]; isError?: boolean };
+    expect(typed.isError).toBe(true);
+    const parsed = JSON.parse(typed.content[0].text);
+    expect(parsed.error).toBe('context_overflow');
+    expect(parsed._server_reminder).toMatchObject({
+      schemaVersion: 1,
+      kind: 'monitoring-reminder',
+      status: 'unknown',
+      scope: 'server-local',
+    });
+  });
+
   it('routes benchmark_task to the benchmark module with realistic client arguments', async () => {
     if (!capturedHandler) throw new Error('handler not registered');
 
