@@ -114,3 +114,7 @@ job-results.txt
 ollama-models.json
 .rooignore
 job-results.json
+locallama.log.1.gz
+locallama.log.2.gz
+locallama.log.3.gz
+locallama.log.4.gz
