@@ -297,8 +297,7 @@ Priority order for next session. Remove entries as they are covered; add new gap
 | Tool / Scenario | Why important | Priority |
 |---|---|---|
 | `preemptive_route_task` with low-scored model | Verify Issues #49/#50 fix actually excludes benchmarked-bad models | High |
-| `benchmark_task` / `benchmark_tasks` + concurrent `route_task` | Observe VRAM contention and slot competition live (#84) | High |
-| OpenRouter free-model quarantine | Issue #16 implemented, zero live validation | High |
+| OpenRouter free-model quarantine | Issue #16 implemented, live validation still blocked when OpenRouter free models are unavailable in test context | High |
 | Concurrent `route_task` after #86 fix | Verify FIFO serialization works post-fix | High |
 | `cancel_job` (individual job ID, not task) | Backwards-compat path per Issue #32 AC; untested | Medium |
 | `reload_config` | Added to smoke suite 2026-05-20; verify post-Issue #57 `.env` path fix | Medium |
@@ -474,3 +473,59 @@ Task C: Go config reader    context_length: 70
 #### Live run artifact
 
 - Raw structured output captured at `temp/live-realworld-2026-05-21-output.json`.
+
+---
+
+### 2026-05-22 — GPT-5.3-Codex high-priority follow-up run (bounded)
+
+**Tester:** GPT-5.3-Codex via VS Code agent tools  
+**Goal:** cover next high-priority scenarios from "Tests Not Yet Performed" while avoiding long-running hangs.  
+**Isolation roots:**
+- `C:\Users\herat\locallama-dev\hp2-low-score-20260522`
+- `C:\Users\herat\locallama-dev\hp2-contention-20260522`
+- `C:\Users\herat\locallama-dev\hp2-quarantine-20260522`
+
+#### Test E — `preemptive_route_task` low-score exclusion stress
+
+**Method:** same coding task run twice with OpenRouter disabled, changing `CODE_SCORE_THRESHOLD` from `0.3` to `0.8`.
+
+**Result:** both runs selected the same local model:
+- `costClass=local`
+- `modelId=qwen/qwen3.5-9b`
+
+**Interpretation:** this run did not validate #49/#50 exclusion behavior. In this isolated root, local models had no benchmark summaries loaded, so capability score filtering did not materially change model selection.
+
+#### Test F — `benchmark_task` / `benchmark_tasks` + concurrent `route_task`
+
+**Method:** started `benchmark_task` and `benchmark_tasks` first, then submitted 3 `route_task` calls during benchmark activity.
+
+**Observed benchmark behavior:**
+- `benchmark_task` succeeded on local `gemma3-4b-64k:latest` with nonzero quality/time metrics.
+- `benchmark_tasks` succeeded similarly for its batch task.
+
+**Observed route behavior during benchmark activity:**
+- All 3 `route_task` calls routed to `openrouter / meta-llama/llama-3.3-70b-instruct:free`.
+- Initial queue positions were `1`, `2`, `3` (not the all-ones pattern from prior run).
+- DB rows showed closely staggered starts (`~389ms` apart), all `in_progress` at snapshot time.
+
+**Interpretation:**
+- This run did **not** reproduce #88 (queue positions were distinct in this environment).
+- It also did not conclusively prove/disprove #84 contention because route selection escaped to OpenRouter free models while local benchmarking was active.
+
+#### Test G — OpenRouter free-model quarantine validation
+
+**Method:** attempted live quarantine filter validation in isolated roots.
+
+**Result:** blocked/inconclusive.
+- In the quarantine root, `get_free_models` returned an empty set, so no model could be quarantined and re-checked for exclusion.
+- Additional direct probe showed sessions where OpenRouter key was not configured in that runtime context, which also yields empty free-model results.
+
+**Interpretation:** quarantine filter path still needs a dedicated run with stable OpenRouter free-model availability.
+
+#### Issues created in this follow-up run
+
+- None. No clearly new, non-duplicate defect was isolated beyond existing open issues.
+
+#### Live run artifact
+
+- Raw structured output captured at `temp/live-high-priority-quick-2026-05-22-output.json`.
