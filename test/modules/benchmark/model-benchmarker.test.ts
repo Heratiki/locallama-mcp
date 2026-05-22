@@ -231,6 +231,33 @@ describe('benchmarkModel', () => {
     expect(result.providerId).toBe('test-provider');
   });
 
+  it('uses requested providerId instead of registry lookup when specified', async () => {
+    // Registry says provider is 'test-provider' but caller requests 'lm_studio'
+    const lmStudioProvider = { ...fakeProvider, id: 'lm_studio' };
+    providerRegistryMock.get.mockImplementation((id: string) =>
+      id === 'lm_studio' ? lmStudioProvider : undefined
+    );
+
+    const result = await benchmarkModel({
+      modelId: 'gemma3-4b-64k:latest',
+      providerId: 'lm_studio',
+      taskCategories: ['chat'],
+    });
+
+    expect(result.providerId).toBe('lm_studio');
+    // modelRegistry.getModel should still be called (for contextWindow), but
+    // provider selection must not be overridden by registry providerId
+    expect(providerRegistryMock.get).toHaveBeenCalledWith('lm_studio');
+  });
+
+  it('throws when requested providerId is not in registry', async () => {
+    providerRegistryMock.get.mockReturnValue(undefined);
+
+    await expect(
+      benchmarkModel({ modelId: 'gemma3-4b-64k:latest', providerId: 'unknown_provider', taskCategories: ['chat'] })
+    ).rejects.toThrow(/not in the registry/);
+  });
+
   it('resolves provider-prefixed model ids when requested id is unprefixed', async () => {
     modelRegistryMock.getModel.mockReturnValue(undefined);
 

@@ -86,6 +86,8 @@ const CATEGORY_TASKS: Record<TaskCategory, CategoryTask[]> = {
 
 export interface BenchmarkModelParams {
   modelId: string;
+  /** When specified, benchmark runs exclusively on this provider. Skips registry lookup. */
+  providerId?: string;
   /** Defaults to ['code', 'chat'] when omitted. */
   taskCategories?: TaskCategory[];
 }
@@ -192,34 +194,47 @@ export async function benchmarkModel(
   // -------------------------------------------------------------------------
   let providerId: string;
   let executableModelId = modelId;
+
   const meta = modelRegistry.getModel(modelId);
-  if (meta) {
-    providerId = meta.providerId;
+
+  if (params.providerId) {
+    // Caller pinned a specific provider — validate it exists, skip registry lookup.
+    // This ensures (provider_id, model_id) is treated as a strict identity key.
+    providerId = params.providerId;
+    if (!registry.get(providerId)) {
+      throw new Error(
+        `benchmark_model: provider '${params.providerId}' is not in the registry`,
+      );
+    }
   } else {
-    // Model not in registry yet — scan providers for one that claims to support it
-    let found: string | undefined;
-    let foundModelId: string | undefined;
-    for (const provider of registry.list()) {
-      const variants = buildModelIdVariants(modelId, provider.id);
-      for (const variant of variants) {
-        const supported = await Promise.resolve(provider.supportsModel(variant));
-        if (supported) {
-          found = provider.id;
-          foundModelId = variant;
+    if (meta) {
+      providerId = meta.providerId;
+    } else {
+      // Model not in registry yet — scan providers for one that claims to support it
+      let found: string | undefined;
+      let foundModelId: string | undefined;
+      for (const provider of registry.list()) {
+        const variants = buildModelIdVariants(modelId, provider.id);
+        for (const variant of variants) {
+          const supported = await Promise.resolve(provider.supportsModel(variant));
+          if (supported) {
+            found = provider.id;
+            foundModelId = variant;
+            break;
+          }
+        }
+        if (found) {
           break;
         }
       }
-      if (found) {
-        break;
+      if (!found) {
+        throw new Error(
+          `benchmark_model: model '${modelId}' was not found in any registered provider`,
+        );
       }
+      providerId = found;
+      executableModelId = foundModelId ?? modelId;
     }
-    if (!found) {
-      throw new Error(
-        `benchmark_model: model '${modelId}' was not found in any registered provider`,
-      );
-    }
-    providerId = found;
-    executableModelId = foundModelId ?? modelId;
   }
 
   const provider = registry.get(providerId);
