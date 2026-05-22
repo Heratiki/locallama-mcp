@@ -86,4 +86,7 @@ export interface LlamaCppCapabilities {
   mode: LlamaCppMode;
   modelCount: number;
   supportsMultiModel: boolean;
+  health: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+  lastHealthCheck: string;
+  lastHealthCheckResult: string;
 }

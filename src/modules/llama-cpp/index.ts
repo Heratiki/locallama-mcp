@@ -31,6 +31,21 @@ import {
 import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 
+function isDegenerate(text: string): boolean {
+  if (!text || /^\s*$/.test(text)) return true; // empty or whitespace
+  if (text.toLowerCase().includes('thinking')) return true;
+
+  const uniqueChars = new Set(text);
+  if (uniqueChars.size <= 2) {
+    // It's only non-degenerate if it's a short, simple word like 'ok'
+    if (text.length > 4) return true; // Definitely degenerate if long and repetitive
+    if (text.toLowerCase() !== 'ok') return true; // '..', '??', 'aa' are degenerate
+  }
+
+  return false;
+}
+
+
 export const llamaCppModule = {
   /** Detected runtime mode — set during initialize(). */
   mode: 'unknown' as LlamaCppMode,
@@ -40,10 +55,59 @@ export const llamaCppModule = {
     mode: 'unknown' as LlamaCppMode,
     modelCount: 0,
     supportsMultiModel: false,
+    health: 'unknown',
+    lastHealthCheck: new Date(0).toISOString(),
+    lastHealthCheckResult: 'not yet run',
   } as LlamaCppCapabilities,
 
   /** In-memory cache of models reported by the server. */
   cachedModels: [] as LlamaCppApiModel[],
+
+  /**
+   * Initialize the module. Fetches the live model list from the server and
+   * detects the runtime mode. Failures are non-fatal: the provider will surface
+   * as unavailable if the endpoint is unreachable.
+   */
+  async _runHealthProbe(): Promise<void> {
+    if (!config.llamaCppHealthProbeEnabled) {
+      this.capabilities.health = 'healthy';
+      this.capabilities.lastHealthCheckResult = 'disabled';
+      this.capabilities.lastHealthCheck = new Date().toISOString();
+      return;
+    }
+
+    if (this.cachedModels.length === 0) {
+      this.capabilities.health = 'unhealthy';
+      this.capabilities.lastHealthCheckResult = 'no models found';
+      this.capabilities.lastHealthCheck = new Date().toISOString();
+      return;
+    }
+
+    const modelId = this.cachedModels[0].id;
+    const result = await this.callApi(
+      modelId,
+      config.llamaCppHealthProbePrompt,
+      config.llamaCppHealthProbeTimeoutMs,
+    );
+
+    this.capabilities.lastHealthCheck = new Date().toISOString();
+
+    if (!result.success) {
+      this.capabilities.health = 'unhealthy';
+      this.capabilities.lastHealthCheckResult = `API call failed: ${result.error ?? 'unknown'}`;
+    } else if (!result.text || isDegenerate(result.text)) {
+      this.capabilities.health = 'degraded';
+      this.capabilities.lastHealthCheckResult = `degenerate response: "${result.text?.slice(0, 50) ?? ''}"`;
+    } else {
+      this.capabilities.health = 'healthy';
+      this.capabilities.lastHealthCheckResult = 'ok';
+    }
+
+    logger.info(
+      `llama.cpp health probe: model=${modelId}, status=${this.capabilities.health} ` +
+      `(${this.capabilities.lastHealthCheckResult})`,
+    );
+  },
 
   /**
    * Initialize the module. Fetches the live model list from the server and
@@ -60,12 +124,16 @@ export const llamaCppModule = {
 
     try {
       await this.refreshModels();
+      await this._runHealthProbe();
     } catch (error) {
       logger.debug(
         `llama.cpp init failed (server may not be running): ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
+      this.capabilities.health = 'unhealthy';
+      this.capabilities.lastHealthCheckResult = 'init failed';
+      this.capabilities.lastHealthCheck = new Date().toISOString();
     }
   },
 
