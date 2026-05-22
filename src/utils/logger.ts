@@ -125,9 +125,9 @@ function formatLogMessage(level: string, message: string, args: LogArgs): string
 /**
  * Write message to console
  */
-function writeToConsole(level: string, message: string): void {
-  const output = level === 'ERROR' ? process.stderr : process.stdout;
-  output.write(message + '\n');
+// MCP stdio transport uses stdout for JSON-RPC — all log output MUST go to stderr
+function writeToConsole(_level: string, message: string): void {
+  process.stderr.write(message + '\n');
 }
 
 /**

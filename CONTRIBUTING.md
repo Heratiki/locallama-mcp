@@ -10,7 +10,7 @@ For active development, it's recommended to run the server directly from your cl
 
 Configure your MCP client (e.g., Claude Code, Codex, Cursor) to launch the server from your repository's `dist` directory. The `cwd` should be the repository root, and you should set `LOCALLAMA_ROOT_DIR` to a directory *outside* your repository to keep runtime artifacts (logs, databases, lock files) separate from source code.
 
-**Example for Claude Code (`.claude.json`):**
+**Example for Claude Code (`.claude/settings.json` — do not commit, this file is gitignored):**
 
 ```json
 {
@@ -27,7 +27,7 @@ Configure your MCP client (e.g., Claude Code, Codex, Cursor) to launch the serve
 }
 ```
 
-Replace the paths with the actual location of your repository and desired root directory. `LOCALLAMA_ROOT_DIR` should point to a user-local directory outside the repository.
+Replace `<you>` with your Windows username. `LOCALLAMA_ROOT_DIR` must point to a directory outside the repository — runtime artifacts (logs, databases, lock files) are written there.
 
 ### 2. Build and Rebuild Cycle
 

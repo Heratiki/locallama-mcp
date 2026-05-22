@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "locallama-dev": {
+      "command": "node",
+      "args": ["C:\\Users\\herat\\source\\locallama-mcp\\dist\\index.js"],
+      "env": {
+        "LOCALLAMA_ROOT_DIR": "C:\\Users\\herat\\locallama-dev"
+      }
+    }
+  }
+}

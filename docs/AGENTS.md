@@ -6,7 +6,7 @@ This file is the shared operating guide for Codex, Claude Code, Claw Code, Curso
 
 LocalLama MCP is being revived as a local-first, provider-neutral MCP server for coding-agent workflows. The goal is no longer to target Cline or Roo Code specifically. The server should help modern agents route coding work across local models, free/low-cost remote models, and paid frontier models using measured cost, latency, quality, context capacity, and task fit.
 
-Use targeted GitHub Issues for active work requirements, `docs/PROJECT_STATE.md` for the current snapshot, `docs/audits/ARCHITECTURAL_TRUTHS.md` for core design principles, and `docs/OPERATIONAL_TEST_PLAN.md` for live verification. Strategic documents like `docs/PLAN.md`, `docs/ROADMAP.md`, and `docs/ROADMAP_ACTIVE.md` provide background context unless explicitly referenced by a GitHub Issue.
+Use targeted GitHub Issues for active work requirements, `docs/PROJECT_STATE.md` for the current snapshot, `docs/audits/ARCHITECTURAL_TRUTHS.md` for core design principles, `docs/OPERATIONAL_TEST_PLAN.md` for live verification, and `docs/LIVE_TESTING.md` for real-world MCP test results and known open bugs. Strategic documents like `docs/PLAN.md`, `docs/ROADMAP.md`, and `docs/ROADMAP_ACTIVE.md` provide background context unless explicitly referenced by a GitHub Issue.
 
 ## Reading Order
 
@@ -16,6 +16,7 @@ Before planning or executing work, agents MUST read documents in the following o
 3. The targeted GitHub Issue - The authoritative source for active work and requirements.
 4. `docs/audits/ARCHITECTURAL_TRUTHS.md` - Core system constraints and design philosophies.
 5. `docs/OPERATIONAL_TEST_PLAN.md` - The live verification plan and test records.
+6. `docs/LIVE_TESTING.md` - Real-world MCP testing log, open bugs, and current project state vs intended use. Check the open issues table here before filing new issues.
 
 Note on planning documents:
 - `docs/PLAN.md`, `docs/ROADMAP.md`, and `docs/ROADMAP_ACTIVE.md` serve as strategic, historical, or background planning context ONLY, unless a targeted GitHub Issue explicitly references them for specific implementation tasks.
@@ -31,6 +32,13 @@ After meaningful work, append or update memory with:
 Do not rewrite another contributor's historical notes unless the user explicitly asks. Add dated entries instead.
 
 Do not store secrets, API keys, private prompts, or sensitive logs in tracked docs or memory files.
+
+## MCP stdio Transport Constraint
+
+All log output MUST go to `process.stderr`. `process.stdout` is reserved exclusively for
+JSON-RPC protocol messages. Any non-JSON on stdout silently breaks the MCP handshake —
+Claude Code won't list the server in `/mcp`. See `src/utils/logger.ts` `writeToConsole`.
+The test `test/utils/logger.test.ts` has a stdout-guard test to catch regressions.
 
 ## Platform Notes (Windows)
 

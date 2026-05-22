@@ -67,20 +67,31 @@ describe('Logger Utility', () => {
   });
 
   it('should respect the current log level', () => {
-    const consoleSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     logger.debug('This should not log');
-    expect(consoleSpy).not.toHaveBeenCalled();
+    expect(stderrSpy).not.toHaveBeenCalled();
 
     logger.info('This should log');
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[INFO] This should log'));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('[INFO] This should log'));
   });
 
   it('should format log messages correctly', () => {
-    const consoleSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     logger.info('Formatted message', { key: 'value' });
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringMatching(/\[INFO\] Formatted message \[{"key":"value"}\]/));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringMatching(/\[INFO\] Formatted message \[{"key":"value"}\]/));
+  });
+
+  it('must never write to stdout — MCP stdio transport requires stdout for JSON-RPC only', () => {
+    const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    logger.error('err');
+    logger.warn('warn');
+    logger.info('info');
+    logger.debug('debug');
+
+    expect(stdoutSpy).not.toHaveBeenCalled();
   });
 });

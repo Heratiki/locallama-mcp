@@ -1,3 +1,6 @@
+# Claude Code local project config (machine-specific paths, session state)
+.claude/
+
 # Legacy Cline/Roo specific IDE and tool configuration
 .clinerules-architect
 .clinerules-ask
