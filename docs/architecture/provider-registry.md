@@ -17,6 +17,7 @@ src/modules/core/provider/
 
 src/modules/lm-studio/provider.ts   — LLMProvider adapter wrapping lmStudioModule
 src/modules/ollama/provider.ts      — LLMProvider adapter wrapping ollamaModule
+src/modules/llama-cpp/provider.ts   — LLMProvider adapter wrapping llamaCppModule (llama-server, OpenAI-compat)
 src/modules/openrouter/provider.ts  — LLMProvider adapter wrapping openRouterModule
 ```
 
@@ -28,7 +29,7 @@ Tests: `test/modules/core/provider/registry.test.ts` (8 cases).
 
 ```ts
 interface LLMProvider {
-  readonly id: string;          // 'lm-studio' | 'ollama' | 'openrouter' | ...
+  readonly id: string;          // 'lm-studio' | 'ollama' | 'llama-cpp' | 'openrouter' | ...
   readonly costClass: CostClass; // 'local' | 'free' | 'paid'
   readonly isLocal: boolean;
 

@@ -483,7 +483,9 @@ export const benchmarkService = {
           ? 'lm-studio'
           : isProviderId(provider, 'ollama')
             ? 'ollama'
-            : 'openrouter';
+            : isProviderId(provider, 'llama-cpp')
+              ? 'llama-cpp'
+              : 'openrouter';
         logger.info(`Calling provider ${targetProviderId} for model ${modelId}`);
         const executionResult = await executeProviderTask(
           targetProviderId,
@@ -645,7 +647,19 @@ export const benchmarkService = {
           }
         });
       }
-      
+
+      // Find llama.cpp models and add them to the unique models map
+      const llamaCppModels = availableModels.filter(m => isProviderId(m.provider, 'llama-cpp'));
+      if (llamaCppModels.length > 0) {
+        logger.info(`Including ${llamaCppModels.length} llama.cpp models in free models pool for benchmarking`);
+        llamaCppModels.forEach(model => {
+          const normalizedId = model.id.startsWith('llama-cpp:') ? model.id.substring('llama-cpp:'.length) : model.id;
+          if (!uniqueModelsMap.has(normalizedId)) {
+            uniqueModelsMap.set(normalizedId, model);
+          }
+        });
+      }
+
       // Convert map to array for further processing
       const allFreeModels = Array.from(uniqueModelsMap.values());
       
@@ -817,6 +831,16 @@ export const benchmarkService = {
                 Math.round(dynamicTimeout),
                 isProviderId(draftModel?.provider, 'ollama') ? draftModel?.id : undefined
               );
+            } else if (isProviderId(model.provider, 'llama-cpp')) {
+              logger.info(`Calling llama.cpp provider for model ${model.id}`);
+              const llamaCppProv = getProviderRegistry().get('llama-cpp');
+              if (!llamaCppProv) {
+                throw new Error('llama.cpp provider is not registered');
+              }
+              const execResult = await llamaCppProv.executeTask(model.id, task.task, {
+                timeoutMs: Math.round(dynamicTimeout),
+              });
+              result = { success: true, text: execResult.content };
             } else {
               // Use provider execution path so OpenRouter rate-limit and quarantine gates are enforced.
               const provider = getProviderRegistry().get('openrouter');

@@ -46,6 +46,7 @@ export interface Config {
   providerMaxConcurrentLocal: number;
   providerMaxConcurrentRemote: number;
   localLlamaEndpoint: string; // Added local Llama endpoint
+  llamaCppEndpoint: string; // llama-server OpenAI-compatible endpoint
   
   // Model configuration
   defaultLocalModel: string;
@@ -130,6 +131,7 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'lmStudioEndpoint',
   'ollamaEndpoint',
   'localLlamaEndpoint',
+  'llamaCppEndpoint',
   'openRouterApiKey',
   'benchmark.resultsPath',
   'cacheEnabled',
@@ -209,6 +211,7 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     providerMaxConcurrentLocal: parseNumber(env.PROVIDER_MAX_CONCURRENT_LOCAL, 1, 1, 64),
     providerMaxConcurrentRemote: parseNumber(env.PROVIDER_MAX_CONCURRENT_REMOTE, 1, 1, 128),
     localLlamaEndpoint: env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api',
+    llamaCppEndpoint: env.LLAMA_CPP_ENDPOINT || '',
 
     // Model configuration
     defaultLocalModel: env.DEFAULT_LOCAL_MODEL || 'llama2',

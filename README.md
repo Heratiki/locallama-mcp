@@ -201,6 +201,7 @@ The server resolves `.env` from its own root directory (or `LOCALLAMA_ROOT_DIR` 
 # Local LLM Endpoints
 LM_STUDIO_ENDPOINT=http://localhost:1234/v1
 OLLAMA_ENDPOINT=http://localhost:11434/api
+# LLAMA_CPP_ENDPOINT=http://localhost:8080   # optional: set to enable llama-server provider
 
 # Configuration
 DEFAULT_LOCAL_MODEL=qwen2.5-coder-3b-instruct
@@ -250,6 +251,7 @@ PYTHON_DETECT_VENV=true
 - **Local LLM Endpoints**
   - `LM_STUDIO_ENDPOINT`: URL where your LM Studio instance is running
   - `OLLAMA_ENDPOINT`: URL where your Ollama instance is running
+  - `LLAMA_CPP_ENDPOINT`: URL where your `llama-server` (llama.cpp) instance is running — leave unset to disable the provider (default: disabled). Example: `http://localhost:8080`
   - `OLLAMA_TIMEOUT`: Per-request Ollama timeout in seconds (default `120`)
   - `PROVIDER_TIMEOUT_MS`: Generic per-request timeout in milliseconds for providers without a specific override (default `120000`)
 
@@ -336,6 +338,40 @@ To use the OpenRouter integration:
 
 Current OpenRouter integration provides access to approximately 240 models, including 30+ free models from providers like Google, Meta, Mistral, and Microsoft.
 
+### llama.cpp Integration
+
+The server supports [llama-server](https://github.com/ggml-org/llama.cpp/tree/master/examples/server) (the HTTP server shipped with llama.cpp) as a local provider alongside Ollama and LM Studio.
+
+**Runtime modes detected automatically:**
+
+- **single-model** — `llama-server` loaded with one model (`-m model.gguf`). `GET /v1/models` returns one entry.
+- **router** — `llama-server` loaded with multiple models. `GET /v1/models` returns more than one entry.
+
+The detected mode is stored in provider capabilities after init and is visible in server logs.
+
+**To enable:**
+
+1. Start `llama-server` pointing at one or more GGUF models:
+   ```bash
+   # single-model
+   llama-server -m /path/to/model.gguf --port 8080
+
+   # router mode (multiple models)
+   llama-server --model /path/to/model1.gguf --model /path/to/model2.gguf --port 8080
+   ```
+2. Set `LLAMA_CPP_ENDPOINT` in your `.env` or MCP client `env` block:
+   ```
+   LLAMA_CPP_ENDPOINT=http://localhost:8080
+   ```
+3. Restart the MCP server. `llama-cpp` will appear in `locallama://models` and be eligible for routing and benchmarking.
+
+**Notes:**
+
+- If `LLAMA_CPP_ENDPOINT` is unset or the server is unreachable at startup, the provider initialises silently and reports as unavailable — other providers are unaffected.
+- Task execution uses the OpenAI-compatible `POST /v1/chat/completions` endpoint.
+- Model unloading (`releaseResources`) is a documented no-op: `llama-server` has no stable public unload API. Models remain resident until the server process is stopped.
+- No subprocess lifecycle management is performed — the MCP server does not start or stop `llama-server`.
+
 ### Code Task Analysis
 
 The new task analysis system intelligently decomposes complex coding tasks for optimal processing:
@@ -404,6 +440,7 @@ Generic stdio MCP configuration:
       "env": {
         "LM_STUDIO_ENDPOINT": "http://localhost:1234/v1",
         "OLLAMA_ENDPOINT": "http://localhost:11434/api",
+        "LLAMA_CPP_ENDPOINT": "http://localhost:8080",
         "DEFAULT_LOCAL_MODEL": "qwen2.5-coder-3b-instruct",
         "TOKEN_THRESHOLD": "1500",
         "COST_THRESHOLD": "0.02",
