@@ -18,6 +18,9 @@
   },
   "author": "Jonathan Witmore",
   "license": "ISC",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc --project tsconfig.json && npm run copy:assets",
     "start": "node dist/index.js",
