@@ -38,6 +38,16 @@ function resolveModelId(modelId: string): { providerId: string | null; bareId: s
  *     no prefix and no registry entry — backward-compat with old callers).
  */
 export class TaskExecutor implements ITaskExecutor {
+  private async updateProgressSafely(jobId: string, progress: number, estimatedMs: number): Promise<void> {
+    try {
+      await jobTracker.updateJobProgress(jobId, progress, estimatedMs);
+    } catch (err) {
+      logger.error(
+        `Failed to update job progress (${progress}%) for job ${jobId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   async executeTask(modelId: string, task: string, jobId: string): Promise<string> {
     logger.info(`Executing task with model ${modelId} for job ${jobId}`);
 
@@ -48,15 +58,9 @@ export class TaskExecutor implements ITaskExecutor {
       throw err;
     }
 
-    try {
-      void jobTracker.updateJobProgress(jobId, 25, 120_000);
-    } catch (err) {
-      logger.error(`Failed to update job progress (25%) for job ${jobId}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
     let result: string;
     try {
-      result = await this._dispatch(modelId, task);
+      result = await this._dispatch(modelId, task, jobId);
     } catch (error) {
       logger.error(`Error executing task for job ${jobId}:`, error);
       try {
@@ -70,11 +74,7 @@ export class TaskExecutor implements ITaskExecutor {
       throw error;
     }
 
-    try {
-      void jobTracker.updateJobProgress(jobId, 75, 30_000);
-    } catch (err) {
-      logger.error(`Failed to update job progress (75%) for job ${jobId}: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    await this.updateProgressSafely(jobId, 75, 30_000);
 
     logger.info(`Job ${jobId} completed successfully`);
     return result;
@@ -86,6 +86,7 @@ export class TaskExecutor implements ITaskExecutor {
     task: string,
     options: TaskExecutionOptions,
     source: string,
+    jobId: string,
   ): Promise<string> {
     const registry = getProviderRegistry();
     const provider = registry.get(providerId);
@@ -99,10 +100,10 @@ export class TaskExecutor implements ITaskExecutor {
 
     try {
       const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
-      const result = await registry.executeWithConcurrencyLimit(
-        provider,
-        async () => await provider.executeTask(bareId, task, executionOptions),
-      );
+      const result = await registry.executeWithConcurrencyLimit(provider, async () => {
+        await this.updateProgressSafely(jobId, 25, 120_000);
+        return await provider.executeTask(bareId, task, executionOptions);
+      });
       registry.recordProviderSuccess(provider.id);
       return result.content;
     } catch (error) {
@@ -112,7 +113,7 @@ export class TaskExecutor implements ITaskExecutor {
   }
 
   /** Dispatch to the right provider without job tracking (pure routing). */
-  private async _dispatch(modelId: string, task: string): Promise<string> {
+  private async _dispatch(modelId: string, task: string, jobId: string): Promise<string> {
     const { providerId: prefixProviderId, bareId } = resolveModelId(modelId);
     const registry = getProviderRegistry();
     const modelRegistry = getModelRegistry();
@@ -134,7 +135,7 @@ export class TaskExecutor implements ITaskExecutor {
       if (registry.get(meta.providerId)) {
         logger.debug(`Dispatching ${bareId} via registry (provider: ${meta.providerId})`);
         try {
-          return await this.executeWithProvider(meta.providerId, bareId, task, options, 'registry lookup');
+          return await this.executeWithProvider(meta.providerId, bareId, task, options, 'registry lookup', jobId);
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
           logger.warn(`Primary provider dispatch failed for ${bareId} via ${meta.providerId}: ${lastError.message}`);
@@ -147,7 +148,7 @@ export class TaskExecutor implements ITaskExecutor {
       if (registry.get(prefixProviderId)) {
         logger.debug(`Dispatching ${bareId} via prefix (provider: ${prefixProviderId})`);
         try {
-          return await this.executeWithProvider(prefixProviderId, bareId, task, options, 'prefixed model id');
+          return await this.executeWithProvider(prefixProviderId, bareId, task, options, 'prefixed model id', jobId);
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
           logger.warn(`Prefix provider dispatch failed for ${bareId} via ${prefixProviderId}: ${lastError.message}`);
@@ -167,7 +168,7 @@ export class TaskExecutor implements ITaskExecutor {
       if (supports) {
         logger.debug(`Dispatching ${bareId} to local provider ${provider.id} (fallback probe)`);
         try {
-          return await this.executeWithProvider(provider.id, bareId, task, options, 'local fallback probe');
+          return await this.executeWithProvider(provider.id, bareId, task, options, 'local fallback probe', jobId);
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
           logger.warn(`Local fallback provider ${provider.id} failed for ${bareId}: ${lastError.message}`);
@@ -187,7 +188,7 @@ export class TaskExecutor implements ITaskExecutor {
       if (supports) {
         logger.debug(`Dispatching ${bareId} to provider ${provider.id} (fallback probe)`);
         try {
-          return await this.executeWithProvider(provider.id, bareId, task, options, 'remote fallback probe');
+          return await this.executeWithProvider(provider.id, bareId, task, options, 'remote fallback probe', jobId);
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
           logger.warn(`Fallback provider ${provider.id} failed for ${bareId}: ${lastError.message}`);

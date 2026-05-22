@@ -39,6 +39,41 @@ import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
 export class Router implements IRouter {
+  private readonly maxConcurrentLocalQueuedRoutes =
+    Number.isFinite(config.providerMaxConcurrentLocal) && config.providerMaxConcurrentLocal > 0
+      ? Math.floor(config.providerMaxConcurrentLocal)
+      : 1;
+  private activeLocalQueuedRoutes = 0;
+  private localQueuedRouteWaiters: Array<() => void> = [];
+
+  private pumpLocalQueuedRoutes(): void {
+    while (
+      this.activeLocalQueuedRoutes < this.maxConcurrentLocalQueuedRoutes &&
+      this.localQueuedRouteWaiters.length > 0
+    ) {
+      const next = this.localQueuedRouteWaiters.shift();
+      if (!next) break;
+      this.activeLocalQueuedRoutes += 1;
+      next();
+    }
+  }
+
+  private async acquireQueuedRouteExecutionSlot(providerId: string): Promise<() => void> {
+    if (!isProviderLocal(providerId)) {
+      return () => {};
+    }
+
+    await new Promise<void>((resolve) => {
+      this.localQueuedRouteWaiters.push(resolve);
+      this.pumpLocalQueuedRoutes();
+    });
+
+    return () => {
+      this.activeLocalQueuedRoutes = Math.max(0, this.activeLocalQueuedRoutes - 1);
+      this.pumpLocalQueuedRoutes();
+    };
+  }
+
   private providerLooksUnavailable(providerId: string): boolean {
     const registry = getProviderRegistry();
     return !registry.has(providerId) || !registry.isAvailable(providerId);
@@ -203,9 +238,17 @@ export class Router implements IRouter {
     });
   }
 
-  private async runQueuedRouteTask(taskId: string, params: RouteTaskParams): Promise<void> {
+  private async runQueuedRouteTask(taskId: string, providerId: string, params: RouteTaskParams): Promise<void> {
     const tracker = await getJobTracker();
+    const releaseSlot = await this.acquireQueuedRouteExecutionSlot(providerId);
     try {
+      const jobsForTask = await getJobsByTaskId(taskId);
+      const persistedTopLevelJob = jobsForTask.find((job) => job.id === taskId);
+      if (persistedTopLevelJob?.status === 'cancelled') {
+        await this.updateTaskFromJobs(taskId);
+        return;
+      }
+
       await updateJob({ id: taskId, status: 'in_progress', progress_pct: 1, started_at: Date.now(), poll_again_after_ms: 15_000 });
       await updateTask({ id: taskId, status: 'in_progress' });
       const result = await this.executeRouteTaskBlocking(params, taskId);
@@ -216,6 +259,7 @@ export class Router implements IRouter {
       await tracker.failJob(taskId, message);
       await updateTask({ id: taskId, status: 'failed', completed_count: 0, failed_count: 1 });
     } finally {
+      releaseSlot();
       await refreshAlertState();
     }
   }
@@ -322,7 +366,7 @@ export class Router implements IRouter {
       poll_again_after_ms: 5_000,
     });
 
-    void this.runQueuedRouteTask(taskId, params);
+    void this.runQueuedRouteTask(taskId, providerId, params);
 
     return {
       task_id: taskId,
