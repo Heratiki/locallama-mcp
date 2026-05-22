@@ -27,8 +27,8 @@ class LlamaCppProvider implements LLMProvider {
   private lastExecutedModelId: string | undefined;
 
   async init(): Promise<void> {
-    await llamaCppModule.initialize();
     try {
+      await llamaCppModule.initialize();
       const models = await this.listModels();
       this.cachedModelIds = new Set(models.map((m) => m.id));
       logger.debug(
@@ -36,7 +36,7 @@ class LlamaCppProvider implements LLMProvider {
       );
     } catch (error) {
       logger.debug(
-        `llama.cpp model cache warm-up failed: ${
+        `llama.cpp provider init failed: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -45,12 +45,9 @@ class LlamaCppProvider implements LLMProvider {
 
   async isAvailable(): Promise<boolean> {
     if (!config.llamaCppEndpoint) return false;
-    try {
-      const models = await llamaCppModule.getAvailableModels();
-      return models.length > 0;
-    } catch {
-      return false;
-    }
+    // A provider with no models is not available. A provider that fails the
+    // health probe is not available.
+    return llamaCppModule.capabilities.health === 'healthy' && llamaCppModule.capabilities.modelCount > 0;
   }
 
   async listModels(): Promise<ProviderModel[]> {

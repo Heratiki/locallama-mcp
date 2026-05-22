@@ -74,27 +74,41 @@ describe('llamaCppProvider — init and isAvailable', () => {
     jest.restoreAllMocks();
     llamaCppModule.cachedModels = [];
     llamaCppModule.mode = 'unknown';
-    llamaCppModule.capabilities = { mode: 'unknown', modelCount: 0, supportsMultiModel: false };
+    llamaCppModule.capabilities = {
+      mode: 'unknown',
+      modelCount: 0,
+      supportsMultiModel: false,
+      health: 'unknown',
+      lastHealthCheck: new Date(0).toISOString(),
+      lastHealthCheckResult: 'not yet run',
+    };
   });
 
   it('init resolves without throwing when server unavailable', async () => {
     jest.spyOn(llamaCppModule, 'initialize').mockResolvedValueOnce(undefined);
-    jest.spyOn(llamaCppModule, 'getAvailableModels').mockRejectedValueOnce(new Error('down'));
     await expect(llamaCppProvider.init()).resolves.toBeUndefined();
   });
 
-  it('isAvailable returns false when no models returned', async () => {
-    jest.spyOn(llamaCppModule, 'getAvailableModels').mockResolvedValueOnce([]);
+  it('isAvailable returns false when health is unknown', async () => {
+    llamaCppModule.capabilities.modelCount = 1; // Assume models are present
     expect(await llamaCppProvider.isAvailable()).toBe(false);
   });
 
-  it('isAvailable returns true when models present', async () => {
-    jest.spyOn(llamaCppModule, 'getAvailableModels').mockResolvedValueOnce(FAKE_MODELS);
+  it('isAvailable returns true when health is healthy and models are present', async () => {
+    llamaCppModule.capabilities.health = 'healthy';
+    llamaCppModule.capabilities.modelCount = 1;
     expect(await llamaCppProvider.isAvailable()).toBe(true);
   });
 
-  it('isAvailable returns false when getAvailableModels throws', async () => {
-    jest.spyOn(llamaCppModule, 'getAvailableModels').mockRejectedValueOnce(new Error('err'));
+  it('isAvailable returns false when health is healthy but no models are present', async () => {
+    llamaCppModule.capabilities.health = 'healthy';
+    llamaCppModule.capabilities.modelCount = 0;
+    expect(await llamaCppProvider.isAvailable()).toBe(false);
+  });
+
+  it('isAvailable returns false after a failed init', async () => {
+    jest.spyOn(llamaCppModule, 'initialize').mockRejectedValueOnce(new Error('init failed'));
+    await llamaCppProvider.init(); // This will fail internally and set health to unhealthy
     expect(await llamaCppProvider.isAvailable()).toBe(false);
   });
 });

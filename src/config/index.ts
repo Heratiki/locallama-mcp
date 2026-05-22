@@ -47,6 +47,9 @@ export interface Config {
   providerMaxConcurrentRemote: number;
   localLlamaEndpoint: string; // Added local Llama endpoint
   llamaCppEndpoint: string; // llama-server OpenAI-compatible endpoint
+  llamaCppHealthProbeEnabled: boolean;
+  llamaCppHealthProbePrompt: string;
+  llamaCppHealthProbeTimeoutMs: number;
   
   // Model configuration
   defaultLocalModel: string;
@@ -212,6 +215,9 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     providerMaxConcurrentRemote: parseNumber(env.PROVIDER_MAX_CONCURRENT_REMOTE, 1, 1, 128),
     localLlamaEndpoint: env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api',
     llamaCppEndpoint: env.LLAMA_CPP_ENDPOINT || '',
+    llamaCppHealthProbeEnabled: parseBool(env.LLAMA_CPP_HEALTH_PROBE_ENABLED, true),
+    llamaCppHealthProbePrompt: env.LLAMA_CPP_HEALTH_PROBE_PROMPT || `write 'ok'`,
+    llamaCppHealthProbeTimeoutMs: parseNumber(env.LLAMA_CPP_HEALTH_PROBE_TIMEOUT_MS, 10000, 1000),
 
     // Model configuration
     defaultLocalModel: env.DEFAULT_LOCAL_MODEL || 'llama2',
