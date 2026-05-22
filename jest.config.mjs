@@ -19,7 +19,13 @@ export default {
       },
     ],
   },
-  testPathIgnorePatterns: ['/node_modules/', '/.claude/'],
+  // Restrict discovery to test/ only. This replaces the previous
+  // testPathIgnorePatterns: ['/node_modules/', '/.claude/'] which inadvertently
+  // excluded test runs inside git worktrees under .claude/worktrees/.
+  // To revert: remove `roots` and restore testPathIgnorePatterns to
+  //   ['/node_modules/', '/.claude/']
+  roots: ['<rootDir>/test'],
+  testPathIgnorePatterns: ['/node_modules/'],
   injectGlobals: true,
   moduleDirectories: ['node_modules', 'dist']
 }

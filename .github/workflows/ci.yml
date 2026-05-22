@@ -1,0 +1,56 @@
+# CI — build, test, lint on every PR and push to main.
+#
+# Three parallel jobs to fail fast on the specific step that broke:
+#   build-and-test  TypeScript compile + Jest unit tests
+#   lint            ESLint across src/ and test/
+#   typecheck       tsc --noEmit (type-only, no output artifacts)
+#
+# To reverse: delete this file. No secrets or environment config required.
+# Node version is pinned to 20 — bump here when upgrading the runtime.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Run jest directly to avoid double-compile (npm test runs build again).
+      # --passWithNoTests guards against the jest path-ignore bug noted in jest.config.mjs.
+      - run: node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs --passWithNoTests
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
