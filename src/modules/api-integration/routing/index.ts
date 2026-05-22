@@ -39,14 +39,16 @@ import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
 export class Router implements IRouter {
-  private readonly maxConcurrentLocalQueuedRoutes =
-    Number.isFinite(config.providerMaxConcurrentLocal) && config.providerMaxConcurrentLocal > 0
+  private get maxConcurrentLocalQueuedRoutes(): number {
+    return Number.isFinite(config.providerMaxConcurrentLocal) && config.providerMaxConcurrentLocal > 0
       ? Math.floor(config.providerMaxConcurrentLocal)
       : 1;
+  }
   private activeLocalQueuedRoutes = 0;
   private localQueuedRouteWaiters: Array<() => void> = [];
 
   private pumpLocalQueuedRoutes(): void {
+    logger.debug(`[Router] Pumping local queued routes. Active: ${this.activeLocalQueuedRoutes}/${this.maxConcurrentLocalQueuedRoutes}, Waiters: ${this.localQueuedRouteWaiters.length}`);
     while (
       this.activeLocalQueuedRoutes < this.maxConcurrentLocalQueuedRoutes &&
       this.localQueuedRouteWaiters.length > 0
@@ -54,22 +56,28 @@ export class Router implements IRouter {
       const next = this.localQueuedRouteWaiters.shift();
       if (!next) break;
       this.activeLocalQueuedRoutes += 1;
+      logger.debug(`[Router] Dispatched waiter. Active: ${this.activeLocalQueuedRoutes}/${this.maxConcurrentLocalQueuedRoutes}`);
       next();
     }
   }
 
   private async acquireQueuedRouteExecutionSlot(providerId: string): Promise<() => void> {
-    if (!isProviderLocal(providerId)) {
+    const isLocal = isProviderLocal(providerId);
+    logger.debug(`[Router] acquireQueuedRouteExecutionSlot for provider: ${providerId}, isLocal: ${isLocal}`);
+    
+    if (!isLocal) {
       return () => {};
     }
 
     await new Promise<void>((resolve) => {
       this.localQueuedRouteWaiters.push(resolve);
+      logger.debug(`[Router] Added waiter for local slot. Current waiters: ${this.localQueuedRouteWaiters.length}, active: ${this.activeLocalQueuedRoutes}/${this.maxConcurrentLocalQueuedRoutes}`);
       this.pumpLocalQueuedRoutes();
     });
 
     return () => {
       this.activeLocalQueuedRoutes = Math.max(0, this.activeLocalQueuedRoutes - 1);
+      logger.debug(`[Router] Released local slot. Active: ${this.activeLocalQueuedRoutes}/${this.maxConcurrentLocalQueuedRoutes}`);
       this.pumpLocalQueuedRoutes();
     };
   }

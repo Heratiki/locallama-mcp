@@ -24,10 +24,7 @@ export class ProviderRegistry {
   // --- Health probe (Issue 26) ---
   private healthProbeTimer: ReturnType<typeof setInterval> | undefined;
   private availabilityMap = new Map<string, boolean>();
-  private readonly rateLimiter = new ProviderRateLimiter({
-    maxConcurrentLocal: config.providerMaxConcurrentLocal,
-    maxConcurrentRemote: config.providerMaxConcurrentRemote,
-  });
+  private readonly rateLimiter = new ProviderRateLimiter();
 
   register(provider: LLMProvider): void {
     if (this.providers.has(provider.id)) {
