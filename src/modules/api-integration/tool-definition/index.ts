@@ -338,6 +338,12 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
               type: 'string',
               description: 'The model id to benchmark (e.g. "qwen2.5-coder-7b")'
             },
+            provider_id: {
+              type: 'string',
+              description: 'Pin the benchmark to a specific provider (e.g. "lm_studio", "ollama"). ' +
+                'Required when the same model id exists on multiple providers. ' +
+                'The response providerId will always match this value when supplied.'
+            },
             task_categories: {
               type: 'array',
               items: {

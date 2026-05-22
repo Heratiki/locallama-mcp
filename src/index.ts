@@ -474,12 +474,15 @@ export class LocalLamaMcpServer {
                   if (typeof modelId !== 'string' || !modelId) {
                     throw new Error('Invalid model_id for benchmark_model');
                   }
+                  const requestedProviderId = typeof args?.provider_id === 'string' && args.provider_id
+                    ? args.provider_id
+                    : undefined;
                   const rawCategories = args?.task_categories;
                   const taskCategories = Array.isArray(rawCategories)
                     ? rawCategories.filter((c): c is string => typeof c === 'string')
                     : undefined;
                   const { benchmarkModel } = await import('./modules/benchmark/core/model-benchmarker.js');
-                  return await benchmarkModel({ modelId, taskCategories: taskCategories as import('./modules/benchmark/core/model-benchmarker.js').TaskCategory[] | undefined });
+                  return await benchmarkModel({ modelId, providerId: requestedProviderId, taskCategories: taskCategories as import('./modules/benchmark/core/model-benchmarker.js').TaskCategory[] | undefined });
                 }
                 case 'retriv_init': {
                   const directories = args?.directories;
