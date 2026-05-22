@@ -342,7 +342,9 @@ No test verifies server behavior under concurrent tool calls:
 
 2026-05-20 update: Unit coverage now defines the expected behavior for the provider execution layer: local providers share one FIFO slot, and one local job can run concurrently with one remote provider job. Remaining work is operational coverage through the live MCP `route_task` path.
 
-**Blocker:** Live concurrency coverage still needs a deterministic harness that can submit simultaneous `route_task` calls and observe completion ordering without making routine test runs slow or paid by default.
+2026-05-22 update: `test-operational.mjs --suite routing` now includes an opt-in live check (`route_task — concurrent local queue admission (Issue #86 live check)`) gated behind `RUN_ROUTE_TASK_CONCURRENCY_TEST=true`. This keeps default routing runs lightweight while providing a deterministic concurrency probe when local runtime access is available.
+
+**Blocker:** Full always-on live concurrency coverage is still gated to avoid slowing default runs and requiring local inference availability in every environment.
 
 ---
 

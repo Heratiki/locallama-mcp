@@ -14,6 +14,7 @@ jest.unstable_mockModule('../../../../dist/config/index.js', () => ({
     openRouterApiKey: 'test-key',
     openRouterFreeOnly: false,
     costThreshold: 0.02,
+    providerMaxConcurrentLocal: 1,
   },
 }));
 
@@ -199,6 +200,88 @@ describe('api-integration routing', () => {
       job_count: 1,
     }));
     expect(mockCreateJob).toHaveBeenCalledWith(result.task_id, expect.stringContaining('implementation plan'), 'openai/gpt-4o');
+  });
+
+  it('keeps later local queued tasks out of in_progress until a local slot is available', async () => {
+    mockRouteTaskDecision.mockResolvedValueOnce({
+      provider: 'local',
+      model: 'qwen2.5-coder:7b',
+      explanation: 'Local route for queue serialization test.',
+    });
+    mockRouteTaskDecision.mockResolvedValueOnce({
+      provider: 'local',
+      model: 'qwen2.5-coder:7b',
+      explanation: 'Local route for queue serialization test.',
+    });
+    mockOpenRouterProvider.supportsModel.mockResolvedValue(false);
+
+    let releaseFirstExecution: (() => void) | undefined;
+    const executeMock = jest
+      .fn()
+      .mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => {
+          releaseFirstExecution = resolve;
+        });
+        return {
+          model: 'qwen2.5-coder:7b',
+          providerId: 'local',
+          costClass: 'local',
+          provider: 'local',
+          reason: 'first',
+          resultCode: 'first-result',
+          estimatedCost: 0,
+        };
+      })
+      .mockResolvedValue({
+        model: 'qwen2.5-coder:7b',
+        providerId: 'local',
+        costClass: 'local',
+        provider: 'local',
+        reason: 'second',
+        resultCode: 'second-result',
+        estimatedCost: 0,
+      });
+
+    const internalRouter = router as unknown as { executeRouteTaskBlocking: typeof executeMock };
+    const originalExecute = internalRouter.executeRouteTaskBlocking;
+    internalRouter.executeRouteTaskBlocking = executeMock;
+
+    try {
+      await Promise.all([
+        routeTask({
+          task: 'First queued local task',
+          contextLength: 64,
+          expectedOutputLength: 128,
+          complexity: 0.5,
+          priority: 'cost',
+        }),
+        routeTask({
+          task: 'Second queued local task',
+          contextLength: 64,
+          expectedOutputLength: 128,
+          complexity: 0.5,
+          priority: 'cost',
+        }),
+      ]);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const inProgressBeforeRelease = mockUpdateJob.mock.calls.filter(
+        ([job]) => job?.status === 'in_progress',
+      ).length;
+      expect(inProgressBeforeRelease).toBe(1);
+
+      releaseFirstExecution?.();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const inProgressAfterRelease = mockUpdateJob.mock.calls.filter(
+        ([job]) => job?.status === 'in_progress',
+      ).length;
+      expect(inProgressAfterRelease).toBe(2);
+    } finally {
+      mockOpenRouterProvider.supportsModel.mockResolvedValue(true);
+      internalRouter.executeRouteTaskBlocking = originalExecute;
+    }
   });
 
   it('get_task_status returns aggregate task status and inline completed results', async () => {

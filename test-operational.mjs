@@ -10,7 +10,7 @@
  * Suites:
  *   all       (default) Run every test
  *   smoke     Startup, tool list, resource reads only (no LLM calls)
- *   routing   preemptive_route_task + get_cost_estimate (no LLM calls)
+ *   routing   preemptive_route_task + get_cost_estimate (+ optional live route_task concurrency check)
  *   storage   DB persistence, lock contention, data-dir isolation (no LLM calls)
  *   llm       route_task with Ollama (makes real LLM calls, slower)
  */
@@ -480,6 +480,74 @@ async function runSuite(client, serverEnv) {
         const paidCost  = parsed.paid?.cost?.total ?? parsed.estimatedCost ?? '?';
         info(`Cost estimate — local: $${localCost}  paid: $${paidCost}`);
       }
+    });
+
+    await runTest('route_task — concurrent local queue admission (Issue #86 live check)', async () => {
+      const liveConcurrencyEnabled = String(process.env.RUN_ROUTE_TASK_CONCURRENCY_TEST || '').toLowerCase() === 'true';
+      if (!liveConcurrencyEnabled) {
+        info('Skipping live route_task concurrency check (set RUN_ROUTE_TASK_CONCURRENCY_TEST=true to enable)');
+        results.skipped++;
+        return;
+      }
+
+      const makeArgs = (index) => ({
+        task: `Write a tiny helper function #${index} and return only code.`,
+        context_length: 40,
+        expected_output_length: 120,
+        complexity: 0.2,
+        priority: 'cost',
+      });
+
+      const responses = await Promise.all([
+        client.callTool({ name: 'route_task', arguments: makeArgs(1) }),
+        client.callTool({ name: 'route_task', arguments: makeArgs(2) }),
+        client.callTool({ name: 'route_task', arguments: makeArgs(3) }),
+      ]);
+
+      const parsedResponses = responses.map((response) => {
+        const text = extractText(response);
+        return text ? JSON.parse(text) : null;
+      });
+
+      assert(parsedResponses.every((entry) => !!entry?.task_id), 'Concurrent route_task calls return task IDs');
+      assert(parsedResponses.every((entry) => entry?.status === 'queued'), 'Concurrent route_task calls initially return queued status');
+
+      const localProviderIds = new Set(['local', 'ollama', 'lm-studio', 'llama-cpp']);
+      const allLocal = parsedResponses.every((entry) => localProviderIds.has(String(entry?.provider)));
+      if (!allLocal) {
+        info('Skipping local queue assertion because at least one call routed to a non-local provider');
+        results.skipped++;
+        return;
+      }
+
+      const taskIds = parsedResponses.map((entry) => entry.task_id);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      const statuses = await Promise.all(
+        taskIds.map(async (taskId) => {
+          const statusResult = await client.callTool({
+            name: 'get_task_status',
+            arguments: { task_id: taskId },
+          });
+          return JSON.parse(extractText(statusResult));
+        }),
+      );
+
+      const inProgressCount = statuses.filter((status) => status.status === 'in_progress').length;
+      const queuedCount = statuses.filter((status) => status.status === 'queued').length;
+      const localCap = Math.max(1, Number.parseInt(String(process.env.PROVIDER_MAX_CONCURRENT_LOCAL || '1'), 10) || 1);
+
+      assert(inProgressCount <= localCap, `In-progress local tasks (${inProgressCount}) do not exceed local cap (${localCap})`);
+      assert(queuedCount >= Math.max(0, taskIds.length - localCap), 'Later tasks remain queued while local slots are occupied');
+
+      await Promise.all(
+        taskIds.map(async (taskId) => {
+          await client.callTool({
+            name: 'cancel_task',
+            arguments: { task_id: taskId },
+          });
+        }),
+      );
     });
 
     await runTest('route_task — oversized prompt returns context_overflow', async () => {
