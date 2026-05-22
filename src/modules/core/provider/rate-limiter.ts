@@ -1,3 +1,5 @@
+import { config } from '../../../config/index.js';
+
 type ProviderTier = 'local' | 'remote';
 
 interface QueueEntry<T> {
@@ -24,15 +26,8 @@ export interface ProviderRateLimiterOptions {
  */
 export class ProviderRateLimiter {
   private readonly states = new Map<string, ProviderQueueState>();
-  private readonly maxConcurrentLocal: number;
-  private readonly maxConcurrentRemote: number;
 
-  constructor(options: ProviderRateLimiterOptions) {
-    const localCap = Number.isFinite(options.maxConcurrentLocal) ? options.maxConcurrentLocal : 1;
-    const remoteCap = Number.isFinite(options.maxConcurrentRemote) ? options.maxConcurrentRemote : 1;
-    this.maxConcurrentLocal = Math.max(1, Math.floor(localCap));
-    this.maxConcurrentRemote = Math.max(1, Math.floor(remoteCap));
-  }
+  constructor() {}
 
   async schedule<T>(providerId: string, tier: ProviderTier, run: () => Promise<T>): Promise<T> {
     return await new Promise<T>((resolve, reject) => {
@@ -58,7 +53,9 @@ export class ProviderRateLimiter {
   }
 
   private capForTier(tier: ProviderTier): number {
-    return tier === 'local' ? this.maxConcurrentLocal : this.maxConcurrentRemote;
+    const rawCap = tier === 'local' ? config.providerMaxConcurrentLocal : config.providerMaxConcurrentRemote;
+    const cap = Number.isFinite(rawCap) ? rawCap : 1;
+    return Math.max(1, Math.floor(cap));
   }
 
   private drain(queueKey: string, tier: ProviderTier): void {

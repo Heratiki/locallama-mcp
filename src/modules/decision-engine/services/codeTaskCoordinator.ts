@@ -310,13 +310,15 @@ ${result}
    * @param model The model to use
    * @param fullContext Optional additional context for the model
    * @param originalTask Optional original task description for context
+   * @param jobTracker Optional job tracker for progress updates
    * @returns The model's response
    */
   async executeSubtask(
     subtask: CodeSubtask,
     model: Model,
     fullContext?: string,
-    originalTask?: string // Add originalTask parameter
+    originalTask?: string, // Add originalTask parameter
+    jobTracker?: JobTracker | null // Add jobTracker parameter
   ): Promise<string> {
     // Enhanced logging: Log detailed subtask information
     logger.info(`------- SUBTASK EXECUTION START -------`);
@@ -386,7 +388,17 @@ Output only the code required for this subtask. Do not include explanations unle
         logger.info(`Executing subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
         const execResult = await registry.executeWithConcurrencyLimit(
           provider,
-          async () => await provider.executeTask(bareId, prompt, { timeoutMs: timeout }),
+          async () => {
+            // Update job status to In Progress ONLY AFTER acquiring the slot
+            if (jobTracker) {
+              try {
+                await jobTracker.updateJobProgress(subtask.id, 10);
+              } catch (error) {
+                logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
+              }
+            }
+            return await provider.executeTask(bareId, prompt, { timeoutMs: timeout });
+          },
         );
         resultText = execResult.content;
         logger.info(`Successfully executed subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
@@ -401,7 +413,17 @@ Output only the code required for this subtask. Do not include explanations unle
             logger.info(`Falling back to provider '${p.id}' for model ${bareId}`);
             const execResult = await registry.executeWithConcurrencyLimit(
               p,
-              async () => await p.executeTask(bareId, prompt, { timeoutMs: timeout }),
+              async () => {
+                // Update job status to In Progress ONLY AFTER acquiring the slot
+                if (jobTracker) {
+                  try {
+                    await jobTracker.updateJobProgress(subtask.id, 10);
+                  } catch (error) {
+                    logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
+                  }
+                }
+                return await p.executeTask(bareId, prompt, { timeoutMs: timeout });
+              },
             );
             resultText = execResult.content;
             found = true;
@@ -539,18 +561,6 @@ Output only the code required for this subtask. Do not include explanations unle
       completedCount++;
       logger.info(`Executing subtask ${completedCount}/${executionOrder.length}: ${subtask.id}`);
       
-      // Update job status to In Progress (if job tracker is available)
-      // Check if jobTracker is not null before using it
-      if (jobTracker) {
-        try {
-          await jobTracker.updateJobProgress(subtask.id, 10); // Start at 10%
-        } catch (error) {
-          logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
-        }
-      } else {
-         logger.debug(`JobTracker not available, skipping progress update (10%) for subtask ${subtask.id}`);
-      }
-      
       // Gather context from dependencies
       let dependencyContext = '';
       for (const depId of subtask.dependencies) {
@@ -581,15 +591,12 @@ Output only the code required for this subtask. Do not include explanations unle
         } catch (error) {
           logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
         }
-      } else {
-         logger.debug(`JobTracker not available, skipping progress update (30%) for subtask ${subtask.id}`);
       }
-      
+
       try {
         // Execute the subtask
-        const result = await this.executeSubtask(subtask, model, dependencyContext, decomposedTask.originalTask); // Pass originalTask
+        const result = await this.executeSubtask(subtask, model, dependencyContext, decomposedTask.originalTask, jobTracker); // Pass originalTask and jobTracker
         results.set(subtask.id, result);
-        
         // Write the result to the subtask log file
         this.logSubtaskResult(subtask, model, result);
         
