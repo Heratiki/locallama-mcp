@@ -107,6 +107,36 @@ export type Job = {
   model?: string;
 };
 
+export type SystemStateStatus = 'healthy' | 'contended' | 'degraded';
+
+export type SystemStateReason =
+  | 'local_slot_benchmark_contention'
+  | 'benchmark_queued'
+  | 'provider_unavailable'
+  | 'provider_unreachable';
+
+export interface SystemStateLocalSlot {
+  status: 'inference' | 'benchmark' | 'idle';
+  queued_jobs: number;
+  active_benchmark_runs: number;
+  queued_benchmark_runs: number;
+}
+
+export interface SystemStateRemoteProvider {
+  id: string;
+  cost_class: 'local' | 'free' | 'paid';
+  available: boolean;
+  queued_jobs: number;
+}
+
+export interface SystemStateResult {
+  status: SystemStateStatus;
+  reasons: SystemStateReason[];
+  poll_again_after_ms: number;
+  local_slot: SystemStateLocalSlot;
+  remote_providers: SystemStateRemoteProvider[];
+}
+
 export interface IRouter {
   routeTask(params: RouteTaskParams): Promise<QueuedRouteTaskResult>;
   preemptiveRouting(params: RouteTaskParams): Promise<RouteTaskResult>;

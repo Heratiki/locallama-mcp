@@ -306,6 +306,33 @@ export async function getTask(id: string): Promise<PersistedTask | undefined> {
   }
 }
 
+export interface QueuedJobCounts {
+  local: number;
+  byProvider: Record<string, number>;
+}
+
+export async function getQueuedJobCounts(): Promise<QueuedJobCounts> {
+  if (!dbInstance) return { local: 0, byProvider: {} };
+  try {
+    const rows = await dbInstance.all<{ is_local: number | null; provider_id: string | null; count: number }[]>(
+      `SELECT is_local, provider_id, COUNT(*) AS count FROM jobs WHERE status = 'queued' GROUP BY is_local, provider_id`
+    );
+    let local = 0;
+    const byProvider: Record<string, number> = {};
+    for (const row of rows) {
+      if (row.is_local === 1) {
+        local += row.count;
+      } else if (row.provider_id) {
+        byProvider[row.provider_id] = (byProvider[row.provider_id] ?? 0) + row.count;
+      }
+    }
+    return { local, byProvider };
+  } catch (error) {
+    logger.error('Failed to get queued job counts:', error);
+    return { local: 0, byProvider: {} };
+  }
+}
+
 /**
  * Compute queue position for a job at read time (ADR 0002).
  * Counts queued jobs in the same slot (local vs remote) with an earlier or equal rowid.
