@@ -31,7 +31,7 @@ Each Provider has its own independent FIFO Job Queue and execution slot. Jobs fo
 _Avoid_: Global queue, shared queue
 
 **Local Inference Slot**:
-The single execution slot shared by all local Providers (Ollama, LM Studio) combined. Because local Providers share VRAM on a single GPU, only one local Job can run at a time regardless of which local Provider hosts it. Remote Providers (OpenRouter, future: OpenAI, Anthropic) each have their own independent slot and are not VRAM-constrained.
+The single execution slot shared by all local Providers (Ollama, LM Studio, llama.cpp) combined. Because local Providers share VRAM on a single GPU, only one local Job can run at a time regardless of which local Provider hosts it. Remote Providers (OpenRouter, future: OpenAI, Anthropic) each have their own independent slot and are not VRAM-constrained.
 _Avoid_: Worker, thread, connection
 
 **Routing Decision**:
@@ -85,6 +85,10 @@ _Avoid_: Per-call spam, transport-level crash guarantees
 **Monitoring reachability state**:
 The reminder's normalized status for monitoring endpoint checks: `reachable`, `unreachable`, or `unknown` when no conclusive probe result exists yet.
 _Avoid_: Boolean-only status, ad-hoc freeform strings
+
+**System State**:
+A snapshot of current runtime health returned by the `get_system_state` MCP tool. Includes a top-level `status` (`"healthy" | "contended" | "degraded"`), a `reasons` array of active condition codes, a `poll_again_after_ms` hint, a `local_slot` block, and a `remote_providers` array. `status` is the worst-case of all active conditions (`degraded > contended > healthy`). Data sources: Local Inference Slot stats from the in-memory rate limiter; `queued_jobs` counts from the persistent job store; provider availability from the circuit breaker. Valid `reasons` codes: `"local_slot_benchmark_contention"`, `"benchmark_queued"`, `"provider_unavailable"`, `"provider_unreachable"`.
+_Avoid_: System status, health check, status endpoint
 
 **Server-local monitoring endpoint**:
 A monitoring URL emitted in MCP metadata that is resolved from the machine running the MCP server, not the machine running the MCP client. Typical examples are `monitoring.websocketUrl` and the optional dashboard URL. In remote environments, callers may need SSH, container, Codespaces, or WSL port forwarding before these URLs are reachable.

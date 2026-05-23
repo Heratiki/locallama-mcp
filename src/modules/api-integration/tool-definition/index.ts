@@ -152,6 +152,20 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         }
       },
       {
+        name: 'get_system_state',
+        description:
+          'Return a structured snapshot of current runtime health: local slot occupancy (inference vs benchmark vs idle), ' +
+          'queue depths, and remote provider availability. ' +
+          'Use this to determine why a task is delayed without needing WebSocket access. ' +
+          'The response includes a top-level status ("healthy" | "contended" | "degraded"), a reasons array of active ' +
+          'condition codes, and a poll_again_after_ms hint for backoff scheduling.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: [],
+        },
+      },
+      {
         name: 'reload_config',
         description:
           'Reload runtime configuration from the project .env file and apply only hot-reloadable fields. ' +

@@ -418,6 +418,10 @@ export class LocalLamaMcpServer {
                   }
                   return await routingModule.cancelTask(taskId);
                 }
+                case 'get_system_state': {
+                  const { getSystemState } = await import('./modules/api-integration/system-state/index.js');
+                  return await getSystemState();
+                }
                 case 'reload_config':
                   return reloadConfig();
                 case 'get_free_models':

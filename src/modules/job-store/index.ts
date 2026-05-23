@@ -15,6 +15,7 @@ export {
   updateTask,
   getTask,
   getQueuePositionForJob,
+  getQueuedJobCounts,
 } from './db.js';
 export { recoverInProgressJobs } from './recovery.js';
 export { refreshAlertState, isAlertActive, buildQueueAlert } from './alert.js';
