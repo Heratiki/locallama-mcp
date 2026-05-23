@@ -203,6 +203,7 @@ export class JobTracker extends EventEmitter {
         result: null,
         error: null,
         queue_position: null,
+        is_local: null,
         progress_pct: 0,
         poll_again_after_ms: null,
         retry_count: 0,

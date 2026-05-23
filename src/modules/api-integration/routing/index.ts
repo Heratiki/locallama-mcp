@@ -26,12 +26,12 @@ import { countTokens } from '../../utils/tokenCount.js';
 import { ContextWindowError } from '../../utils/contextWindow.js';
 import {
   cancelJobsForTask,
-  getActiveJobs,
   getTask,
   getJobsByTaskId,
   insertTask,
   updateJob,
   updateTask,
+  getQueuePositionForJob,
 } from '../../job-store/index.js';
 import { refreshAlertState } from '../../job-store/alert.js';
 import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus } from '../../job-store/types.js';
@@ -352,8 +352,7 @@ export class Router implements IRouter {
     const providerId = await this.resolveProviderIdForModel(decision.model, decision.provider);
     const taskId = uuidv4();
     const tracker = await getJobTracker();
-    const activeJobs = await getActiveJobs();
-    const queuePosition = activeJobs.filter((job) => job.status === 'queued' || job.status === 'in_progress').length + 1;
+    const isLocal = isProviderLocal(providerId) ? 1 : 0;
     const now = Date.now();
 
     await insertTask({
@@ -370,9 +369,12 @@ export class Router implements IRouter {
       task_id: taskId,
       provider_id: providerId,
       model_id: decision.model,
-      queue_position: queuePosition,
+      is_local: isLocal,
       poll_again_after_ms: 5_000,
     });
+
+    // Compute position at read time after insert so concurrent submissions get distinct values.
+    const queuePosition = (await getQueuePositionForJob(taskId)) ?? 1;
 
     void this.runQueuedRouteTask(taskId, providerId, params);
 

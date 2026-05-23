@@ -73,19 +73,19 @@ jest.unstable_mockModule('../../../../dist/modules/decision-engine/services/jobT
 const mockInsertTask = jest.fn().mockResolvedValue(undefined);
 const mockUpdateTask = jest.fn().mockResolvedValue(undefined);
 const mockUpdateJob = jest.fn().mockResolvedValue(undefined);
-const mockGetActiveJobs = jest.fn().mockResolvedValue([]);
 const mockGetTask = jest.fn();
 const mockGetJobsByTaskId = jest.fn();
 const mockCancelJobsForTask = jest.fn();
+const mockGetQueuePositionForJob = jest.fn().mockResolvedValue(1);
 
 jest.unstable_mockModule('../../../../dist/modules/job-store/index.js', () => ({
   insertTask: mockInsertTask,
   updateTask: mockUpdateTask,
   updateJob: mockUpdateJob,
-  getActiveJobs: mockGetActiveJobs,
   getTask: mockGetTask,
   getJobsByTaskId: mockGetJobsByTaskId,
   cancelJobsForTask: mockCancelJobsForTask,
+  getQueuePositionForJob: mockGetQueuePositionForJob,
 }));
 
 const mockRefreshAlertState = jest.fn().mockResolvedValue(undefined);
@@ -150,7 +150,7 @@ describe('api-integration routing', () => {
     jest.clearAllMocks();
     mockGetTask.mockResolvedValue(undefined);
     mockGetJobsByTaskId.mockResolvedValue([]);
-    mockGetActiveJobs.mockResolvedValue([]);
+    mockGetQueuePositionForJob.mockResolvedValue(1);
     mockCancelJobsForTask.mockResolvedValue(0);
     mockGetAvailableModels.mockResolvedValue([]);
     mockRegistry.list.mockReturnValue([mockOpenRouterProvider]);
@@ -170,10 +170,7 @@ describe('api-integration routing', () => {
       model: 'openai/gpt-4o',
       explanation: 'Queued paid task.',
     });
-    mockGetActiveJobs.mockResolvedValueOnce([
-      { id: 'active-1', status: 'queued' },
-      { id: 'active-2', status: 'in_progress' },
-    ]);
+    mockGetQueuePositionForJob.mockResolvedValueOnce(3);
     mockExecuteTask.mockImplementationOnce(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       return 'background result';
