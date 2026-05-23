@@ -1,228 +1,60 @@
 # LocalLama MCP Server
 
-LocalLama MCP is a local-first, provider-neutral Model Context Protocol server for modern coding-agent workflows. It is being revived to support current MCP-capable tools such as Codex, Claude Code, Claw Code, Cursor, GitHub Copilot Agent mode, and generic MCP clients.
+Local-first, provider-neutral Model Context Protocol server for coding-agent workflows. Routes tasks across local models (Ollama, LM Studio, llama.cpp), free OpenRouter models, and paid frontier models using cost, latency, context capacity, and benchmark history.
 
-The project routes coding work across local models, free or low-cost remote models, and paid frontier models using cost, latency, context capacity, benchmark history, and task fit. It is no longer designed around Cline or Roo Code as primary clients.
-
-> Revival status: this repository has useful architecture, but several development commands still need cleanup. See `docs/ROADMAP.md` for the active modernization plan.
+**Version:** 1.16.0 | **Node.js:** >=22 | **License:** ISC
 
 ## Overview
 
-LocalLama MCP Server is designed to reduce token usage and costs without giving up quality. It dynamically decides whether a coding task should run on a local model, a free or low-cost remote model, or a paid frontier model. The long-term direction is to make those decisions from measured provider capabilities and executable benchmark results instead of hardcoded model assumptions.
+LocalLama MCP reduces token costs without sacrificing quality. Tasks are queued asynchronously — `route_task` returns a `task_id` immediately; callers poll `get_task_status` for results. The decision engine chooses local → free → paid based on measured provider capabilities and configurable thresholds.
 
-## Current Baseline
+Supported MCP clients: Codex, Claude Code, Claw Code, Cursor, GitHub Copilot Agent mode, and any generic MCP stdio client.
 
-- `npx tsc --project tsconfig.json --noEmit` succeeds.
-- `npm run build` now succeeds on native Windows because the package script uses a Node copy step.
-- `npm run lint` currently fails because `eslint-plugin-import` is referenced but not installed.
-- `npm run benchmark` and `npm run benchmark:comprehensive` build the project and run the checked-in benchmark CLI.
+## Requirements
 
-## Project Memory and Roadmap
-
-- `docs/AGENTS.md` is the shared operating guide for coding agents.
-- `docs/CLAUDE.md` points Claude Code at the same shared guidance.
-- `docs/PROJECT_STATE.md` is the current snapshot of what is done, in progress, and being tracked.
-- `docs/PLAN.md` is the branch implementation plan.
-- `docs/OPERATIONAL_TEST_PLAN.md` is the live test record.
-- `docs/history/memory-bank/` contains historical append-only project memory.
-- `docs/ROADMAP.md` is the long-form modernization backdrop.
-
-## Key Components
-
-### Cost & Token Monitoring Module
-
-- Queries the current API service for context usage, cumulative costs, API token prices, and available credits
-- Gathers real-time data to inform the decision engine
-- Implements intelligent code pattern recognition and semantic search for optimizing token usage
-- Provides context-aware code suggestions to reduce redundancy and improve efficiency
-- Features new pattern-based caching with ~30% token reduction in complex tasks
-
-### Decision Engine
-
-- Defines rules that compare the cost of using the paid API against the cost (and potential quality trade-offs) of offloading to a local LLM
-- Includes configurable thresholds for when to offload
-- Uses preemptive routing based on benchmark data to make faster decisions without API calls
-- For preemptive local selection, task-category benchmark scores from ModelRegistry (for example `code`) are preferred over generic historical quality when available
-- New adaptive model selection system with performance history tracking
-- Enhanced code task decomposition with complexity analysis
-- **NEW** Smart task dependency mapping with critical path analysis
-- **NEW** Code complexity evaluation system with technical and domain knowledge assessment
-- **NEW** Execution order optimization for parallel task processing
-
-### API Integration & Configurability
-
-- Provides a configuration interface that allows users to specify the endpoints for their local instances (e.g., LM Studio, Ollama)
-- Interacts with these endpoints using standardized API calls
-- Integrates with OpenRouter to access free and paid models from various providers
-- Includes robust directory handling and caching mechanisms for reliable operation
-- New BM25-based semantic code search integration
-
-### Fallback & Error Handling
-
-- Implements fallback mechanisms in case the paid API's data is unavailable or the local service fails
-- Includes robust logging and error handling strategies
-
-### Benchmarking System
-
-- Compares performance of local LLM models against paid API models
-- Measures response time, success rate, quality score, and token usage
-- Generates detailed reports for analysis and decision-making
-- Includes new tools for benchmarking free models and updating prompting strategies
-
-### Server Lock Mechanism
-
-- Prevents multiple instances of the server from running simultaneously
-- Automatically detects and cleans up stale lock files from crashed processes
-- Stores connection information in the lock file for better diagnostics
-- Verifies if processes in existing lock files are still running
-- Provides clear error messages when attempting to start a second instance
-
-## Tools
-
-The following tools are available in the LocalLama MCP Server:
-
-*   `route_task`: Route a coding task to either a local LLM or a paid API based on cost and complexity.
-    *   **Input:** `task`, `context_length`, `expected_output_length`, `complexity`, `priority`, `preemptive`
-*   `retriv_init`: Initialize and configure Retriv for code search and indexing.
-    *   **Input:** `directories`, `exclude_patterns`, `chunk_size`, `force_reindex`, `bm25_options`, `install_dependencies`
-*   `cancel_job`: Cancel a running job.
-    *   **Input:** `job_id`
-*   `reload_config`: Reload `.env` at runtime and apply hot-reloadable settings only.
-  *   **Input:** none
-*   `preemptive_route_task`: Quickly route a coding task without making API calls (faster but less accurate).
-    *   **Input:** `task`, `context_length`, `expected_output_length`, `complexity`, `priority`
-*   `get_cost_estimate`: Get an estimate of the cost for a task.
-    *   **Input:** `context_length`, `expected_output_length`, `model`
-*   `benchmark_task`: Benchmark the performance of local LLMs vs paid APIs for a specific task.
-    *   **Input:** `task_id`, `task`, `context_length`, `expected_output_length`, `complexity`, `local_model`, `paid_model`, `runs_per_task`
-*   `benchmark_tasks`: Benchmark the performance of local LLMs vs paid APIs for multiple tasks.
-    *   **Input:** `tasks`, `runs_per_task`, `parallel`, `max_parallel_tasks`
-
-The following tools are only available if Python and the `retriv` module are installed:
-
-*   `retriv_search`: Search code using Retriv search engine.
-    *   **Input:** `query`, `limit`
-
-The following tools are only available if the OpenRouter API key is configured:
-
-*   `get_free_models`: Get a list of free models available from OpenRouter.
-    *   **Input:** None
-*   `clear_openrouter_tracking`: Clear OpenRouter tracking data and force an update.
-    *   **Input:** None
-*   `benchmark_free_models`: Benchmark the performance of free models from OpenRouter.
-    *   **Input:** `tasks`, `runs_per_task`, `parallel`, `max_parallel_tasks`
-*   `set_model_prompting_strategy`: Update the prompting strategy for an OpenRouter model.
-     *   **Input:** `task`, `context_length`, `expected_output_length`, `priority`, `complexity`, `preemptive`
-
-## Resources
-
-The following resources are available in the LocalLama MCP Server:
-
-**Static Resources:**
-
-*   `locallama://status`: Current status of the LocalLama MCP Server.
-*   `locallama://models`: List of available local LLM models.
-*   `locallama://jobs/active`: List of currently active jobs.
-*   `locallama://memory-bank`: List of files in the memory bank directory (only available if the `memory-bank` directory exists).
-*   `locallama://openrouter/models`: List of available models from OpenRouter (only available if the OpenRouter API key is configured).
-*   `locallama://openrouter/free-models`: List of free models available from OpenRouter (only available if the OpenRouter API key is configured).
-*   `locallama://openrouter/status`: Status of the OpenRouter integration (only available if the OpenRouter API key is configured).
-
-**Resource Templates:**
-
-*   `locallama://usage/{api}`: Token usage and cost statistics for a specific API.
-*   `locallama://jobs/progress/{jobId}`: Progress information for a specific job.
-*   `locallama://openrouter/model/{modelId}`: Details about a specific OpenRouter model (only available if the OpenRouter API key is configured).
-*   `locallama://openrouter/prompting-strategy/{modelId}`: Prompting strategy for a specific OpenRouter model (only available if the OpenRouter API key is configured).
+- Node.js 22+
+- npm
+- At least one of: Ollama, LM Studio, llama.cpp server, or an OpenRouter API key
 
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/locallama-mcp.git
+git clone https://github.com/Heratiki/locallama-mcp.git
 cd locallama-mcp
-
-# Install dependencies
 npm install
-
-# Build the project
 npm run build
-
-# Install retriv dependencies (if you want to use retriv)
-pip install retriv>=0.3.1 numpy>=1.22.0 scikit-learn>=1.0.2 scipy>=1.8.0
 ```
-
-### Python Setup for Retriv (Code Search)
-
-The code search functionality uses Retriv, a Python-based semantic search library. To use this feature:
-
-1. **Install Python**: Ensure Python 3.8+ is installed on your system.
-
-2. **Create a Virtual Environment** (recommended):
-   ```bash
-   # For Linux/macOS:
-   python3 -m venv venv
-   source venv/bin/activate
-
-   # For Windows:
-   python -m venv venv
-   venv\Scripts\activate
-   ```
-
-3. **Install Retriv and dependencies**:
-   ```bash
-   pip install retriv>=0.3.1 numpy>=1.22.0 scikit-learn>=1.0.2 scipy>=1.8.0
-   ```
-
-4. **Configure the server to use your virtual environment**:
-   Add these lines to your `.env` file:
-   ```
-   # Python Configuration
-   PYTHON_PATH=./venv/bin/python  # For Linux/macOS
-   # PYTHON_PATH=./venv/Scripts/python.exe  # For Windows
-   PYTHON_DETECT_VENV=true
-   ```
-
-> **Note**: You can also let the server install Retriv automatically by using the `retriv_init` tool with `install_dependencies` set to `true`.
 
 ## Configuration
 
-Copy the `.env.example` file to create your own `.env` file:
+Copy `.env.example` to `.env` and edit with your values. The server resolves `.env` from its own root directory (or `LOCALLAMA_ROOT_DIR` when set), not from the MCP host's CWD.
 
-```bash
-cp .env.example .env
-```
-
-Then edit the `.env` file with your specific configuration:
-
-The server resolves `.env` from its own root directory (or `LOCALLAMA_ROOT_DIR` when set), not from the MCP host's current working directory.
-
-```
+```env
 # Local LLM Endpoints
 LM_STUDIO_ENDPOINT=http://localhost:1234/v1
 OLLAMA_ENDPOINT=http://localhost:11434/api
-# LLAMA_CPP_ENDPOINT=http://localhost:8080   # optional: set to enable llama-server provider
+# LLAMA_CPP_ENDPOINT=http://localhost:8080   # leave unset to disable
 
-# Configuration
+# Routing thresholds
 DEFAULT_LOCAL_MODEL=qwen2.5-coder-3b-instruct
 TOKEN_THRESHOLD=1500
 COST_THRESHOLD=0.02
 QUALITY_THRESHOLD=0.7
-PROVIDER_HEALTH_PROBE_INTERVAL_MS=60000
 
-# Code Search Configuration
+# Provider concurrency
+PROVIDER_HEALTH_PROBE_INTERVAL_MS=60000
+PROVIDER_MAX_CONCURRENT_LOCAL=1
+PROVIDER_MAX_CONCURRENT_REMOTE=5
+PROVIDER_TIMEOUT_MS=120000
+OLLAMA_TIMEOUT=120
+
+# Code search (native BM25, no Python required)
 CODE_SEARCH_ENABLED=true
 CODE_SEARCH_EXCLUDE_PATTERNS=["node_modules/**","dist/**",".git/**"]
 CODE_SEARCH_INDEX_ON_START=true
 CODE_SEARCH_REINDEX_INTERVAL=3600
 
-# Code Task Analysis Configuration
-TASK_DECOMPOSITION_ENABLED=true
-DEPENDENCY_ANALYSIS_ENABLED=true
-MAX_SUBTASKS=8
-SUBTASK_GRANULARITY=medium
-
-# Benchmark Configuration
+# Benchmarks
 BENCHMARK_RUNS_PER_TASK=3
 BENCHMARK_PARALLEL=false
 BENCHMARK_MAX_PARALLEL_TASKS=2
@@ -230,206 +62,41 @@ BENCHMARK_TASK_TIMEOUT=60000
 BENCHMARK_SAVE_RESULTS=true
 BENCHMARK_RESULTS_PATH=./benchmark-results
 
-# Server Lock Configuration
+# Lock file
 LOCK_FILE_CHECK_ACTIVE_PROCESS=true
 REMOVE_STALE_LOCK_FILES=true
 
-# API Keys (replace with your actual keys)
+# OpenRouter (optional)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_FREE_ONLY=false
 
 # Logging
 LOG_LEVEL=debug
 
-# Python Configuration
-PYTHON_PATH=./venv/bin/python  # For Linux/macOS
-# PYTHON_PATH=./venv/Scripts/python.exe  # For Windows
-PYTHON_DETECT_VENV=true
+# Operational testing
+# EXPECT_LOCAL_PROVIDER_DOWN=true
 ```
 
-### Environment Variables Explained
+### Key environment variables
 
-- **Local LLM Endpoints**
-  - `LM_STUDIO_ENDPOINT`: URL where your LM Studio instance is running
-  - `OLLAMA_ENDPOINT`: URL where your Ollama instance is running
-  - `LLAMA_CPP_ENDPOINT`: URL where your `llama-server` (llama.cpp) instance is running — leave unset to disable the provider (default: disabled). Example: `http://localhost:8080`
-  - `OLLAMA_TIMEOUT`: Per-request Ollama timeout in seconds (default `120`)
-  - `PROVIDER_TIMEOUT_MS`: Generic per-request timeout in milliseconds for providers without a specific override (default `120000`)
+| Variable | Default | Description |
+|---|---|---|
+| `LM_STUDIO_ENDPOINT` | — | LM Studio API base URL |
+| `OLLAMA_ENDPOINT` | — | Ollama API base URL |
+| `LLAMA_CPP_ENDPOINT` | — | llama-server URL; leave unset to disable provider |
+| `DEFAULT_LOCAL_MODEL` | — | Model name used when offloading to local provider |
+| `TOKEN_THRESHOLD` | `1500` | Token count above which local offload is considered |
+| `COST_THRESHOLD` | `0.02` | USD cost above which local offload is preferred |
+| `QUALITY_THRESHOLD` | `0.7` | Quality score below which paid API is always used |
+| `PROVIDER_MAX_CONCURRENT_LOCAL` | `1` | Shared local execution slot count |
+| `PROVIDER_MAX_CONCURRENT_REMOTE` | `5` | Per-remote-provider slot count |
+| `OPENROUTER_API_KEY` | — | Enables OpenRouter provider and related tools |
+| `OPENROUTER_FREE_ONLY` | `false` | Restrict OpenRouter to free-tier models only |
+| `EXPECT_LOCAL_PROVIDER_DOWN` | — | Set `true` in `test-operational.mjs` to assert no local suggestion |
 
-- **Configuration**
-  - `DEFAULT_LOCAL_MODEL`: The local LLM model to use when offloading tasks
-  - `TOKEN_THRESHOLD`: Maximum token count before considering offloading to local LLM
-  - `COST_THRESHOLD`: Cost threshold (in USD) that triggers local LLM usage
-  - `QUALITY_THRESHOLD`: Quality score below which to use paid APIs regardless of cost
-  - `PROVIDER_HEALTH_PROBE_INTERVAL_MS`: Interval in milliseconds for provider health probing (default `60000`)
-  - `PROVIDER_MAX_CONCURRENT_LOCAL`: Max concurrent requests per local provider (default `2`)
-  - `PROVIDER_MAX_CONCURRENT_REMOTE`: Max concurrent requests per remote provider (default `5`)
+## MCP Client Configuration
 
-- **Code Search Configuration**
-  - `CODE_SEARCH_ENABLED`: Enable or disable semantic code search functionality
-  - `CODE_SEARCH_EXCLUDE_PATTERNS`: Patterns to exclude from code indexing (JSON array)
-  - `CODE_SEARCH_INDEX_ON_START`: Whether to index code files when server starts
-  - `CODE_SEARCH_REINDEX_INTERVAL`: Interval in seconds between reindexing (0 to disable)
-
-- **Code Task Analysis Configuration** (New)
-  - `TASK_DECOMPOSITION_ENABLED`: Enable smart task decomposition
-  - `DEPENDENCY_ANALYSIS_ENABLED`: Enable dependency mapping and critical path analysis
-  - `MAX_SUBTASKS`: Maximum number of subtasks to create when decomposing a task
-  - `SUBTASK_GRANULARITY`: Level of detail for subtasks (fine, medium, coarse)
-
-- **API Keys**
-  - `OPENROUTER_API_KEY`: Your OpenRouter API key for accessing various LLM services
-
-- **Python Configuration** (New)
-  - `PYTHON_PATH`: Path to your Python executable (set to virtual environment Python if available)
-  - `PYTHON_VENV_PATH`: Path to your Python virtual environment 
-  - `PYTHON_DETECT_VENV`: Enable automatic detection of Python virtual environments
-
-- **New Tools**
-  - `clear_openrouter_tracking`: Clears OpenRouter tracking data and forces an update
-  - `benchmark_free_models`: Benchmarks the performance of free models from OpenRouter
-  - `analyze_code_task`: Analyzes a code task and suggests decomposition strategy
-  - `visualize_dependencies`: Creates a visual representation of task dependencies
-  - `retriv_init`: Initializes and configures Retriv for code search and indexing
-  - `cancel_job`: Cancels a running job to prevent runaway costs
-  - Enhanced `route_task`: Implements a structured workflow with user preferences, cost confirmation, Retriv search, and job tracking
-
-- **Server Lock Configuration** (New)
-  - `LOCK_FILE_CHECK_ACTIVE_PROCESS`: Verify if processes in lock files are still running
-  - `REMOVE_STALE_LOCK_FILES`: Automatically clean up stale lock files from crashed processes
-
-- **Operational Testing Flags**
-  - `EXPECT_LOCAL_PROVIDER_DOWN`: Optional flag for `test-operational.mjs` routing suite. When `true`, the preemptive routing test asserts that no local model is suggested.
-
-### Environment Variables for MCP Clients
-
-When integrating with Codex, Claude Code, Claw Code, Cursor, GitHub Copilot Agent mode, or another MCP-capable client, pass these environment variables through that client's MCP server configuration:
-
-- For **simple configuration**: Use the basic env variables in your MCP setup
-- For **advanced routing**: Configure thresholds to fine-tune when local vs. cloud models are used
-- For **model selection**: Specify which local models should handle different types of requests
-- For **task decomposition**: Configure how complex tasks are broken down and processed
-
-## Usage
-
-### Starting the Server
-
-```bash
-npm start
-```
-
-The server uses a lock file mechanism to prevent multiple instances from running simultaneously. If you try to start the server when another instance is already running, you'll see a message with information about the existing instance and the process will exit.
-
-If a previous server process crashed without properly cleaning up, the enhanced lock file mechanism will automatically detect and remove the stale lock file, allowing a new server instance to start correctly.
-
-### OpenRouter Integration
-
-The server integrates with OpenRouter to access a variety of free and paid models from different providers. Key features include:
-
-- **Free Models Access**: Automatically retrieves and tracks free models available from OpenRouter
-- **Model Tracking**: Maintains a local cache of available models to reduce API calls
-- **Force Update Tool**: Includes a `clear_openrouter_tracking` tool to force a fresh update of models
-- **Improved Reliability**: Features robust directory handling and enhanced error logging
-
-To use the OpenRouter integration:
-
-1. Set your `OPENROUTER_API_KEY` in the environment variables
-2. The server will automatically retrieve available models on startup
-3. If you encounter issues with free models not appearing, you can use the `clear_openrouter_tracking` tool through the MCP interface
-
-Current OpenRouter integration provides access to approximately 240 models, including 30+ free models from providers like Google, Meta, Mistral, and Microsoft.
-
-### llama.cpp Integration
-
-The server supports [llama-server](https://github.com/ggml-org/llama.cpp/tree/master/examples/server) (the HTTP server shipped with llama.cpp) as a local provider alongside Ollama and LM Studio.
-
-**Runtime modes detected automatically:**
-
-- **single-model** — `llama-server` loaded with one model (`-m model.gguf`). `GET /v1/models` returns one entry.
-- **router** — `llama-server` loaded with multiple models. `GET /v1/models` returns more than one entry.
-
-The detected mode is stored in provider capabilities after init and is visible in server logs.
-
-**To enable:**
-
-1. Start `llama-server` pointing at one or more GGUF models:
-   ```bash
-   # single-model
-   llama-server -m /path/to/model.gguf --port 8080
-
-   # router mode (multiple models)
-   llama-server --model /path/to/model1.gguf --model /path/to/model2.gguf --port 8080
-   ```
-2. Set `LLAMA_CPP_ENDPOINT` in your `.env` or MCP client `env` block:
-   ```
-   LLAMA_CPP_ENDPOINT=http://localhost:8080
-   ```
-3. Restart the MCP server. `llama-cpp` will appear in `locallama://models` and be eligible for routing and benchmarking.
-
-**Notes:**
-
-- If `LLAMA_CPP_ENDPOINT` is unset or the server is unreachable at startup, the provider initialises silently and reports as unavailable — other providers are unaffected.
-- Task execution uses the OpenAI-compatible `POST /v1/chat/completions` endpoint.
-- Model unloading (`releaseResources`) is a documented no-op: `llama-server` has no stable public unload API. Models remain resident until the server process is stopped.
-- No subprocess lifecycle management is performed — the MCP server does not start or stop `llama-server`.
-
-### Code Task Analysis
-
-The new task analysis system intelligently decomposes complex coding tasks for optimal processing:
-
-- **Task Decomposition**: Breaks down complex tasks into manageable subtasks
-- **Dependency Mapping**: Identifies relationships between code components
-- **Complexity Analysis**: Assesses algorithmic, integration, domain knowledge, and technical requirements
-- **Critical Path Analysis**: Identifies bottlenecks and optimization opportunities
-- **Execution Order Optimization**: Arranges tasks for optimal parallel execution
-
-Example of code task analysis usage through the MCP interface:
-
-```
-/use_mcp_tool locallama analyze_code_task {"task": "Create a React component that fetches data from an API and displays it in a paginated table with sorting capabilities"}
-```
-
-This will return a structured analysis including:
-
-- Subtasks with their dependencies
-- Complexity assessment
-- Recommended execution order
-- Critical path identification
-- Suggested optimizations
-
-### User Preferences and Job Tracking
-
-The server now includes user preferences and job tracking features:
-
-#### User Preferences
-
-User preferences are stored in a `user-preferences.json` file and include:
-
-- **Execution Mode**: Control how tasks are routed:
-  - `Fully automated selection`: Let the decision engine choose the best option
-  - `Local model only`: Always use local models
-  - `Free API only`: Prefer free API models when available
-  - `Paid API only`: Always use paid API models
-
-- **Cost Confirmation Threshold**: Set a threshold for when to ask for confirmation before using paid APIs
-- **Retriv Search Priority**: Enable or disable prioritizing Retriv search for existing code solutions
-- **Default Directories**: Configure default directories for Retriv indexing
-- **Exclude Patterns**: Specify patterns to exclude from Retriv indexing
-
-#### Job Tracking
-
-The server now provides job tracking resources:
-
-- **Active Jobs**: View all currently active jobs via `locallama://jobs/active`
-- **Job Progress**: Track the progress of a specific job via `locallama://jobs/progress/{jobId}`
-- **Job Cancellation**: Cancel a running job using the `cancel_job` tool
-
-When live monitoring is enabled, task-executing MCP tools also attach a `monitoring` object to the tool result. The URL values in that object are `scope: server-local`: they are generated from the machine running the MCP server, not from the machine running your MCP client. In local setups those are usually the same machine. In SSH, container, Codespaces, or WSL setups, you may need to forward ports before the `websocketUrl` or dashboard URL is reachable from your client.
-
-### Using with Modern MCP Clients
-
-Build the server, then configure your MCP client to launch `node dist/index.js` with the environment variables relevant to your local setup.
-
-Generic stdio MCP configuration:
+Build the server, then point your MCP client at `node dist/index.js`:
 
 ```json
 {
@@ -440,67 +107,58 @@ Generic stdio MCP configuration:
       "env": {
         "LM_STUDIO_ENDPOINT": "http://localhost:1234/v1",
         "OLLAMA_ENDPOINT": "http://localhost:11434/api",
-        "LLAMA_CPP_ENDPOINT": "http://localhost:8080",
         "DEFAULT_LOCAL_MODEL": "qwen2.5-coder-3b-instruct",
         "TOKEN_THRESHOLD": "1500",
         "COST_THRESHOLD": "0.02",
         "QUALITY_THRESHOLD": "0.07",
-        "TASK_DECOMPOSITION_ENABLED": "true",
-        "DEPENDENCY_ANALYSIS_ENABLED": "true",
         "OPENROUTER_API_KEY": "your_openrouter_api_key_here"
-      },
-      "disabled": false
+      }
     }
   }
 }
 ```
 
-Claude Code project-scoped configuration can use the same server shape in `.mcp.json`. Codex users should add this server through Codex MCP configuration or the Codex CLI, using the same command, args, and environment values.
+Claude Code users can place this in `.mcp.json` (project-scoped) or `~/.claude/settings.json` (global).
 
-Once configured, the MCP client can discover and use tools such as:
+## Tools
 
-- `get_free_models`: Retrieve the list of free models from OpenRouter
-- `clear_openrouter_tracking`: Force a fresh update of OpenRouter models if you encounter issues
-- `benchmark_free_models`: Benchmark the performance of free models from OpenRouter
-- `analyze_code_task`: Analyze a complex coding task and get a decomposition plan
-- `visualize_dependencies`: Generate a visual representation of task dependencies
-- `retriv_init`: Initialize and configure Retriv for code search and indexing
-- `cancel_job`: Cancel a running job to prevent runaway costs
+### Core tools (always available)
 
-Example tool call:
+| Tool | Inputs | Description |
+|---|---|---|
+| `route_task` | `task`, `context_length`, `expected_output_length?`, `complexity?`, `priority?`, `preemptive?` | Queue a task asynchronously. Returns `task_id` immediately. Poll `get_task_status` for results. |
+| `get_task_status` | `task_id` | Poll a non-blocking `route_task` submission. Returns status, progress, and inline result when complete. |
+| `cancel_task` | `task_id` | Cancel all queued or in-progress jobs for a task. |
+| `cancel_job` | `job_id` | Cancel a single background job. |
+| `preemptive_route_task` | `task`, `context_length`, `expected_output_length?`, `complexity?`, `priority?` | Heuristic routing check with no LLM calls. Returns model/provider recommendation without executing the task. |
+| `get_cost_estimate` | `context_length`, `expected_output_length?`, `model?` | Estimate USD cost before calling `route_task`. Local and free-tier models return 0. |
+| `benchmark_task` | `task_id`, `task`, `context_length`, `expected_output_length?`, `complexity?`, `local_model?`, `paid_model?`, `runs_per_task?` | Benchmark one task across local vs paid models. |
+| `benchmark_tasks` | `tasks[]`, `runs_per_task?`, `parallel?`, `max_parallel_tasks?` | Benchmark multiple tasks in one call. |
+| `benchmark_model` | `model_id`, `provider_id?`, `task_categories?` | Run built-in benchmark suites against a specific model. Persists results to `benchmarks.db` and updates ModelRegistry capability scores. |
+| `retriv_init` | `directories[]`, `exclude_patterns?`, `chunk_size?`, `force_reindex?`, `bm25_options?` | Index code with the native BM25 engine (no Python required). |
+| `retriv_search` | `query`, `limit?` | Search indexed code using native BM25. |
+| `reload_config` | — | Reload `.env` at runtime. Atomic: invalid config is rejected. |
+| `check_for_updates` | — | Check whether the server is up to date with the latest GitHub commit. |
+| `update_server` | — | Pull latest changes from GitHub, run `npm install` and `npm run build`. Restart the server manually after. |
+
+### OpenRouter tools (require `OPENROUTER_API_KEY`)
+
+| Tool | Inputs | Description |
+|---|---|---|
+| `get_free_models` | — | List free models available from OpenRouter. |
+| `clear_openrouter_tracking` | — | Clear cached model list and force a fresh fetch. |
+| `benchmark_free_models` | `tasks[]`, `runs_per_task?`, `parallel?`, `max_parallel_tasks?` | Benchmark free OpenRouter models. Results written to `benchmarks.db`. |
+| `set_model_prompting_strategy` | `model_id`, `system_prompt`, `user_prompt`, `use_chat`, `assistant_prompt?`, `success_rate?`, `quality_score?` | Set a custom prompting strategy for an OpenRouter model. |
+
+### Async task flow
 
 ```
-/use_mcp_tool locallama clear_openrouter_tracking {}
+route_task → { task_id }
+                ↓ poll
+get_task_status → { status: "pending" | "in_progress" | "completed" | "failed", result? }
 ```
 
-This will clear the tracking data and force a fresh update of the models, which is useful if you're not seeing any free models or if you want to ensure you have the latest model information.
-
-### Enhanced Route Task Workflow
-
-The `route_task` tool now follows a structured workflow:
-
-1. **Load User Preferences**: Loads stored user preferences from the configuration file
-2. **Cost Estimation**: Assesses execution costs and prompts for confirmation if the cost exceeds the threshold
-3. **Task Breakdown Analysis**: Determines if task segmentation is necessary
-4. **Retriv Search**: Checks Retriv for existing code solutions before generating anything new
-5. **Decision Engine Routing**: Determines the most cost-efficient way to execute the task
-6. **Job Creation**: Creates a new job and logs it in `locallama://jobs/active`
-7. **Progress Tracking**: Uses `locallama://jobs/progress/{jobId}` to track job progress
-8. **Result Storage**: Stores the result in Retriv for future reuse
-
-Example usage:
-
-```
-/use_mcp_tool locallama route_task {
-  "task": "Create a function to calculate the Fibonacci sequence",
-  "context_length": 1000,
-  "expected_output_length": 500,
-  "complexity": 0.3,
-  "priority": "cost"
-}
-```
-
-When local providers are under benchmark load, `route_task` may include optional contention metadata:
+When local providers are contended by benchmark workloads, `route_task` surfaces contention metadata:
 
 ```json
 {
@@ -511,56 +169,86 @@ When local providers are under benchmark load, `route_task` may include optional
     "local_slot_contended": true,
     "active_benchmark_runs": 1,
     "queued_benchmark_runs": 2,
-    "message": "Local execution slot currently contended by benchmark workloads. Task remains queued until local slot is free."
+    "message": "Local execution slot currently contended by benchmark workloads."
   }
 }
 ```
 
-This field is omitted when no benchmark workload is occupying the local execution queue.
+## Resources
 
-### "Retriv First" Strategy
+### Static resources
 
-The server now implements a "Retriv First" strategy to prioritize existing code:
+| URI | Description |
+|---|---|
+| `locallama://status` | Server status |
+| `locallama://models` | Available local models |
+| `locallama://jobs/active` | Currently active jobs |
+| `locallama://memory-bank` | Memory bank file list (if directory exists) |
+| `locallama://openrouter/models` | All OpenRouter models (requires API key) |
+| `locallama://openrouter/free-models` | Free OpenRouter models (requires API key) |
+| `locallama://openrouter/status` | OpenRouter integration status (requires API key) |
 
-1. **Set up Python environment**: Follow the Python setup instructions above
-2. **Code Indexing**: Use `retriv_init` to index your code repositories
-3. **Semantic Search**: When a task is submitted, Retriv searches for similar code
-4. **Code Reuse**: If similar code is found, it's returned immediately without generating new code
-5. **Fallback**: If no suitable code is found, the task is routed to the appropriate model
+### Resource templates
 
-Example usage:
+| URI template | Description |
+|---|---|
+| `locallama://usage/{api}` | Token usage and costs for a specific API (e.g. `openrouter`) |
+| `locallama://jobs/progress/{jobId}` | Progress for a specific job |
+| `locallama://openrouter/model/{modelId}` | Details for an OpenRouter model (requires API key) |
+| `locallama://openrouter/prompting-strategy/{modelId}` | Prompting strategy for an OpenRouter model (requires API key) |
 
+## Usage
+
+### Starting the server
+
+```bash
+npm start
 ```
-/use_mcp_tool locallama retriv_init {
-  "directories": ["/path/to/your/code/repo"],
-  "exclude_patterns": ["node_modules/**", "dist/**"],
-  "install_dependencies": true,
-  "force_reindex": true
-}
+
+A lock file prevents multiple instances. Stale locks from crashed processes are detected and cleaned up automatically.
+
+### Running benchmarks
+
+```bash
+npm run benchmark
+npm run benchmark:comprehensive
 ```
 
-### Understanding Usage
+Results are stored in `benchmark-results/` as JSON and Markdown summaries.
 
-The MCP server provides several ways to monitor and understand its usage:
+### Dashboard
 
-*   **API Usage & Costs**: Track token usage and estimated costs for different APIs (like OpenRouter) using the `locallama://usage/{api}` resource. Replace `{api}` with the name of the API (e.g., `openrouter`). This information is gathered by the Cost Monitoring module.
-*   **Job Tracking**: Monitor the status and progress of tasks submitted to the server:
-    *   `locallama://jobs/active`: Lists all currently running jobs.
-    *   `locallama://jobs/progress/{jobId}`: Shows the detailed progress percentage and status for a specific job ID.
-*   **Model Execution Logs**: The server logs (`locallama.log` by default) contain detailed information about which models are being used for specific tasks, including decisions made by the Decision Engine.
-*   **Advanced Local Model Features (LM Studio & Ollama)**:
-    *   **Automatic Prompt Strategy Improvement**: The `lmStudioModule` (and potentially `ollamaModule` if implemented similarly) can automatically benchmark different prompting strategies for models over time. If a better strategy is found based on quality heuristics, it will be saved and used for future requests. This process happens periodically based on configuration (e.g., `promptImprovementConfig` in `lm-studio/index.ts`). Check the logs for messages indicating strategy updates.
-    *   **Speculative Inference/Decoding**: The `lmStudioModule`'s `callWithSpeculativeInference` function (and potentially Ollama's equivalent) attempts to speed up responses by generating a few tokens speculatively and then validating them. This is controlled by configuration (e.g., `speculativeInferenceConfig` in `lm-studio/index.ts`) and requires model support. Logs will indicate when speculative inference is attempted, accepted, or rejected, and may show statistics on tokens generated/accepted.
-    *   **Configuration**: While not directly controlled via tools/resources, the behavior of these features (enabled status, thresholds, cooldowns) is managed within the respective module files (`lm-studio/index.ts`, `ollama/index.ts`) and their associated configuration objects (like `DEFAULT_PROMPT_IMPROVEMENT_CONFIG`, `DEFAULT_SPECULATIVE_INFERENCE_CONFIG`).
-*   **Speculative Inference Statistics**: When speculative inference is enabled for LM Studio or Ollama models, the logs may also contain statistics about the number of tokens generated, accepted, and potential time saved.
-*   **Resource Status**: Check the general status of the server and integrations:
-    *   `locallama://status`: General server status.
-    *   `locallama://models`: List of detected local models (LM Studio, Ollama).
-    *   `locallama://openrouter/status`: Status of the OpenRouter integration.
+When the server is running, a web dashboard is available at `http://localhost:3001` (server-local).
 
-#### Monitoring Metadata Example
+Features:
+- Real-time job queue with status, provider/model, and queue position
+- Task monitoring with per-job details and ETA
+- Manual `route_task` submission form
+- Task and job cancellation
+- Benchmark history
 
-When the JobTracker WebSocket server is running, task-executing tools can include monitoring metadata like this:
+REST API endpoints:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/queue` | Queue summary and jobs. Filters: `status`, `provider`, `model`, `task_id`, `q`, `page`, `page_size` |
+| `GET` | `/api/tasks` | Recent tasks. Filters: `status`, `provider`, `model`, `q`, `page`, `page_size` |
+| `GET` | `/api/tasks/:taskId` | Detailed task status |
+| `POST` | `/api/tasks` | Submit a task (`route_task`) |
+| `POST` | `/api/tasks/:taskId/cancel` | Cancel a task |
+| `POST` | `/api/jobs/:jobId/cancel` | Cancel a job |
+
+Example submission:
+
+```bash
+curl -X POST http://localhost:3001/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Refactor parser for readability", "context_length": 4096, "complexity": 0.6, "priority": "quality"}'
+```
+
+### Live monitoring metadata
+
+When the JobTracker WebSocket server is running, task-executing tools include:
 
 ```json
 {
@@ -569,227 +257,152 @@ When the JobTracker WebSocket server is running, task-executing tools can includ
     "websocketUrl": "ws://127.0.0.1:8081",
     "activeJobsUri": "locallama://jobs/active",
     "jobProgressUriTemplate": "locallama://jobs/progress/{jobId}",
-    "note": "Connect to websocketUrl for live job updates, or read activeJobsUri / jobProgressUriTemplate through MCP resources."
+    "note": "Connect to websocketUrl for live updates, or use MCP resources."
   }
 }
 ```
 
-Interpret the fields as follows:
+`websocketUrl` is `scope: server-local` — in SSH/container/Codespaces/WSL setups, forward the port before connecting.
 
-- `monitoring.websocketUrl`: `scope: server-local`. This is the WebSocket side channel as seen from the MCP server host. A remote client may need port forwarding before it can connect.
-- `monitoring.activeJobsUri`: MCP resource URI for the currently active job list. This is transport-stable and does not depend on HTTP/WebSocket reachability.
-- `monitoring.jobProgressUriTemplate`: MCP resource URI template for per-job progress. Replace `{jobId}` with the returned job ID.
-- `monitoring.note`: Human-readable reminder to use either the WebSocket side channel or the MCP resources.
+### `_server_reminder` ambient metadata
 
-#### Server Reminder Metadata Example
-
-The server can attach a `_server_reminder` ambient metadata field to any tool response (both success and handled-error paths). This field surfaces low-frequency, non-critical information to the user or agent.
+Tools attach a `_server_reminder` field at most once every 30 minutes to surface monitoring info:
 
 ```json
 {
-  "result": { "...": "..." },
   "_server_reminder": {
     "schemaVersion": 1,
     "kind": "monitoring-reminder",
     "status": "reachable",
     "scope": "server-local",
-    "message": "Optional monitoring is available from the MCP server host. If you are working remotely, use server-local port forwarding before opening monitoring URLs.",
+    "message": "Optional monitoring available from MCP server host.",
     "monitoringUrl": "http://127.0.0.1:3001",
     "lastCheckedAt": 1747699200000
   }
 }
 ```
 
-- `_server_reminder`: The top-level field name for the ambient metadata.
-- `schemaVersion`: Currently `1`.
-- `kind`: Currently `monitoring-reminder`.
-- `status`: The reachability of the monitoring dashboard URL. One of `reachable`, `unreachable`, or `unknown`.
-- `scope`: Always `server-local`, indicating the `monitoringUrl` is resolved from the server's host.
-- `message`: A human-readable explanation of the reminder.
-- `monitoringUrl`: The URL for the web dashboard. Only present when `status` is `reachable`.
-- `lastCheckedAt`: A Unix millisecond timestamp of when the reachability probe last ran.
+### Remote access
 
-**Behavior:**
-
-- **Cadence**: The reminder is emitted at most once every 30 minutes per server process instance. An atomic, in-memory gate prevents spamming. The cadence timer resets on server restart.
-- **Delivery**: The reminder is attached to both successful and handled-error tool responses when it is due. It is not guaranteed to be delivered if the server crashes or the transport connection fails fatally.
-- **Non-blocking**: The reachability probe for the dashboard URL is non-blocking and uses a cached status. A tool call will not be delayed waiting for a probe to complete.
-- **Remote Access**: As with the `monitoring.websocketUrl`, the `monitoringUrl` is `scope: server-local`. Clients on different machines (SSH, containers, Codespaces, WSL) may need to forward the port (default `3001`) before the URL is accessible.
-
-#### Remote Access Troubleshooting
-
-If your MCP client is not running on the same machine as the server, use one of these patterns:
-
-- SSH host: forward the server-local WebSocket port, and optionally the dashboard port, to your local machine.
+If your MCP client is not on the same machine as the server:
 
 ```bash
-ssh -L 8081:127.0.0.1:8081 -L 3001:127.0.0.1:3001 your-user@your-server
+# SSH
+ssh -L 8081:127.0.0.1:8081 -L 3001:127.0.0.1:3001 user@host
 ```
 
-- Dev Containers or Codespaces: forward port `8081` for live job updates and optionally port `3001` for the dashboard. Use the VS Code Ports view or your Codespaces port-forwarding workflow.
-- WSL: if the MCP client runs inside the same WSL distro as the server, use the returned `websocketUrl` directly. If the client runs on Windows while the server runs in WSL, forward port `8081` and optionally `3001` through VS Code or another local tunnel before connecting.
-- Containerized server: treat `127.0.0.1` as container-local. Publish or forward the WebSocket port from the container namespace before trying to connect from outside the container.
+- Dev Containers / Codespaces: forward ports 8081 (WebSocket) and 3001 (dashboard) via the VS Code Ports view.
+- WSL client + WSL server: use the WebSocket URL directly. Windows client + WSL server: forward port 8081 via VS Code or a local tunnel.
 
-The WebSocket side channel is optional. You can always fall back to `locallama://jobs/active` and `locallama://jobs/progress/{jobId}` through MCP resources even when no forwarded WebSocket path is available.
+## Provider integrations
 
-By utilizing these resources and checking the logs, users and LLMs interacting with the server can gain insights into its operation, costs, and performance, including the advanced optimizations happening within the local model modules.
+### Ollama
 
-### Running Benchmarks
+Set `OLLAMA_ENDPOINT` in `.env`. The server probes for available models on startup.
 
-The project includes a comprehensive benchmarking system to compare local LLM models against paid API models:
+### LM Studio
+
+Set `LM_STUDIO_ENDPOINT` in `.env`. Exposes an OpenAI-compatible API.
+
+### llama.cpp (`llama-server`)
 
 ```bash
-# Run a simple benchmark
-npm run benchmark
+# Single model
+llama-server -m /path/to/model.gguf --port 8080
 
-# Run a comprehensive benchmark across multiple models
-npm run benchmark:comprehensive
+# Router mode (multiple models)
+llama-server --model /path/model1.gguf --model /path/model2.gguf --port 8080
 ```
 
-Benchmark results are stored in the `benchmark-results` directory and include:
+Set `LLAMA_CPP_ENDPOINT=http://localhost:8080` in `.env`. If the endpoint is unset or unreachable, the provider initialises silently — other providers are unaffected. The server does not manage the `llama-server` process lifecycle.
 
-- Individual task performance metrics in JSON format
-- Summary reports in JSON and Markdown formats
-- Comprehensive analysis of model performance
+### OpenRouter
 
-### Dashboard (Job Queue + Tasks + Benchmarks)
+Set `OPENROUTER_API_KEY`. The server fetches ~240 available models on startup (30+ free). Use `clear_openrouter_tracking` to force a refresh. Set `OPENROUTER_FREE_ONLY=true` to restrict to free-tier models.
 
-When the server is running, a dashboard is available at:
+## Code search
 
-`http://localhost:3001`
+Code search uses a native TypeScript BM25 engine — no Python or external dependencies required.
 
-This dashboard is optional. It consumes the same server-local monitoring surfaces as the WebSocket side channel, but the MCP resources remain the primary transport-neutral monitoring path. In remote setups, treat `http://localhost:3001` as `scope: server-local` and forward port `3001` if you want to open it from another machine.
-
-The dashboard provides:
-
-- Real-time Job Queue visibility (status, provider/model, progress)
-- Task monitoring with aggregate status and per-job details
-- Manual `route_task` submission form for testing without an MCP client
-- Task and job cancellation actions
-- Benchmark history table with quick capability flags
-
-The UI consumes the existing WebSocket side channel and these Express endpoints:
-
-- `GET /api/queue` - queue summary and jobs
-- `GET /api/tasks` - recent tasks with aggregate status
-- `GET /api/tasks/:taskId` - detailed task status
-- `POST /api/tasks` - submit a task (`route_task`)
-- `POST /api/tasks/:taskId/cancel` - cancel a task
-- `POST /api/jobs/:jobId/cancel` - cancel a job
-
-`GET /api/queue` supports optional filters and pagination:
-
-- `status` (comma-separated)
-- `provider`
-- `model`
-- `task_id`
-- `q` (free-text search)
-- `page` (default `1`)
-- `page_size` (default `20`)
-
-`GET /api/tasks` supports optional filters and pagination:
-
-- `status` (comma-separated)
-- `provider`
-- `model`
-- `q` (free-text search)
-- `page` (default `1`)
-- `page_size` (default `20`)
-
-Dashboard responses now include queue/ETA metadata:
-
-- Job rows include `queue_position`, `eta_ms`, and `eta`
-- Task rows include `queue_position_min`, `queue_position_max`, `eta_ms`, and `eta`
-
-Example manual task submission:
-
-```bash
-curl -X POST http://localhost:3001/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "task": "Refactor parser for readability and add tests",
-    "context_length": 4096,
-    "expected_output_length": 768,
-    "complexity": 0.6,
-    "priority": "quality"
-  }'
 ```
-
-## Benchmark Results
-
-The repository includes benchmark results that provide valuable insights into the performance of different models. These results:
-
-1. Do not contain any sensitive API keys or personal information
-2. Provide performance metrics that help inform the decision engine
-3. Include response times, success rates, quality scores, and token usage statistics
-4. Are useful for anyone who wants to understand the trade-offs between local LLMs and paid APIs
+# Via MCP tool
+retriv_init { "directories": ["/path/to/repo"], "force_reindex": true }
+retriv_search { "query": "pagination logic" }
+```
 
 ## Development
 
-### Running in Development Mode
-
 ```bash
-npm run dev
+npm run build        # compile TypeScript + copy assets
+npm start            # run compiled server
+npm run dev          # TypeScript watch mode
+npm test             # build + run Jest (23 suites, 186 tests)
+npm run lint         # ESLint (note: eslint-plugin-import not installed — lint currently fails)
+npm run lint:fix     # ESLint with auto-fix
 ```
 
-### Running Tests
+All test files mock server state to prevent multiple real instances during test runs.
 
-```bash
-npm test
+## Architecture
+
+```
+src/
+  index.ts                        entry point, lock file, MCP lifecycle
+  modules/
+    api-integration/              tool definitions, resources, routing adapters
+    decision-engine/              task analysis, model selection, coordination
+    cost-monitor/                 token accounting, cost estimation
+    benchmark/                    execution, scoring, summaries, DB storage
+    lm-studio/                    LM Studio provider
+    ollama/                       Ollama provider
+    llama-cpp/                    llama-server provider
+    openrouter/                   OpenRouter provider
+    core/provider/                shared provider registry and execution queue
+    updater/                      self-update logic (check_for_updates, update_server)
+    job-store/                    persistent Task/Job store
+    websocket-server/             live monitoring side channel
 ```
 
-All test files in the `/test` directory use proper mocking to prevent multiple actual server instances from starting during test runs. If you create custom test scripts, make sure they properly clean up server processes and remove lock files when done.
+Decision engine uses two model data stores:
+- `ModelRegistry` + `CapabilityDetector`: benchmark-derived capability scores (authoritative for full routing)
+- `modelsDbService`: heuristic performance data seeded from ModelRegistry at startup; used by `preemptiveRouting()`
+
+## Project docs
+
+| File | Purpose |
+|---|---|
+| `docs/AGENTS.md` | Shared operating guide for all coding agents |
+| `docs/PROJECT_STATE.md` | Current snapshot of completed and in-progress work |
+| `docs/ROADMAP.md` | Long-form modernization backdrop |
+| `docs/ROADMAP_ACTIVE.md` | Active roadmap tasks |
+| `docs/PLAN.md` | Branch implementation plan |
+| `docs/OPERATIONAL_TEST_PLAN.md` | Live test record and verified behavior |
+| `docs/LIVE_TESTING.md` | Real-world MCP test results and known open bugs |
+| `docs/audits/ARCHITECTURAL_TRUTHS.md` | Core design principles and constraints |
+| `docs/history/memory-bank/` | Historical append-only project memory |
 
 ## Troubleshooting
 
-### Server Won't Start Due to Lock File
+**Server won't start — lock file detected**
 
-If the server won't start because it detects another instance is already running:
+1. Check if another instance is running (`ps aux | grep locallama`).
+2. Stale locks from crashes are cleaned up automatically (`REMOVE_STALE_LOCK_FILES=true`).
+3. If needed, manually remove `locallama.lock` from the project root.
 
-1. Check if there's actually another instance running using `ps` or Task Manager
-2. If no other instance is running, the lock file might be stale due to a previous crash
-3. The enhanced lock mechanism should automatically detect and remove stale lock files
-4. If needed, you can manually remove the `locallama.lock` file from the project root
+**OpenRouter models not appearing**
 
-## Security Notes
+Use `clear_openrouter_tracking` through the MCP interface to force a fresh fetch.
 
-- The `.gitignore` file is configured to prevent sensitive data from being committed to the repository
-- API keys and other secrets should be stored in your `.env` file, which is excluded from version control
-- Benchmark results included in the repository do not contain sensitive information
+**`npm run lint` fails**
+
+`eslint-plugin-import` is referenced in the config but not installed. Known issue. Build and tests are unaffected.
+
+## Security notes
+
+- API keys belong in `.env`, which is excluded from version control.
+- All log output goes to `stderr`; `stdout` is reserved for MCP JSON-RPC. Never write non-JSON to stdout.
+- Treat MCP tools as model-controlled surfaces. Avoid mutations without user approval.
 
 ## License
 
 ISC
-
-## Phases
-
-### Phase 1: Code Task Analysis
-- Status: Completed
-- Completion: 100%
-- Features: Task decomposition, complexity analysis, dependency mapping, token estimation
-
-### Phase 2: Token Optimization
-- Status: Completed
-- Completion: 100%
-- Features: Pattern-based caching, similarity matching, cache invalidation, reuse optimization
-
-### Phase 3: Model Selection Enhancement
-- Status: Completed
-- Completion: 100%
-- Features: Dynamic model scoring, performance history tracking, resource optimization
-
-### Phase 4: Code Quality Integration
-- Status: Completed
-- Completion: 100%
-- Features: Code validation, quality evaluation, task-specific analysis, model-based assessment
-
-### Phase 5: Performance Optimization
-- Status: Completed
-- Completion: 100%
-- Features: Cache optimization, retrieval efficiency, resource usage optimization
-
-### Phase 6: New Module Integration
-- Status: In Progress
-- Completion: 60%
-- Features: Module system architecture, component framework, extensibility improvements, user preferences, job tracking, Retriv integration
-- Current Focus: Implementing "Retriv First" strategy and job management system
