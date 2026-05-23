@@ -399,6 +399,7 @@ Output only the code required for this subtask. Do not include explanations unle
             }
             return await provider.executeTask(bareId, prompt, { timeoutMs: timeout });
           },
+          { workload: 'task' },
         );
         resultText = execResult.content;
         logger.info(`Successfully executed subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
@@ -424,6 +425,7 @@ Output only the code required for this subtask. Do not include explanations unle
                 }
                 return await p.executeTask(bareId, prompt, { timeoutMs: timeout });
               },
+              { workload: 'task' },
             );
             resultText = execResult.content;
             found = true;

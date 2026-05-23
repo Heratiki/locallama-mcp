@@ -375,6 +375,17 @@ export class Router implements IRouter {
 
     // Compute position at read time after insert so concurrent submissions get distinct values.
     const queuePosition = (await getQueuePositionForJob(taskId)) ?? 1;
+    const localQueueStats = isProviderLocal(providerId)
+      ? getProviderRegistry().getLocalExecutionQueueStats()
+      : null;
+    const benchmarkContention = localQueueStats && (localQueueStats.activeBenchmarks > 0 || localQueueStats.queuedBenchmarks > 0)
+      ? {
+          local_slot_contended: true,
+          active_benchmark_runs: localQueueStats.activeBenchmarks,
+          queued_benchmark_runs: localQueueStats.queuedBenchmarks,
+          message: 'Local execution slot currently contended by benchmark workloads. Task remains queued until local slot is free.',
+        }
+      : undefined;
 
     void this.runQueuedRouteTask(taskId, providerId, params);
 
@@ -386,6 +397,7 @@ export class Router implements IRouter {
       poll_again_after_ms: 5_000,
       provider: providerId,
       model: decision.model,
+      benchmark_contention: benchmarkContention,
     };
   }
 

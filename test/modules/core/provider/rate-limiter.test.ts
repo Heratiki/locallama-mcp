@@ -88,4 +88,52 @@ describe('ProviderRateLimiter', () => {
     expect([local, remote]).toEqual(['ollama', 'openrouter']);
     expect(observedOverlap).toBe(true);
   });
+
+  it('prioritizes task work ahead of queued benchmark work on local tier', async () => {
+    const limiter = new ProviderRateLimiter({
+      maxConcurrentLocal: 1,
+      maxConcurrentRemote: 1,
+    });
+
+    const events: string[] = [];
+    let releaseFirst: (() => void) | undefined;
+
+    const firstTask = limiter.schedule('ollama', 'local', async () => {
+      events.push('task-1:start');
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      events.push('task-1:end');
+      return 'task-1';
+    }, { workload: 'task' });
+
+    const benchmark = limiter.schedule('ollama', 'local', async () => {
+      events.push('benchmark:start');
+      events.push('benchmark:end');
+      return 'benchmark';
+    }, { workload: 'benchmark', priority: 'background' });
+
+    const secondTask = limiter.schedule('ollama', 'local', async () => {
+      events.push('task-2:start');
+      events.push('task-2:end');
+      return 'task-2';
+    }, { workload: 'task' });
+
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(events).toEqual(['task-1:start']);
+
+    releaseFirst?.();
+    const results = await Promise.all([firstTask, benchmark, secondTask]);
+
+    expect(results).toEqual(['task-1', 'benchmark', 'task-2']);
+    expect(events).toEqual([
+      'task-1:start',
+      'task-1:end',
+      'task-2:start',
+      'task-2:end',
+      'benchmark:start',
+      'benchmark:end',
+    ]);
+  });
 });

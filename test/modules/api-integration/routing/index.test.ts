@@ -126,6 +126,12 @@ const mockRegistry = {
   list: jest.fn(() => [mockOpenRouterProvider]),
   has: jest.fn((providerId: string) => providerId === 'openrouter' || providerId === 'ollama' || providerId === 'lm-studio'),
   isAvailable: jest.fn((providerId: string) => providerId !== 'ollama' && providerId !== 'lm-studio'),
+  getLocalExecutionQueueStats: jest.fn(() => ({
+    activeCount: 0,
+    queuedCount: 0,
+    activeBenchmarks: 0,
+    queuedBenchmarks: 0,
+  })),
   listByCostClass: jest.fn((costClass: string) => {
     if (costClass === 'local') {
       return [{ id: 'ollama' }, { id: 'lm-studio' }];
@@ -156,6 +162,12 @@ describe('api-integration routing', () => {
     mockRegistry.list.mockReturnValue([mockOpenRouterProvider]);
     mockRegistry.has.mockImplementation((providerId: string) => providerId === 'openrouter' || providerId === 'ollama' || providerId === 'lm-studio');
     mockRegistry.isAvailable.mockImplementation((providerId: string) => providerId !== 'ollama' && providerId !== 'lm-studio');
+    mockRegistry.getLocalExecutionQueueStats.mockReturnValue({
+      activeCount: 0,
+      queuedCount: 0,
+      activeBenchmarks: 0,
+      queuedBenchmarks: 0,
+    });
     mockRegistry.listByCostClass.mockImplementation((costClass: string) => {
       if (costClass === 'local') {
         return [{ id: 'ollama' }, { id: 'lm-studio' }];
@@ -279,6 +291,38 @@ describe('api-integration routing', () => {
       mockOpenRouterProvider.supportsModel.mockResolvedValue(true);
       internalRouter.executeRouteTaskBlocking = originalExecute;
     }
+  });
+
+  it('returns benchmark contention metadata for queued local route_task when benchmark load is active', async () => {
+    mockRouteTaskDecision.mockResolvedValueOnce({
+      provider: 'local',
+      model: 'qwen2.5-coder:7b',
+      explanation: 'Local route under benchmark load.',
+    });
+    mockOpenRouterProvider.supportsModel.mockResolvedValue(false);
+    mockRegistry.getLocalExecutionQueueStats.mockReturnValueOnce({
+      activeCount: 1,
+      queuedCount: 2,
+      activeBenchmarks: 1,
+      queuedBenchmarks: 1,
+    });
+
+    const result = await routeTask({
+      task: 'Local task under benchmark contention',
+      contextLength: 64,
+      expectedOutputLength: 64,
+      complexity: 0.5,
+      priority: 'cost',
+    });
+
+    expect(result.provider).toBe('local');
+    expect(result.benchmark_contention).toMatchObject({
+      local_slot_contended: true,
+      active_benchmark_runs: 1,
+      queued_benchmark_runs: 1,
+    });
+
+    mockOpenRouterProvider.supportsModel.mockResolvedValue(true);
   });
 
   it('get_task_status returns aggregate task status and inline completed results', async () => {

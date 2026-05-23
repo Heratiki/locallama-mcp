@@ -141,11 +141,16 @@ export async function runModelBenchmark(
       let completionTokens = 0;
       let runOutput = '';
 
-      const registryProvider = getProviderRegistry().get(model.provider);
+      const providerRegistry = getProviderRegistry();
+      const registryProvider = providerRegistry.get(model.provider);
       if (registryProvider) {
         try {
           const execResult = await withHardTimeout(
-            registryProvider.executeTask(model.id, task, { timeoutMs: effectiveTimeout }),
+            providerRegistry.executeWithConcurrencyLimit(
+              registryProvider,
+              async () => await registryProvider.executeTask(model.id, task, { timeoutMs: effectiveTimeout }),
+              { workload: 'benchmark', priority: 'background' },
+            ),
             effectiveTimeout,
             `Benchmark run timed out after ${effectiveTimeout}ms for model ${model.id}`
           );

@@ -500,6 +500,24 @@ Example usage:
 }
 ```
 
+When local providers are under benchmark load, `route_task` may include optional contention metadata:
+
+```json
+{
+  "task_id": "...",
+  "status": "queued",
+  "queue_position": 2,
+  "benchmark_contention": {
+    "local_slot_contended": true,
+    "active_benchmark_runs": 1,
+    "queued_benchmark_runs": 2,
+    "message": "Local execution slot currently contended by benchmark workloads. Task remains queued until local slot is free."
+  }
+}
+```
+
+This field is omitted when no benchmark workload is occupying the local execution queue.
+
 ### "Retriv First" Strategy
 
 The server now implements a "Retriv First" strategy to prioritize existing code:

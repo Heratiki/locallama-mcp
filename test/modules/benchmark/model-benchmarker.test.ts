@@ -14,6 +14,7 @@ jest.unstable_mockModule('../../../dist/utils/logger.js', () => ({
 }));
 
 const executeTaskMock = jest.fn();
+const executeWithConcurrencyLimitMock = jest.fn(async (_provider, run: () => Promise<unknown>) => await run());
 const supportsModelMock = jest.fn();
 const initBenchmarkDbMock = jest.fn();
 const saveBenchmarkResultMock = jest.fn();
@@ -57,6 +58,7 @@ const providerRegistryMock = {
   list: jest.fn().mockReturnValue([fakeProvider]),
   listByCostClass: jest.fn().mockReturnValue([fakeProvider]),
   has: jest.fn().mockReturnValue(true),
+  executeWithConcurrencyLimit: executeWithConcurrencyLimitMock,
 };
 
 jest.unstable_mockModule('../../../dist/modules/core/provider/index.js', () => ({
@@ -116,6 +118,7 @@ describe('benchmarkModel', () => {
       promptTokens: 50,
       completionTokens: 100,
     });
+    executeWithConcurrencyLimitMock.mockClear();
     supportsModelMock.mockReturnValue(false);
   });
 
@@ -131,6 +134,11 @@ describe('benchmarkModel', () => {
 
     // 'code' category has 2 tasks
     expect(executeTaskMock).toHaveBeenCalledTimes(2);
+    expect(executeWithConcurrencyLimitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'test-provider' }),
+      expect.any(Function),
+      { workload: 'benchmark', priority: 'background' },
+    );
     expect(executeTaskMock.mock.calls[0][0]).toBe('qwen2.5-coder-7b');
     expect(typeof executeTaskMock.mock.calls[0][1]).toBe('string');
   });
