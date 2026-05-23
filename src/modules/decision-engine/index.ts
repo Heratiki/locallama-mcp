@@ -17,6 +17,7 @@ import { lmStudioModule } from '../lm-studio/index.js';
 import { ollamaModule } from '../ollama/index.js';
 import { getProviderRegistry, isProviderLocal } from '../core/provider/index.js';
 import { getCapabilityDetector } from '../core/capability-detector.js';
+import { benchmarkFreshnessService } from '../benchmark/core/freshness.js';
 // import { taskRouter } from './services/taskRouter.js'; //TODO: Check and make sure this module is still used elsewhere in the codebase.
 
 const CODE_TASK_PATTERN = /\b(code|function|class|implement|debug|test|refactor|fix|bug|method|module|api|script|parse|algorithm|compile)\b/i;
@@ -591,7 +592,12 @@ export const decisionEngine = {
   ): Promise<string> {
     if (isProviderLocal(provider)) {
       const bestModel = await modelSelector.getBestLocalModel(complexity, totalTokens, undefined, taskCategory);
-      return bestModel?.id || config.defaultLocalModel;
+      const modelId = bestModel?.id || config.defaultLocalModel;
+      // Non-blocking lazy benchmark: refresh if stale or missing
+      benchmarkFreshnessService.scheduleIfNeeded(modelId, {
+        ttlMs: config.benchmarkFreshnessHours * 3_600_000,
+      });
+      return modelId;
     } else {
       const preferredModelIds = complexity >= COMPLEXITY_THRESHOLDS.COMPLEX
         ? ['openai/gpt-4o', 'openai/gpt-4o-mini']

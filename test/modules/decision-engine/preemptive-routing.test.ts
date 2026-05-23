@@ -121,6 +121,18 @@ jest.unstable_mockModule('../../../dist/modules/ollama/index.js', () => ({
   ollamaModule: { initialize: jest.fn().mockResolvedValue(undefined) },
 }));
 
+// benchmarkFreshnessService — new dep pulled in by decision-engine for lazy benchmark scheduling.
+// Stub it out so the module loads cleanly without pulling model/registry → CapabilityDetector.
+jest.unstable_mockModule('../../../dist/modules/benchmark/core/freshness.js', () => ({
+  benchmarkFreshnessService: {
+    check: jest.fn().mockReturnValue({ status: 'fresh', reason: 'benchmark_fresh' }),
+    scheduleIfNeeded: jest.fn().mockReturnValue(false),
+    isInBackoff: jest.fn().mockReturnValue(false),
+    recordFailure: jest.fn(),
+    clearBackoff: jest.fn(),
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Module under test (after mocks)
 // ---------------------------------------------------------------------------

@@ -37,7 +37,7 @@ interface ModelConfig {
 export interface Config {
   // Server configuration
   server: ServerConfig;
-  
+
   // Local LLM endpoints
   lmStudioEndpoint: string;
   ollamaEndpoint: string;
@@ -50,17 +50,17 @@ export interface Config {
   llamaCppHealthProbeEnabled: boolean;
   llamaCppHealthProbePrompt: string;
   llamaCppHealthProbeTimeoutMs: number;
-  
+
   // Model configuration
   defaultLocalModel: string;
   defaultModelConfig: ModelConfig;
-  
+
   // Decision thresholds
   tokenThreshold: number;
   costThreshold: number;
   qualityThreshold: number;
   codeScoreThreshold: number;
-  
+
   // API Keys
   openRouterApiKey?: string;
   // When true, only free-tier OpenRouter models (cost === 0) are eligible — no paid calls
@@ -68,27 +68,32 @@ export interface Config {
   // Max OpenRouter API calls per minute across all free models (0 = no limit)
   openRouterRateLimitPerMinute: number;
   providerHealthProbeIntervalMs: number;
-  
+
   // Benchmark configuration
   benchmark: BenchmarkConfig;
-  
+
+  // How old a benchmark result can be before it is considered stale (hours).
+  // Route-time freshness checks use this value; 0 is invalid (clamped to 1).
+  benchmarkFreshnessHours: number;
+
   // Logging
   logLevel: 'error' | 'warn' | 'info' | 'debug' | 'trace';
   logFile?: string;
-  
+
   // Cache settings
   cacheEnabled: boolean;
   cacheDir: string;
   maxCacheSize: number;
-  
+
   // Code Search Configuration
   directoriesToIndex?: string[]; // Directories to index for code search
   codeSearchExcludePatterns?: string[]; // Patterns to exclude from indexing
-  
+
   // Paths
   rootDir: string;
-  
-  // Startup benchmark targets
+
+  // Startup benchmark targets — defaults to [] (disabled).
+  // Set STARTUP_BENCHMARK_TARGETS=local,free to opt in to startup sweeps.
   startupBenchmarkTargets: string[];
 
   // Hardware profile — controls routing aggressiveness toward local models
@@ -123,6 +128,7 @@ export const HOT_RELOADABLE_CONFIG_FIELDS = [
   'benchmark.taskTimeout',
   'benchmark.saveResults',
   'startupBenchmarkTargets',
+  'benchmarkFreshnessHours',
   'logLevel',
   'profile',
 ] as const;
@@ -166,6 +172,7 @@ export interface ReloadConfigResult {
     providerHealthProbeIntervalMs: number;
     benchmark: Pick<BenchmarkConfig, 'runsPerTask' | 'parallel' | 'maxParallelTasks' | 'taskTimeout' | 'saveResults'>;
     startupBenchmarkTargets: string[];
+    benchmarkFreshnessHours: number;
     logLevel: Config['logLevel'];
     profile: Config['profile'];
   };
@@ -260,12 +267,11 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     cacheDir: resolvePath(env.CACHE_DIR, '.cache'),
     maxCacheSize: parseInt(env.MAX_CACHE_SIZE || '1073741824', 10),
 
-    // Startup benchmark targets
+    // Startup benchmark targets — off by default; opt in via STARTUP_BENCHMARK_TARGETS
     startupBenchmarkTargets: (() => {
       const envVar = env.STARTUP_BENCHMARK_TARGETS;
-      const defaultTargets = env.OPENROUTER_API_KEY ? ['free'] : ['local'];
       if (!envVar) {
-        return defaultTargets;
+        return [];
       }
       const targets = envVar.toLowerCase().split(',').map(t => t.trim()).filter(t => t);
       if (targets.includes('none')) {
@@ -276,6 +282,9 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
       }
       return [...new Set(targets)];
     })(),
+
+    // Benchmark freshness TTL in hours (minimum 1h)
+    benchmarkFreshnessHours: Math.max(1, parseNumber(env.BENCHMARK_FRESHNESS_HOURS, 24, 1)),
 
     // Hardware profile
     profile: (env.LOCALLAMA_PROFILE === 'lightweight' ? 'lightweight' : 'default') as 'default' | 'lightweight',
@@ -308,6 +317,7 @@ function getActiveHotReloadSnapshot(cfg: Config): ReloadConfigResult['activeConf
       saveResults: cfg.benchmark.saveResults,
     },
     startupBenchmarkTargets: [...cfg.startupBenchmarkTargets],
+    benchmarkFreshnessHours: cfg.benchmarkFreshnessHours,
     logLevel: cfg.logLevel,
     profile: cfg.profile,
   };
@@ -333,6 +343,7 @@ function applyHotReloadableFields(target: Config, source: Config): void {
   target.benchmark.taskTimeout = source.benchmark.taskTimeout;
   target.benchmark.saveResults = source.benchmark.saveResults;
   target.startupBenchmarkTargets = [...source.startupBenchmarkTargets];
+  target.benchmarkFreshnessHours = source.benchmarkFreshnessHours;
   target.logLevel = source.logLevel;
   target.profile = source.profile;
 }
