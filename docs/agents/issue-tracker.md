@@ -21,14 +21,14 @@ Create a GitHub issue.
 
 Run `gh issue view <number> --comments`.
 
-## Current recommended work order (2026-05-22)
+## Current recommended work order (2026-05-23)
 
 Prioritize by production impact first (correctness/concurrency), then contention/visibility, then llama-cpp feature work with explicit dependencies.
 
 | Order | Issue | Why this order |
 | --- | --- | --- |
-| 1 | [#86](https://github.com/Heratiki/locallama-mcp/issues/86) | [COMPLETE] Core P1 correctness bug: local single-slot FIFO is broken under concurrency; many queue semantics depend on this being fixed first. |
-| 2 | [#83](https://github.com/Heratiki/locallama-mcp/issues/83) | Core P1 correctness bug: stale `get_task_status` breaks polling trust and masks real queue behavior. |
+| 1 | [#86](https://github.com/Heratiki/locallama-mcp/issues/86) | [COMPLETE — [PR #98](https://github.com/Heratiki/locallama-mcp/pull/98)] Core P1 correctness bug: local single-slot FIFO is broken under concurrency; many queue semantics depend on this being fixed first. |
+| 2 | [#83](https://github.com/Heratiki/locallama-mcp/issues/83) | [COMPLETE — [PR #100](https://github.com/Heratiki/locallama-mcp/pull/100)] Core P1 correctness bug: stale `get_task_status` breaks polling trust and masks real queue behavior. |
 | 3 | [#88](https://github.com/Heratiki/locallama-mcp/issues/88) | Queue position reporting bug; safest to fix after #86/#83 so position and status are based on corrected queue lifecycle. |
 | 4 | [#97](https://github.com/Heratiki/locallama-mcp/issues/97) | High-impact contention reduction: disables startup benchmark sweeps and moves to lazy benchmark freshness model. |
 | 5 | [#84](https://github.com/Heratiki/locallama-mcp/issues/84) | Complements #97 by adding queue/priority semantics and contention signaling when benchmarks block task work. |

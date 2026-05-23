@@ -11,6 +11,8 @@ export interface PersistedJob {
   result: string | null;
   error: string | null;
   queue_position: number | null;
+  /** 1 = local inference slot, 0 = remote provider queue. Used for per-slot position computation (ADR 0002). */
+  is_local: number | null;
   progress_pct: number;
   poll_again_after_ms: number | null;
   retry_count: number;

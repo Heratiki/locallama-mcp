@@ -22,6 +22,10 @@ _Avoid_: Job (when referring to the aggregate), request, work item
 The persistent, ordered list of Jobs awaiting execution. Survives server restart. Jobs are processed in submission order unless a provider-specific slot is free.
 _Avoid_: Task queue, work queue
 
+**Queue Position**:
+A read-time computed integer indicating how many Jobs are ahead of a given Job among those competing for the same execution slot. For local Jobs, counts other local Jobs in `queued` or `in_progress` state with an earlier insertion order (by `rowid` when `created_at` ties). For remote Jobs, counts other Jobs on the same Provider Queue. `null` when the Job is `in_progress`, `completed`, `failed`, `cancelled`, or `permanently_failed` — position is only meaningful while a Job is `queued`. The `is_local` flag on a Job records which slot category it was assigned at routing time and must be updated alongside `provider_id` whenever a Routing Decision changes.
+_Avoid_: Stored position, enqueue-time position, global position across all providers
+
 **Provider Queue**:
 Each Provider has its own independent FIFO Job Queue and execution slot. Jobs for different Providers run in parallel — one active Job per Provider at a time. A decomposed Task with subtasks targeting different Providers dispatches concurrently across those Providers, while still respecting each Provider's individual slot limit.
 _Avoid_: Global queue, shared queue

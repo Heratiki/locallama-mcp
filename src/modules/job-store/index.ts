@@ -13,7 +13,8 @@ export {
   deleteOldJobs,
   insertTask,
   updateTask,
-  getTask
+  getTask,
+  getQueuePositionForJob,
 } from './db.js';
 export { recoverInProgressJobs } from './recovery.js';
 export { refreshAlertState, isAlertActive, buildQueueAlert } from './alert.js';

@@ -46,6 +46,7 @@ export async function initJobStore(): Promise<void> {
         result TEXT,
         error TEXT,
         queue_position INTEGER,
+        is_local INTEGER,
         progress_pct INTEGER NOT NULL DEFAULT 0,
         poll_again_after_ms INTEGER,
         retry_count INTEGER NOT NULL DEFAULT 0,
@@ -67,6 +68,13 @@ export async function initJobStore(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
       CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
     `);
+
+    // Add is_local column to existing DBs that pre-date this schema version.
+    try {
+      await db.exec(`ALTER TABLE jobs ADD COLUMN is_local INTEGER`);
+    } catch {
+      // Column already exists — safe to ignore.
+    }
 
     dbInstance = db;
     logger.debug('Job store database initialized');
@@ -106,8 +114,8 @@ export async function insertJob(job: PersistedJob): Promise<void> {
   try {
     await db.run(
       `INSERT INTO jobs (id, task_id, status, provider_id, model_id, task_text, result, error,
-        queue_position, progress_pct, poll_again_after_ms, retry_count, created_at, started_at, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        queue_position, is_local, progress_pct, poll_again_after_ms, retry_count, created_at, started_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         job.id,
         job.task_id,
@@ -118,6 +126,7 @@ export async function insertJob(job: PersistedJob): Promise<void> {
         job.result,
         job.error,
         job.queue_position,
+        job.is_local ?? null,
         job.progress_pct,
         job.poll_again_after_ms,
         job.retry_count,
@@ -146,6 +155,7 @@ export async function updateJob(job: Partial<PersistedJob> & { id: string }): Pr
     if (job.result !== undefined) { fields.push('result = ?'); values.push(job.result); }
     if (job.error !== undefined) { fields.push('error = ?'); values.push(job.error); }
     if (job.queue_position !== undefined) { fields.push('queue_position = ?'); values.push(job.queue_position); }
+    if (job.is_local !== undefined) { fields.push('is_local = ?'); values.push(job.is_local); }
     if (job.progress_pct !== undefined) { fields.push('progress_pct = ?'); values.push(job.progress_pct); }
     if (job.poll_again_after_ms !== undefined) { fields.push('poll_again_after_ms = ?'); values.push(job.poll_again_after_ms); }
     if (job.retry_count !== undefined) { fields.push('retry_count = ?'); values.push(job.retry_count); }
@@ -293,6 +303,34 @@ export async function getTask(id: string): Promise<PersistedTask | undefined> {
   } catch (error) {
     logger.error(`Failed to get task ${id}:`, error);
     return undefined;
+  }
+}
+
+/**
+ * Compute queue position for a job at read time (ADR 0002).
+ * Counts queued jobs in the same slot (local vs remote) with an earlier or equal rowid.
+ * Returns null if the job is not found or not in 'queued' status.
+ */
+export async function getQueuePositionForJob(jobId: string): Promise<number | null> {
+  const db = getDb();
+  try {
+    const job = await db.get<{ is_local: number | null; status: string }>(
+      `SELECT is_local, status FROM jobs WHERE id = ?`,
+      [jobId]
+    );
+    if (!job || job.status !== 'queued') return null;
+
+    const result = await db.get<{ pos: number }>(
+      `SELECT COUNT(*) AS pos FROM jobs
+       WHERE status = 'queued'
+         AND is_local IS ?
+         AND rowid <= (SELECT rowid FROM jobs WHERE id = ?)`,
+      [job.is_local, jobId]
+    );
+    return result?.pos ?? null;
+  } catch (error) {
+    logger.error(`Failed to get queue position for job ${jobId}:`, error);
+    return null;
   }
 }
 
