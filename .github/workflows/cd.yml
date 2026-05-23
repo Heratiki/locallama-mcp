@@ -1,0 +1,46 @@
+# CD — create GitHub releases via semantic-release on every successful CI run.
+#
+# Triggers only after the CI workflow completes successfully on main or testing.
+# Stable releases come from main; pre-releases (x.y.z-testing.n) from testing.
+#
+# Required secret: none beyond the automatic GITHUB_TOKEN.
+# semantic-release commits CHANGELOG.md back with [skip ci] so this won't loop.
+#
+# To reverse: delete this file.
+
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main, testing]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
