@@ -183,7 +183,7 @@ export class JobTracker extends EventEmitter {
     }
   }
 
-  async createJob(id: string, task: string, model?: string): Promise<string> {
+  async createJob(id: string, task: string, model?: string, provider?: string): Promise<string> {
     // Allow operation even if not fully initialized
     if (!this.initialized) {
       logger.warn(`Attempted to create job ${id} before JobTracker was initialized`);
@@ -197,7 +197,7 @@ export class JobTracker extends EventEmitter {
         id,
         task_id: id,
         status: 'queued',
-        provider_id: null,
+        provider_id: provider ?? null,
         model_id: model ?? null,
         task_text: task,
         result: null,
@@ -235,7 +235,7 @@ export class JobTracker extends EventEmitter {
     return id;
   }
 
-  async updateJobProgress(id: string, progress: number, estimatedTimeRemaining?: number): Promise<void> {
+  async updateJobProgress(id: string, progress: number, estimatedTimeRemaining?: number, provider?: string): Promise<void> {
     // Allow operation even if not fully initialized
     if (!this.initialized) {
       logger.warn(`Attempted to update job ${id} before JobTracker was initialized`);
@@ -245,28 +245,29 @@ export class JobTracker extends EventEmitter {
     }
 
     const progressPct = Math.round(progress);
-    try {
-      await dbUpdateJob({
-        id,
-        status: 'in_progress',
-        progress_pct: progressPct,
-        started_at: Date.now()
-      });
-    } catch (dbError) {
-      logger.warn(`Failed to persist progress update for job ${id}:`, dbError);
-    }
-
     const progressStr = `${progressPct}%`;
     const etaStr = estimatedTimeRemaining
       ? `${Math.round(estimatedTimeRemaining / 60000)} minutes`
       : 'Calculating...';
 
-    // Update in-memory cache
+    // Update in-memory cache FIRST for immediate visibility
     const existing = this.activeJobs.get(id);
     const job: Job = existing
       ? { ...existing, status: JobStatus.IN_PROGRESS, progress: progressStr, estimated_time_remaining: etaStr }
       : { id, task: '', status: JobStatus.IN_PROGRESS, progress: progressStr, estimated_time_remaining: etaStr, startTime: Date.now() };
     this.activeJobs.set(id, job);
+
+    try {
+      await dbUpdateJob({
+        id,
+        status: 'in_progress',
+        progress_pct: progressPct,
+        provider_id: provider ?? undefined,
+        started_at: Date.now()
+      });
+    } catch (dbError) {
+      logger.warn(`Failed to persist progress update for job ${id}:`, dbError);
+    }
 
     logger.debug(`Updated job ${id} progress: ${progressStr}`);
     try {
@@ -287,18 +288,6 @@ export class JobTracker extends EventEmitter {
     }
 
     const now = Date.now();
-    try {
-      await dbUpdateJob({
-        id,
-        status: 'completed',
-        progress_pct: 100,
-        result: results ? JSON.stringify(results) : null,
-        completed_at: now
-      });
-    } catch (dbError) {
-      logger.warn(`Failed to persist completion for job ${id}:`, dbError);
-    }
-
     const existing = this.activeJobs.get(id);
     const job: Job = {
       ...(existing ?? { task: '', startTime: now }),
@@ -309,6 +298,20 @@ export class JobTracker extends EventEmitter {
       results: results ?? existing?.results
     };
     this.activeJobs.set(id, job);
+
+    try {
+      await dbUpdateJob({
+        id,
+        status: 'completed',
+        progress_pct: 100,
+        result: results ? JSON.stringify(results) : null,
+        completed_at: now,
+        queue_position: null,
+        poll_again_after_ms: 0
+      });
+    } catch (dbError) {
+      logger.warn(`Failed to persist completion for job ${id}:`, dbError);
+    }
 
     if (results && results.length > 0) {
       logger.debug(`Stored ${results.length} code blocks for job ${id}`);
@@ -332,12 +335,6 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    try {
-      await dbUpdateJob({ id, status: 'cancelled' });
-    } catch (dbError) {
-      logger.warn(`Failed to persist cancellation for job ${id}:`, dbError);
-    }
-
     const existing = this.activeJobs.get(id);
     const job: Job = {
       ...(existing ?? { task: '', startTime: Date.now() }),
@@ -347,6 +344,17 @@ export class JobTracker extends EventEmitter {
       estimated_time_remaining: 'N/A'
     };
     this.activeJobs.set(id, job);
+
+    try {
+      await dbUpdateJob({ 
+        id, 
+        status: 'cancelled',
+        queue_position: null,
+        poll_again_after_ms: 0
+      });
+    } catch (dbError) {
+      logger.warn(`Failed to persist cancellation for job ${id}:`, dbError);
+    }
 
     logger.debug(`Cancelled job ${id}`);
     try {
@@ -367,12 +375,6 @@ export class JobTracker extends EventEmitter {
       return;
     }
 
-    try {
-      await dbUpdateJob({ id, status: 'failed', error: error ?? null });
-    } catch (dbError) {
-      logger.warn(`Failed to persist failure for job ${id}:`, dbError);
-    }
-
     const existing = this.activeJobs.get(id);
     const job: Job = {
       ...(existing ?? { task: '', startTime: Date.now() }),
@@ -383,6 +385,18 @@ export class JobTracker extends EventEmitter {
       error
     };
     this.activeJobs.set(id, job);
+
+    try {
+      await dbUpdateJob({ 
+        id, 
+        status: 'failed', 
+        error: error ?? null,
+        queue_position: null,
+        poll_again_after_ms: 0
+      });
+    } catch (dbError) {
+      logger.warn(`Failed to persist failure for job ${id}:`, dbError);
+    }
 
     logger.error(`Job ${id} failed: ${error || 'Unknown error'}`);
     try {

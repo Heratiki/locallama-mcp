@@ -199,7 +199,7 @@ describe('api-integration routing', () => {
       status: 'queued',
       job_count: 1,
     }));
-    expect(mockCreateJob).toHaveBeenCalledWith(result.task_id, expect.stringContaining('implementation plan'), 'openai/gpt-4o');
+    expect(mockCreateJob).toHaveBeenCalledWith(result.task_id, expect.stringContaining('implementation plan'), 'openai/gpt-4o', 'openrouter');
   });
 
   it('keeps later local queued tasks out of in_progress until a local slot is available', async () => {
