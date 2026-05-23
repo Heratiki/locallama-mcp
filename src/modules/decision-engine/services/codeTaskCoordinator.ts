@@ -8,7 +8,7 @@ import { getProviderRegistry } from '../../core/provider/registry.js';
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
-import { getJobTracker } from './jobTracker.js'; // Import job tracker
+import { getJobTracker, JobTracker } from './jobTracker.js'; // Import job tracker
 import { config } from '../../../config/index.js';
 import {
   assertPromptWithinContextWindow,
@@ -392,7 +392,7 @@ Output only the code required for this subtask. Do not include explanations unle
             // Update job status to In Progress ONLY AFTER acquiring the slot
             if (jobTracker) {
               try {
-                await jobTracker.updateJobProgress(subtask.id, 10);
+                await jobTracker.updateJobProgress(subtask.id, 10, undefined, model.provider);
               } catch (error) {
                 logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
               }
@@ -547,7 +547,8 @@ Output only the code required for this subtask. Do not include explanations unle
           await jobTracker.createJob(
             subtask.id, 
             `Subtask: ${subtask.description.substring(0, 100)}${subtask.description.length > 100 ? '...' : ''}`,
-            model.id
+            model.id,
+            model.provider
           );
         } catch (error) {
           logger.warn(`Failed to create job for subtask ${subtask.id}:`, error);
@@ -587,7 +588,7 @@ Output only the code required for this subtask. Do not include explanations unle
       // Check if jobTracker is not null before using it
       if (jobTracker) {
         try {
-          await jobTracker.updateJobProgress(subtask.id, 30); // Update to 30%
+          await jobTracker.updateJobProgress(subtask.id, 30, undefined, model.provider); // Update to 30%
         } catch (error) {
           logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
         }

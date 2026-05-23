@@ -364,7 +364,7 @@ export class Router implements IRouter {
       failed_count: 0,
       created_at: now,
     });
-    await tracker.createJob(taskId, params.task, decision.model);
+    await tracker.createJob(taskId, params.task, decision.model, providerId);
     await updateJob({
       id: taskId,
       task_id: taskId,
@@ -703,7 +703,31 @@ export class Router implements IRouter {
       };
     }
 
-    const jobs = await getJobsByTaskId(taskId);
+    const dbJobs = await getJobsByTaskId(taskId);
+    const tracker = await getJobTracker();
+    
+    // Optimistic overlay: if JobTracker has a more recent terminal status in memory, use it.
+    // This eliminates the window between DB write and Map update.
+    const jobs = dbJobs.map(job => {
+      const liveJob = tracker.getJob(job.id);
+      if (liveJob) {
+        const liveStatus = liveJob.status;
+        // If DB says not terminal but Map says terminal, override
+        if (['queued', 'in_progress'].includes(job.status)) {
+          if (liveStatus === JobStatus.COMPLETED) {
+            return { ...job, status: 'completed' as PersistedJobStatus, progress_pct: 100, poll_again_after_ms: 0, queue_position: null };
+          }
+          if (liveStatus === JobStatus.FAILED) {
+            return { ...job, status: 'failed' as PersistedJobStatus, poll_again_after_ms: 0, queue_position: null };
+          }
+          if (liveStatus === JobStatus.CANCELLED) {
+            return { ...job, status: 'cancelled' as PersistedJobStatus, poll_again_after_ms: 0, queue_position: null };
+          }
+        }
+      }
+      return job;
+    });
+
     const completedCount = jobs.filter((job) => job.status === 'completed').length;
     const failedCount = jobs.filter((job) => job.status === 'failed' || job.status === 'permanently_failed').length;
     const progressPct = jobs.length === 0
@@ -719,7 +743,6 @@ export class Router implements IRouter {
       await updateTask({
         id: taskId,
         status,
-        job_count: jobs.length,
         completed_count: completedCount,
         failed_count: failedCount,
       });

@@ -38,9 +38,9 @@ function resolveModelId(modelId: string): { providerId: string | null; bareId: s
  *     no prefix and no registry entry — backward-compat with old callers).
  */
 export class TaskExecutor implements ITaskExecutor {
-  private async updateProgressSafely(jobId: string, progress: number, estimatedMs: number): Promise<void> {
+  private async updateProgressSafely(jobId: string, progress: number, estimatedMs: number, providerId?: string): Promise<void> {
     try {
-      await jobTracker.updateJobProgress(jobId, progress, estimatedMs);
+      await jobTracker.updateJobProgress(jobId, progress, estimatedMs, providerId);
     } catch (err) {
       logger.error(
         `Failed to update job progress (${progress}%) for job ${jobId}: ${err instanceof Error ? err.message : String(err)}`,
@@ -74,7 +74,8 @@ export class TaskExecutor implements ITaskExecutor {
       throw error;
     }
 
-    await this.updateProgressSafely(jobId, 75, 30_000);
+    const { providerId } = resolveModelId(modelId);
+    await this.updateProgressSafely(jobId, 75, 30_000, providerId ?? undefined);
 
     logger.info(`Job ${jobId} completed successfully`);
     return result;
@@ -101,7 +102,7 @@ export class TaskExecutor implements ITaskExecutor {
     try {
       const executionOptions = { ...buildCodeTaskExecutionOptions(task, provider.id), ...options };
       const result = await registry.executeWithConcurrencyLimit(provider, async () => {
-        await this.updateProgressSafely(jobId, 25, 120_000);
+        await this.updateProgressSafely(jobId, 25, 120_000, provider.id);
         return await provider.executeTask(bareId, task, executionOptions);
       });
       registry.recordProviderSuccess(provider.id);

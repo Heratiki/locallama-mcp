@@ -58,7 +58,7 @@ export const apiHandlers = {
         const job = jobTracker.getJob(jobId);
         if (job) {
           job.model = decision.model;
-          void jobTracker.updateJobProgress(jobId, 0, 180000); // Initial 3-minute estimate
+          void jobTracker.updateJobProgress(jobId, 0, 180000, decision.provider); // Initial 3-minute estimate
         }
       } catch (getJobError) {
         logger.error('Error getting/updating job:', getJobError);
@@ -315,7 +315,7 @@ export const apiHandlers = {
           const job = jobTracker.getJob(jobId);
           if (job) {
             job.model = decision.model;
-            void jobTracker.updateJobProgress(jobId, 50, 90000);
+            void jobTracker.updateJobProgress(jobId, 50, 90000, decision.provider);
           }
         } catch (getJobError) {
           logger.error('Error getting/updating job:', getJobError);

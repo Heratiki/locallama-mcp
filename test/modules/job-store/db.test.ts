@@ -41,7 +41,7 @@ const makeJob = (id: string, status: string = 'queued') => ({
   progress_pct: 0,
   poll_again_after_ms: null,
   retry_count: 0,
-  created_at: Date.now(),
+  created_at: Date.now() - 1000, // 1s ago to ensure deleteOldJobs(0) catches it
   started_at: null,
   completed_at: null
 });
