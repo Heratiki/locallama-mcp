@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/Heratiki/locallama-mcp/compare/v1.17.0...v1.18.0) (2026-05-23)
+
+
+### Features
+
+* disable startup auto-benchmarking; add lazy benchmark freshness service (closes [#97](https://github.com/Heratiki/locallama-mcp/issues/97)) ([bf0cdab](https://github.com/Heratiki/locallama-mcp/commit/bf0cdab28240038849b3b821e57350f1b140e985))
+
 # [1.17.0](https://github.com/Heratiki/locallama-mcp/compare/v1.16.0...v1.17.0) (2026-05-23)
 
 
