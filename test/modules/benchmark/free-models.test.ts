@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const getFreeModelsMock = jest.fn();
 const executeTaskMock = jest.fn();
+const executeWithConcurrencyLimitMock = jest.fn(async (_provider, run: () => Promise<unknown>) => await run());
 const initBenchmarkDbMock = jest.fn();
 const saveBenchmarkResultMock = jest.fn();
 const getRecentModelResultsMock = jest.fn();
@@ -20,7 +21,8 @@ jest.unstable_mockModule('../../../dist/modules/core/provider/index.js', () => (
           id: 'openrouter',
           executeTask: executeTaskMock
         }
-      : undefined)
+      : undefined),
+    executeWithConcurrencyLimit: executeWithConcurrencyLimitMock,
   })),
   isProviderLocal: jest.fn((providerId: string) => providerId === 'ollama' || providerId === 'lm-studio')
 }));
@@ -51,6 +53,7 @@ describe('benchmarkFreeModels', () => {
       promptTokens: 10,
       completionTokens: 20
     });
+    executeWithConcurrencyLimitMock.mockClear();
   });
 
   it('benchmarks free models through the modular runner and stores results in benchmarkDb', async () => {
@@ -85,6 +88,11 @@ describe('benchmarkFreeModels', () => {
       'openrouter/free-code',
       'Write a JavaScript add function.',
       expect.objectContaining({ timeoutMs: expect.any(Number) })
+    );
+    expect(executeWithConcurrencyLimitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'openrouter' }),
+      expect.any(Function),
+      { workload: 'benchmark', priority: 'background' },
     );
     expect(saveBenchmarkResultMock).toHaveBeenCalledTimes(1);
     expect(saveBenchmarkResultMock).toHaveBeenCalledWith(expect.objectContaining({

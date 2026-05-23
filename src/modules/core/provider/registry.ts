@@ -1,7 +1,7 @@
 import { logger } from '../../../utils/logger.js';
 import { CostClass, LLMProvider } from './types.js';
 import { CircuitBreaker } from './circuit-breaker.js';
-import { ProviderRateLimiter } from './rate-limiter.js';
+import { ProviderQueueStats, ProviderRateLimiter, ProviderScheduleOptions } from './rate-limiter.js';
 import { config } from '../../../config/index.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -24,7 +24,10 @@ export class ProviderRegistry {
   // --- Health probe (Issue 26) ---
   private healthProbeTimer: ReturnType<typeof setInterval> | undefined;
   private availabilityMap = new Map<string, boolean>();
-  private readonly rateLimiter = new ProviderRateLimiter();
+  private readonly rateLimiter = new ProviderRateLimiter({
+    maxConcurrentLocal: config.providerMaxConcurrentLocal,
+    maxConcurrentRemote: config.providerMaxConcurrentRemote,
+  });
 
   register(provider: LLMProvider): void {
     if (this.providers.has(provider.id)) {
@@ -146,12 +149,34 @@ export class ProviderRegistry {
     this.circuitBreaker.recordFailure(providerId);
   }
 
-  async executeWithConcurrencyLimit<T>(provider: LLMProvider, run: () => Promise<T>): Promise<T> {
+  async executeWithConcurrencyLimit<T>(provider: LLMProvider, run: () => Promise<T>, options?: ProviderScheduleOptions): Promise<T> {
     return await this.rateLimiter.schedule(
       provider.id,
       provider.isLocal ? 'local' : 'remote',
       run,
+      options,
     );
+  }
+
+  getExecutionQueueStats(providerId: string): ProviderQueueStats {
+    const provider = this.providers.get(providerId);
+    if (!provider) {
+      return {
+        activeCount: 0,
+        queuedCount: 0,
+        activeBenchmarks: 0,
+        queuedBenchmarks: 0,
+      };
+    }
+
+    return this.rateLimiter.getQueueStats(
+      provider.id,
+      provider.isLocal ? 'local' : 'remote',
+    );
+  }
+
+  getLocalExecutionQueueStats(): ProviderQueueStats {
+    return this.rateLimiter.getQueueStats('local', 'local');
   }
 
   // ---------------------------------------------------------------------------

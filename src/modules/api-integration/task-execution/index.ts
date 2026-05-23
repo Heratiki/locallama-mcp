@@ -104,7 +104,7 @@ export class TaskExecutor implements ITaskExecutor {
       const result = await registry.executeWithConcurrencyLimit(provider, async () => {
         await this.updateProgressSafely(jobId, 25, 120_000, provider.id);
         return await provider.executeTask(bareId, task, executionOptions);
-      });
+      }, { workload: 'task' });
       registry.recordProviderSuccess(provider.id);
       return result.content;
     } catch (error) {

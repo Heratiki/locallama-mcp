@@ -53,6 +53,12 @@ export interface QueuedRouteTaskResult {
   poll_again_after_ms: number;
   provider: string;
   model: string;
+  benchmark_contention?: {
+    local_slot_contended: boolean;
+    active_benchmark_runs: number;
+    queued_benchmark_runs: number;
+    message: string;
+  };
 }
 
 export interface TaskStatusJobSummary {

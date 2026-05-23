@@ -279,7 +279,11 @@ export async function benchmarkModel(
       const startMs = Date.now();
 
       try {
-        const execResult = await provider.executeTask(executableModelId, benchTask.task, { timeoutMs });
+        const execResult = await registry.executeWithConcurrencyLimit(
+          provider,
+          async () => await provider.executeTask(executableModelId, benchTask.task, { timeoutMs }),
+          { workload: 'benchmark', priority: 'background' },
+        );
         const elapsed = Date.now() - startMs;
         const quality = evaluateQuality(benchTask.task, execResult.content);
 

@@ -833,25 +833,35 @@ export const benchmarkService = {
               );
             } else if (isProviderId(model.provider, 'llama-cpp')) {
               logger.info(`Calling llama.cpp provider for model ${model.id}`);
-              const llamaCppProv = getProviderRegistry().get('llama-cpp');
+              const providerRegistry = getProviderRegistry();
+              const llamaCppProv = providerRegistry.get('llama-cpp');
               if (!llamaCppProv) {
                 throw new Error('llama.cpp provider is not registered');
               }
-              const execResult = await llamaCppProv.executeTask(model.id, task.task, {
-                timeoutMs: Math.round(dynamicTimeout),
-              });
+              const execResult = await providerRegistry.executeWithConcurrencyLimit(
+                llamaCppProv,
+                async () => await llamaCppProv.executeTask(model.id, task.task, {
+                  timeoutMs: Math.round(dynamicTimeout),
+                }),
+                { workload: 'benchmark', priority: 'background' },
+              );
               result = { success: true, text: execResult.content };
             } else {
               // Use provider execution path so OpenRouter rate-limit and quarantine gates are enforced.
-              const provider = getProviderRegistry().get('openrouter');
+              const providerRegistry = getProviderRegistry();
+              const provider = providerRegistry.get('openrouter');
               if (!provider) {
                 throw new Error('OpenRouter provider is not registered');
               }
 
               logger.info(`Calling OpenRouter provider for model ${model.id}`);
-              const execResult = await provider.executeTask(model.id, task.task, {
-                timeoutMs: Math.round(dynamicTimeout),
-              });
+              const execResult = await providerRegistry.executeWithConcurrencyLimit(
+                provider,
+                async () => await provider.executeTask(model.id, task.task, {
+                  timeoutMs: Math.round(dynamicTimeout),
+                }),
+                { workload: 'benchmark', priority: 'background' },
+              );
 
               result = {
                 success: true,
