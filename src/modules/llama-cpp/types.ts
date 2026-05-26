@@ -89,4 +89,22 @@ export interface LlamaCppCapabilities {
   health: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
   lastHealthCheck: string;
   lastHealthCheckResult: string;
+  /** True if llama-server binary was discovered on disk. */
+  binaryDiscovered: boolean;
+}
+
+/** Resolved paths and capabilities of local llama.cpp binaries. */
+export interface LlamaBinarySet {
+  /** Path to llama-server (or server) binary. */
+  server: string | null;
+  /** Path to llama-cli binary. */
+  cli: string | null;
+  /** Path to llama-run binary. */
+  run: string | null;
+  /** Version string extracted from --version. */
+  version: string | null;
+  /** True if the server binary supports the --reasoning-format flag. */
+  supportsReasoningFormat: boolean;
+  /** List of all paths searched during discovery. */
+  searchedPaths: string[];
 }

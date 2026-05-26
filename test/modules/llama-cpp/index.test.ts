@@ -39,6 +39,17 @@ jest.unstable_mockModule('../../../dist/modules/utils/sanitizeErrorForLogging.js
   sanitizeErrorForLogging: (e: unknown) => String(e),
 }));
 
+jest.unstable_mockModule('../../../dist/modules/llama-cpp/discovery.js', () => ({
+  discoverLlamaBinaries: jest.fn().mockResolvedValue({
+    server: null,
+    cli: null,
+    run: null,
+    version: null,
+    supportsReasoningFormat: false,
+    searchedPaths: [],
+  }),
+}));
+
 // --- imports (must follow mock declarations) ------------------------------
 
 const { llamaCppModule } = await import('../../../dist/modules/llama-cpp/index.js');
@@ -73,7 +84,16 @@ describe('llamaCppModule — mode detection', () => {
     jest.restoreAllMocks();
     llamaCppModule.cachedModels = [];
     llamaCppModule.mode = 'unknown';
-    llamaCppModule.capabilities = { mode: 'unknown', modelCount: 0, supportsMultiModel: false };
+    llamaCppModule.binaries = null;
+    llamaCppModule.capabilities = {
+      mode: 'unknown',
+      modelCount: 0,
+      supportsMultiModel: false,
+      health: 'unknown',
+      lastHealthCheck: new Date(0).toISOString(),
+      lastHealthCheckResult: 'not yet run',
+      binaryDiscovered: false,
+    };
     loggerMock.debug.mockClear();
     loggerMock.info.mockClear();
   });

@@ -20,6 +20,7 @@ import { logger } from '../../utils/logger.js';
 import { Model } from '../../types/index.js';
 import {
   LlamaCppApiCallResult,
+  LlamaBinarySet,
   LlamaCppApiModel,
   LlamaCppCapabilities,
   LlamaCppChatRequest,
@@ -30,6 +31,7 @@ import {
 } from './types.js';
 import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
+import { discoverLlamaBinaries } from './discovery.js';
 
 function isDegenerate(text: string): boolean {
   if (!text || /^\s*$/.test(text)) return true; // empty or whitespace
@@ -58,7 +60,11 @@ export const llamaCppModule = {
     health: 'unknown',
     lastHealthCheck: new Date(0).toISOString(),
     lastHealthCheckResult: 'not yet run',
+    binaryDiscovered: false,
   } as LlamaCppCapabilities,
+
+  /** Resolved local binaries and their capabilities. */
+  binaries: null as LlamaBinarySet | null,
 
   /** In-memory cache of models reported by the server. */
   cachedModels: [] as LlamaCppApiModel[],
@@ -116,6 +122,19 @@ export const llamaCppModule = {
    */
   async initialize(): Promise<void> {
     logger.debug('Initializing llama.cpp module');
+
+    // Attempt binary discovery. Non-fatal if none found.
+    try {
+      this.binaries = await discoverLlamaBinaries();
+      this.capabilities.binaryDiscovered = !!this.binaries.server;
+      if (this.capabilities.binaryDiscovered) {
+        logger.info(`llama.cpp binary found: ${this.binaries.server} (version: ${this.binaries.version ?? 'unknown'})`);
+      } else {
+        logger.debug('No local llama.cpp server binary discovered');
+      }
+    } catch (error) {
+      logger.debug(`llama.cpp binary discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     if (!config.llamaCppEndpoint) {
       logger.debug('LLAMA_CPP_ENDPOINT not set; llama.cpp provider will be unavailable');

@@ -33,7 +33,7 @@ Prioritize by production impact first (correctness/concurrency), then contention
 | 4 | [#97](https://github.com/Heratiki/locallama-mcp/issues/97) | [COMPLETE — [bf0cdab](https://github.com/Heratiki/locallama-mcp/commit/bf0cdab)] Disables startup benchmark sweeps by default; adds `BenchmarkFreshnessService` with TTL-based lazy scheduling, backoff, and reason codes. |
 | 5 | [#84](https://github.com/Heratiki/locallama-mcp/issues/84) | [COMPLETE — [PR #103](https://github.com/Heratiki/locallama-mcp/pull/103)] Complements #97 by adding queue/priority semantics and contention signaling when benchmarks block task work. |
 | 6 | [#85](https://github.com/Heratiki/locallama-mcp/issues/85) | [COMPLETE — [PR #104](https://github.com/Heratiki/locallama-mcp/pull/104)] Adds `get_system_state` MCP tool: slot-aware schema, job-store queue counts, state-driven poll hint, 8 unit tests, ADR 0003. |
-| 7 | [#94](https://github.com/Heratiki/locallama-mcp/issues/94) | llama-cpp prerequisite: binary discovery is explicitly required by #92 and #95. |
+| 7 | [#94](https://github.com/Heratiki/locallama-mcp/issues/94) | [COMPLETE] llama-cpp prerequisite: binary discovery is explicitly required by #92 and #95. |
 | 8 | [#92](https://github.com/Heratiki/locallama-mcp/issues/92) | llama-cpp process ownership baseline; needed before metadata-aware spawn behavior in #93. |
 | 9 | [#93](https://github.com/Heratiki/locallama-mcp/issues/93) | Depends on spawn flow from #92; adds GGUF-driven flag correctness for reliable inference behavior. |
 | 10 | [#95](https://github.com/Heratiki/locallama-mcp/issues/95) | Depends on #94 and #93 (and references #91); best delivered once llama-cpp discovery + metadata are in place. |
