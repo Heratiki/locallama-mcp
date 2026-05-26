@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/Heratiki/locallama-mcp/compare/v1.21.0...v1.22.0) (2026-05-26)
+
+
+### Features
+
+* **llama-cpp:** managed llama-server lifecycle ([#106](https://github.com/Heratiki/locallama-mcp/issues/106)) ([d3bc0e1](https://github.com/Heratiki/locallama-mcp/commit/d3bc0e196884e3da3d80d627e6b4e1fedccd131e)), closes [#92](https://github.com/Heratiki/locallama-mcp/issues/92)
+
 # [1.21.0](https://github.com/Heratiki/locallama-mcp/compare/v1.20.0...v1.21.0) (2026-05-26)
 
 
