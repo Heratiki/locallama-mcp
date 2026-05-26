@@ -60,6 +60,14 @@ _Avoid_: Feature, skill, ability
 A structured test run against a Model that produces empirical scores for one or more Capabilities. Benchmark results feed back into Routing Decisions.
 _Avoid_: Evaluation, test run, assessment
 
+**Binary Discovery**:
+A best-effort startup check that determines whether locallama-mcp can locate role-specific llama.cpp executables for future managed execution paths. Binary Discovery is diagnostic and preparatory; it does not make the llama.cpp Provider available for routing by itself.
+_Avoid_: Availability check, health probe, process startup
+
+**User-managed llama.cpp mode**:
+The operating mode where locallama-mcp connects to an already running `llama-server` through `LLAMA_CPP_ENDPOINT` and does not own the llama.cpp process lifecycle. Binary Discovery may still run in this mode, but only as diagnostic context.
+_Avoid_: Managed mode, owned process mode, auto-spawn mode
+
 ### Monitoring
 
 **Dashboard**:
