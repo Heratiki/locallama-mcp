@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/Heratiki/locallama-mcp/compare/v1.20.0...v1.21.0) (2026-05-26)
+
+
+### Features
+
+* **llama-cpp:** add cross-platform binary discovery ([#105](https://github.com/Heratiki/locallama-mcp/issues/105)) ([14b5c17](https://github.com/Heratiki/locallama-mcp/commit/14b5c170e3f25833cd4836850640eb0f02f7e322)), closes [#94](https://github.com/Heratiki/locallama-mcp/issues/94)
+
 # [1.20.0](https://github.com/Heratiki/locallama-mcp/compare/v1.19.0...v1.20.0) (2026-05-26)
 
 
