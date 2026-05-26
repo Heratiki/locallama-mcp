@@ -209,6 +209,20 @@ export class ProviderRegistry {
     }
   }
 
+  /** Clean up all registered providers. */
+  async shutdown(): Promise<void> {
+    this.stopHealthProbe();
+    for (const provider of this.list()) {
+      if (provider.shutdown) {
+        try {
+          await provider.shutdown();
+        } catch (error) {
+          logger.error(`Error shutting down provider '${provider.id}':`, error);
+        }
+      }
+    }
+  }
+
   private async runHealthProbe(): Promise<void> {
     for (const provider of this.list()) {
       try {

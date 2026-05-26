@@ -238,9 +238,9 @@ export class LocalLamaMcpServer {
   private async shutdown(): Promise<void> {
     logger.info('Shutting down LocalLama MCP Server...');
     try {
-      // Stop health probe before closing the server transport.
+      // Stop health probe and clean up providers (e.g. managed child processes)
       const { getProviderRegistry } = await import('./modules/core/provider/index.js');
-      getProviderRegistry().stopHealthProbe();
+      await getProviderRegistry().shutdown();
     } catch {
       // Registry may not have been initialized; ignore.
     }
