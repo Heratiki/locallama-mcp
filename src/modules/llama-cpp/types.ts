@@ -91,6 +91,12 @@ export interface LlamaCppCapabilities {
   lastHealthCheckResult: string;
   /** True if llama-server binary was discovered on disk. */
   binaryDiscovered: boolean;
+  /** True if llama-server is being managed as a child process. */
+  managedProcess: boolean;
+  /** The local port the managed server is listening on. */
+  resolvedPort: number | null;
+  /** Number of times the managed server has been restarted. */
+  restartCount: number;
 }
 
 /** Resolved paths and capabilities of local llama.cpp binaries. */

@@ -118,6 +118,10 @@ class LlamaCppProvider implements LLMProvider {
   async getVersion(): Promise<string | null> {
     return null;
   }
+
+  async shutdown(): Promise<void> {
+    await llamaCppModule.shutdown();
+  }
 }
 
 export const llamaCppProvider: LLMProvider = new LlamaCppProvider();

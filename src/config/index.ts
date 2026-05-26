@@ -50,6 +50,8 @@ export interface Config {
   llamaCppServerBin: string; // Explicit path to llama-server binary
   llamaCppCliBin: string; // Explicit path to llama-cli binary
   llamaCppModelPath?: string; // Explicit path to a model file for sibling discovery
+  llamaCppPort: number; // Default port for llama-server (8080)
+  llamaCppStartupTimeoutMs: number; // Max time to wait for server to start (120000)
   llamaCppHealthProbeEnabled: boolean;
   llamaCppHealthProbePrompt: string;
   llamaCppHealthProbeTimeoutMs: number;
@@ -147,6 +149,8 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'llamaCppServerBin',
   'llamaCppCliBin',
   'llamaCppModelPath',
+  'llamaCppPort',
+  'llamaCppStartupTimeoutMs',
   'openRouterApiKey',
   'benchmark.resultsPath',
   'cacheEnabled',
@@ -231,6 +235,8 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     llamaCppServerBin: env.LLAMA_CPP_SERVER_BIN || '',
     llamaCppCliBin: env.LLAMA_CPP_CLI_BIN || '',
     llamaCppModelPath: env.LLAMA_CPP_MODEL || undefined,
+    llamaCppPort: parseNumber(env.LLAMA_CPP_PORT, 8080, 1024, 65535),
+    llamaCppStartupTimeoutMs: parseNumber(env.LLAMA_CPP_STARTUP_TIMEOUT_MS, 120000, 1000),
     llamaCppHealthProbeEnabled: parseBool(env.LLAMA_CPP_HEALTH_PROBE_ENABLED, true),
     llamaCppHealthProbePrompt: env.LLAMA_CPP_HEALTH_PROBE_PROMPT || `write 'ok'`,
     llamaCppHealthProbeTimeoutMs: parseNumber(env.LLAMA_CPP_HEALTH_PROBE_TIMEOUT_MS, 10000, 1000),

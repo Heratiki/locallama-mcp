@@ -32,6 +32,7 @@ import {
 import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 import { discoverLlamaBinaries } from './discovery.js';
+import { LlamaServerManager } from './manager.js';
 
 function isDegenerate(text: string): boolean {
   if (!text || /^\s*$/.test(text)) return true; // empty or whitespace
@@ -61,7 +62,13 @@ export const llamaCppModule = {
     lastHealthCheck: new Date(0).toISOString(),
     lastHealthCheckResult: 'not yet run',
     binaryDiscovered: false,
+    managedProcess: false,
+    resolvedPort: null,
+    restartCount: 0,
   } as LlamaCppCapabilities,
+
+  /** Managed child process manager. */
+  manager: new LlamaServerManager(),
 
   /** Resolved local binaries and their capabilities. */
   binaries: null as LlamaBinarySet | null,
@@ -123,42 +130,74 @@ export const llamaCppModule = {
   async initialize(): Promise<void> {
     logger.debug('Initializing llama.cpp module');
 
-    // Attempt binary discovery. Non-fatal if none found.
+    // 1. Discovery
     try {
       this.binaries = await discoverLlamaBinaries();
-      this.capabilities.binaryDiscovered = !!this.binaries.server;
-      if (this.capabilities.binaryDiscovered) {
-        logger.info(`llama.cpp binary found: ${this.binaries.server} (version: ${this.binaries.version ?? 'unknown'})`);
-      } else {
-        logger.debug('No local llama.cpp server binary discovered');
+      if (this.binaries) {
+        this.capabilities.binaryDiscovered = !!this.binaries.server;
+        if (this.capabilities.binaryDiscovered) {
+          logger.info(`llama.cpp binary found: ${this.binaries.server} (version: ${this.binaries.version ?? 'unknown'})`);
+        }
       }
     } catch (error) {
       logger.debug(`llama.cpp binary discovery failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    if (!config.llamaCppEndpoint) {
-      logger.debug('LLAMA_CPP_ENDPOINT not set; llama.cpp provider will be unavailable');
-      return;
+    // 2. Try reaching existing endpoint
+    if (config.llamaCppEndpoint) {
+      try {
+        await this.refreshModels();
+        if (this.cachedModels.length > 0) {
+          logger.info(`Connected to existing llama.cpp endpoint: ${config.llamaCppEndpoint}`);
+          await this._runHealthProbe();
+          return;
+        }
+      } catch {
+        logger.debug(`Existing llama.cpp endpoint ${config.llamaCppEndpoint} unreachable`);
+      }
     }
 
-    try {
-      await this.refreshModels();
-      await this._runHealthProbe();
-    } catch (error) {
-      logger.debug(
-        `llama.cpp init failed (server may not be running): ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      this.capabilities.health = 'unhealthy';
-      this.capabilities.lastHealthCheckResult = 'init failed';
-      this.capabilities.lastHealthCheck = new Date().toISOString();
+    // 3. Attempt managed spawn
+    const binary = config.llamaCppServerBin || this.binaries?.server;
+    const model = config.llamaCppModelPath;
+
+    if (binary && model) {
+      try {
+        const port = await this.manager.findFreePort(config.llamaCppPort);
+        await this.manager.spawnServer(binary, model, port);
+        
+        // Update config endpoint for subsequent calls
+        (config as any).llamaCppEndpoint = `http://localhost:${port}`;
+        
+        this.capabilities.managedProcess = true;
+        this.capabilities.resolvedPort = port;
+        
+        await this.refreshModels();
+        await this._runHealthProbe();
+      } catch (error) {
+        logger.error(`Failed to start managed llama-server: ${error instanceof Error ? error.message : String(error)}`);
+        this.capabilities.health = 'unhealthy';
+        this.capabilities.lastHealthCheckResult = 'managed spawn failed';
+      }
+    } else {
+      if (!config.llamaCppEndpoint) {
+        logger.debug('No llama.cpp endpoint or managed config (bin+model) set; provider unavailable');
+      }
+    }
+  },
+
+  /**
+   * Stop the managed server if running.
+   */
+  async shutdown(): Promise<void> {
+    if (this.capabilities.managedProcess) {
+      await this.manager.stopServer();
+      this.capabilities.managedProcess = false;
     }
   },
 
   /**
    * Fetch the live model list from GET /v1/models and update the in-memory
-   * cache plus capability flags.
    */
   async refreshModels(): Promise<void> {
     if (!config.llamaCppEndpoint) return;
@@ -166,32 +205,38 @@ export const llamaCppModule = {
     const url = `${config.llamaCppEndpoint}/v1/models`;
     logger.debug(`Fetching llama.cpp model list from ${url}`);
 
-    const response = await axios.get<LlamaCppListModelsResponse>(url, {
-      timeout: 5000,
-      headers: { Accept: 'application/json' },
-    });
+    try {
+      const response = await axios.get<LlamaCppListModelsResponse>(url, {
+        timeout: 5000,
+        headers: { Accept: 'application/json' },
+      });
 
-    const models: LlamaCppApiModel[] = Array.isArray(response.data?.data)
-      ? response.data.data
-      : [];
+      const models: LlamaCppApiModel[] = Array.isArray(response.data?.data)
+        ? response.data.data
+        : [];
 
-    this.cachedModels = models;
-    this.capabilities.modelCount = models.length;
+      this.cachedModels = models;
+      this.capabilities.modelCount = models.length;
 
-    if (models.length === 0) {
-      this.mode = 'unknown';
-    } else if (models.length === 1) {
-      this.mode = 'single-model';
-    } else {
-      this.mode = 'router';
+      if (models.length === 0) {
+        this.mode = 'unknown';
+      } else if (models.length === 1) {
+        this.mode = 'single-model';
+      } else {
+        this.mode = 'router';
+      }
+
+      this.capabilities.mode = this.mode;
+      this.capabilities.supportsMultiModel = this.mode === 'router';
+      this.capabilities.restartCount = this.manager.getRestartCount();
+
+      logger.info(
+        `llama.cpp detected mode=${this.mode}, models=${models.map((m) => m.id).join(', ')}`,
+      );
+    } catch (error) {
+      this.capabilities.restartCount = this.manager.getRestartCount();
+      throw error;
     }
-
-    this.capabilities.mode = this.mode;
-    this.capabilities.supportsMultiModel = this.mode === 'router';
-
-    logger.info(
-      `llama.cpp detected mode=${this.mode}, models=${models.map((m) => m.id).join(', ')}`,
-    );
   },
 
   /**

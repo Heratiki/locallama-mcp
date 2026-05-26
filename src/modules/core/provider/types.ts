@@ -65,4 +65,7 @@ export interface LLMProvider {
   getCost(modelId: string): { prompt: number; completion: number };
 
   getVersion?(): Promise<string | null>;
+
+  /** Clean up resources (e.g. child processes) on server shutdown. */
+  shutdown?(): Promise<void>;
 }
