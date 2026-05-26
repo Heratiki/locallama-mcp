@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/Heratiki/locallama-mcp/compare/v1.19.0...v1.20.0) (2026-05-26)
+
+
+### Features
+
+* add Binary Discovery and User-managed llama.cpp mode descriptions to documentation ([8f7b753](https://github.com/Heratiki/locallama-mcp/commit/8f7b753d81d56cdffec2ab029d295d268f00d2c0))
+
 # [1.19.0](https://github.com/Heratiki/locallama-mcp/compare/v1.18.0...v1.19.0) (2026-05-23)
 
 
