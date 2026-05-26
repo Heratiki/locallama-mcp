@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/Heratiki/locallama-mcp/compare/v1.18.0...v1.19.0) (2026-05-23)
+
+
+### Features
+
+* add get_system_state MCP tool for remote queue/benchmark visibility (closes [#85](https://github.com/Heratiki/locallama-mcp/issues/85)) ([#104](https://github.com/Heratiki/locallama-mcp/issues/104)) ([4d10382](https://github.com/Heratiki/locallama-mcp/commit/4d10382f6761d94bc6e7fdb348311e15cfe0ab09))
+
 # [1.18.0](https://github.com/Heratiki/locallama-mcp/compare/v1.17.0...v1.18.0) (2026-05-23)
 
 
