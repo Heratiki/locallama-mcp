@@ -1,8 +1,19 @@
 # LocalLama MCP Server
 
+[![Status: experimental](https://img.shields.io/badge/status-experimental-orange.svg)](https://github.com/Heratiki/locallama-mcp/releases)
+[![Latest release](https://img.shields.io/github/v/release/Heratiki/locallama-mcp)](https://github.com/Heratiki/locallama-mcp/releases)
+![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)
+
 Local-first, provider-neutral Model Context Protocol server for coding-agent workflows. Routes tasks across local models (Ollama, LM Studio, llama.cpp), free OpenRouter models, and paid frontier models using cost, latency, context capacity, and benchmark history.
 
-**Version:** 1.16.0 | **Node.js:** >=22 | **License:** ISC
+**Node.js:** >=22
+
+> ⚠️ **Early / experimental — not yet a stable release.** This project is under active, rapid development and has not been fully verified end-to-end. MCP tool signatures, configuration, and behavior may change between releases without notice.
+>
+> Version numbers follow [SemVer](https://semver.org/) mechanically (they're derived from [Conventional Commit](https://www.conventionalcommits.org/) messages, not hand-picked), so a `1.x` number signals only *"a public surface exists"* — it is **not** a promise of stability or completeness. If you depend on this server, pin to an exact version.
+>
+> - **Tagged releases on `main`** are the relatively safer builds.
+> - **The `testing` channel** publishes bleeding-edge pre-releases (`x.y.z-testing.n`) for trying unproven changes early.
 
 ## Overview
 
