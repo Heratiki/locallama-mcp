@@ -47,6 +47,9 @@ export interface Config {
   providerMaxConcurrentRemote: number;
   localLlamaEndpoint: string; // Added local Llama endpoint
   llamaCppEndpoint: string; // llama-server OpenAI-compatible endpoint
+  llamaCppServerBin: string; // Explicit path to llama-server binary
+  llamaCppCliBin: string; // Explicit path to llama-cli binary
+  llamaCppModelPath?: string; // Explicit path to a model file for sibling discovery
   llamaCppHealthProbeEnabled: boolean;
   llamaCppHealthProbePrompt: string;
   llamaCppHealthProbeTimeoutMs: number;
@@ -141,6 +144,9 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'ollamaEndpoint',
   'localLlamaEndpoint',
   'llamaCppEndpoint',
+  'llamaCppServerBin',
+  'llamaCppCliBin',
+  'llamaCppModelPath',
   'openRouterApiKey',
   'benchmark.resultsPath',
   'cacheEnabled',
@@ -222,6 +228,9 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     providerMaxConcurrentRemote: parseNumber(env.PROVIDER_MAX_CONCURRENT_REMOTE, 1, 1, 128),
     localLlamaEndpoint: env.LOCAL_LLAMA_ENDPOINT || 'http://localhost:12345/api',
     llamaCppEndpoint: env.LLAMA_CPP_ENDPOINT || '',
+    llamaCppServerBin: env.LLAMA_CPP_SERVER_BIN || '',
+    llamaCppCliBin: env.LLAMA_CPP_CLI_BIN || '',
+    llamaCppModelPath: env.LLAMA_CPP_MODEL || undefined,
     llamaCppHealthProbeEnabled: parseBool(env.LLAMA_CPP_HEALTH_PROBE_ENABLED, true),
     llamaCppHealthProbePrompt: env.LLAMA_CPP_HEALTH_PROBE_PROMPT || `write 'ok'`,
     llamaCppHealthProbeTimeoutMs: parseNumber(env.LLAMA_CPP_HEALTH_PROBE_TIMEOUT_MS, 10000, 1000),
