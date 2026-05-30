@@ -83,6 +83,7 @@ jest.unstable_mockModule('../dist/modules/job-store/alert.js', () => ({
 
 jest.unstable_mockModule('../dist/utils/lock-file.js', () => ({
   isLockFilePresent: jest.fn().mockReturnValue(false),
+  isLockFileProcessRunning: jest.fn().mockReturnValue(false),
   getLockFileInfo: jest.fn().mockReturnValue(null),
   createLockFile: jest.fn(),
   removeLockFile: jest.fn(),

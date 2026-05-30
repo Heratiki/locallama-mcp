@@ -12,7 +12,7 @@ import type { RouteTaskParams } from './modules/api-integration/routing/types.js
 import type { CostEstimationParams } from './modules/api-integration/cost-estimation/types.js';
 import type { OpenRouterBenchmarkConfig } from './modules/api-integration/openrouter-integration/types.js';
 import type { BenchmarkConfig, BenchmarkTaskParams } from './types/index.js';
-import { createLockFile, isLockFilePresent, removeLockFile, getLockFileInfo } from './utils/lock-file.js';
+import { createLockFile, isLockFilePresent, removeLockFile, getLockFileInfo, isLockFileProcessRunning } from './utils/lock-file.js';
 import type { LockFileInfo } from './utils/lock-file.js';
 import { setClientHints } from './modules/core/client/hints.js';
 import { checkForUpdates, runUpdate, runStartupCheck } from './modules/updater/index.js';
@@ -188,48 +188,49 @@ export class LocalLamaMcpServer {
    */
   private setupProcessSignalHandlers(): void {
     const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
-    
+
     signals.forEach(signal => {
       process.on(signal, () => {
-        if (this.isShuttingDown) return;
-        this.isShuttingDown = true;
-        
-        logger.info(`Received ${signal}, shutting down gracefully...`);
-        
-        // Use Promise.resolve to handle the async shutdown without issues in the event handler
-        Promise.resolve(this.shutdown())
-          .then(() => process.exit(0))
-          .catch(err => {
-            logger.error(`Error during shutdown after ${signal}:`, err);
-            process.exit(1);
-          });
+        this.gracefulExit(0, `signal ${signal}`);
       });
     });
+
+    // When the MCP client (e.g. Claude Code) goes away it closes our stdin. If
+    // it exits cleanly we also get SIGTERM/SIGHUP, but on a crash or hard kill
+    // no signal is delivered — stdin EOF is the only notification. Without this
+    // the process would be reparented to init and linger as an orphan, holding
+    // the lock file (and any ports). Treat stdin close as a shutdown request.
+    process.stdin.on('end', () => this.gracefulExit(0, 'stdin end (client disconnected)'));
+    process.stdin.on('close', () => this.gracefulExit(0, 'stdin close (client disconnected)'));
 
     // Handle uncaught exceptions and unhandled promise rejections
     process.on('uncaughtException', (err) => {
       logger.error('Uncaught exception:', err);
-      
-      if (this.isShuttingDown) return;
-      this.isShuttingDown = true;
-      
-      // Use Promise.resolve to handle the async shutdown without issues in the event handler
-      Promise.resolve(this.shutdown())
-        .then(() => process.exit(1))
-        .catch(() => process.exit(1));
+      this.gracefulExit(1, 'uncaughtException');
     });
 
     process.on('unhandledRejection', (reason) => {
       logger.error('Unhandled promise rejection:', reason);
-      
-      if (this.isShuttingDown) return;
-      this.isShuttingDown = true;
-      
-      // Use Promise.resolve to handle the async shutdown without issues in the event handler
-      Promise.resolve(this.shutdown())
-        .then(() => process.exit(1))
-        .catch(() => process.exit(1));
+      this.gracefulExit(1, 'unhandledRejection');
     });
+  }
+
+  /**
+   * Run the shutdown procedure exactly once and exit. Safe to call from any
+   * lifecycle trigger (signal, stdin EOF, transport close, fatal error).
+   */
+  private gracefulExit(code: number, reason: string): void {
+    if (this.isShuttingDown) return;
+    this.isShuttingDown = true;
+
+    logger.info(`Shutting down gracefully (${reason})...`);
+
+    Promise.resolve(this.shutdown())
+      .then(() => process.exit(code))
+      .catch(err => {
+        logger.error(`Error during shutdown (${reason}):`, err);
+        process.exit(code === 0 ? 1 : code);
+      });
   }
 
   /**
@@ -521,7 +522,15 @@ export class LocalLamaMcpServer {
                 }
                 case 'update_server': {
                   const updateResult = await runUpdate();
-                  return JSON.stringify(updateResult);
+                  // The new code is built but this process is still running the
+                  // old code. We do NOT self-exit (that would kill the client's
+                  // active MCP tools mid-session). Instead tell the client to
+                  // reconnect, which cleanly closes the transport -> graceful
+                  // shutdown (lock file released) -> respawn on the new build.
+                  const nextStep = updateResult.success
+                    ? 'Update built successfully. Run /mcp (reconnect locallama-dev) to graceful-restart onto the new build; no manual process kill is needed.'
+                    : 'Update did not complete; the server is still running the previous build.';
+                  return JSON.stringify({ ...updateResult, nextStep });
                 }
                 default:
                   logger.error(`Unknown tool: ${name}`);
@@ -581,46 +590,24 @@ export class LocalLamaMcpServer {
 
   async run(): Promise<void> {
     try {
-      // Check if another instance is already running
+      // This is a stdio MCP server: each MCP client (Claude Code, Cline, …)
+      // spawns and owns its own server process over a private stdio pipe. There
+      // is therefore no cross-process singleton — a new instance must always
+      // start and bind to the pipe its client just opened. The lock file is kept
+      // purely for diagnostics (records the most recent instance); if a stale
+      // lock from a terminated process is present we just log it.
       if (isLockFilePresent()) {
         const lockInfo: LockFileInfo | null = getLockFileInfo();
-        
-        // Check if the process in the lock file is still running
-        try {
-          const isProcessRunning = await import('./utils/lock-file.js').then(
-            module => module.isLockFileProcessRunning()
-          );
-          
-          if (isProcessRunning) {
-            // The other server instance is still running
-            logger.info(`Another instance of LocalLama MCP Server is already running.`);
-            logger.info(`Process: ${lockInfo?.pid || 'unknown'}, Started: ${lockInfo?.startTime || 'unknown'}`);
-            if (lockInfo?.connectionInfo) {
-              logger.info(`Connection Info: ${lockInfo.connectionInfo}`);
-            }
-            logger.info(`This process will exit and requests will be directed to the existing instance.`);
-            process.exit(0);
-            return;
-          } else {
-            // The lock file exists but the process is not running (stale lock file)
-            logger.info(`Found a stale lock file from a terminated server instance. Removing it.`);
-            removeLockFile();
-          }
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          logger.error('Error checking if lock file process is running:', errorMessage);
-          logger.error('Lock file details:', lockInfo);
-          throw error;
-        }
+        const stillRunning = isLockFileProcessRunning();
+        logger.info(
+          stillRunning
+            ? `Existing lock file from PID ${lockInfo?.pid ?? 'unknown'} (started ${lockInfo?.startTime ?? 'unknown'}); overwriting for this instance.`
+            : `Found a stale lock file from a terminated server instance; overwriting it.`
+        );
       }
-      
-      // No lock file or stale lock file was removed, continue starting the server
 
-      // Connection information for the lock file
-      const connectionInfo = `LocalLama MCP Server running on stdio`;
-
-      // Create lock file with current process info and connection details
-      createLockFile({ connectionInfo });
+      // Record this instance in the (diagnostic-only) lock file.
+      createLockFile({ connectionInfo: 'LocalLama MCP Server running on stdio' });
 
       // Bootstrap the provider registry before anything that needs to know which
       // providers exist (decision engine, tool listing). Provider init failures
@@ -728,6 +715,9 @@ export class LocalLamaMcpServer {
       
       logger.info('Starting LocalLama MCP Server...');
       const transport = new StdioServerTransport();
+      // The MCP transport closing is the canonical "client disconnected" signal.
+      // Mirror the stdin-EOF handler so we shut down instead of orphaning.
+      this.server.onclose = () => this.gracefulExit(0, 'MCP transport closed');
       await this.server.connect(transport);
 
       // Capture the connected client's name for per-client behavioral hints.
