@@ -97,6 +97,8 @@ export interface LlamaCppCapabilities {
   resolvedPort: number | null;
   /** Number of times the managed server has been restarted. */
   restartCount: number;
+  /** GGUF metadata read from the model file before spawn. Null if not yet read or unavailable. */
+  modelMetadata: import('./gguf.js').GgufMetadata | null;
 }
 
 /** Resolved paths and capabilities of local llama.cpp binaries. */

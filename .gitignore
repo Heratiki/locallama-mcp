@@ -1,6 +1,18 @@
 # Claude Code local project config (machine-specific paths, session state)
 .claude/
 
+# AI agent local state/config (machine-specific; usually not useful in Git)
+.codex/
+.agents/
+.cursor/
+.windsurf/
+.continue/
+.aider*
+.qodo/
+.augment/
+.cody/
+.antigravitycli/
+
 # Legacy Cline/Roo specific IDE and tool configuration
 .clinerules-architect
 .clinerules-ask
@@ -118,4 +130,5 @@ locallama.log.1.gz
 locallama.log.2.gz
 locallama.log.3.gz
 locallama.log.4.gz
+.claude/settings.local.json
 .claude/settings.local.json

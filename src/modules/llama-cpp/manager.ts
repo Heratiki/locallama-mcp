@@ -12,6 +12,7 @@ export class LlamaServerManager {
   private lastBinaryPath: string | null = null;
   private lastModelPath: string | null = null;
   private lastPort: number | null = null;
+  private lastExtraFlags: string[] = [];
 
   /**
    * Get the current restart count.
@@ -48,17 +49,20 @@ export class LlamaServerManager {
 
   /**
    * Spawn llama-server as a child process and wait for readiness.
+   * @param extraFlags - Additional flags to append (from GGUF metadata + user overrides)
    */
-  async spawnServer(binaryPath: string, modelPath: string, port: number): Promise<void> {
+  async spawnServer(binaryPath: string, modelPath: string, port: number, extraFlags: string[] = []): Promise<void> {
     this.lastBinaryPath = binaryPath;
     this.lastModelPath = modelPath;
     this.lastPort = port;
+    this.lastExtraFlags = extraFlags;
     this.isStopping = false;
 
     const args = [
       '--model', modelPath,
       '--port', port.toString(),
       '--no-mmap',
+      ...extraFlags,
     ];
 
     logger.info(`Spawning llama-server: ${binaryPath} ${args.join(' ')}`);
@@ -137,7 +141,7 @@ export class LlamaServerManager {
     setTimeout(async () => {
       if (this.lastBinaryPath && this.lastModelPath && this.lastPort !== null && !this.isStopping) {
         try {
-          await this.spawnServer(this.lastBinaryPath, this.lastModelPath, this.lastPort);
+          await this.spawnServer(this.lastBinaryPath, this.lastModelPath, this.lastPort, this.lastExtraFlags);
         } catch (error) {
           logger.error(`Failed to restart llama-server: ${error instanceof Error ? error.message : String(error)}`);
         }

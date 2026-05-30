@@ -15,6 +15,7 @@
  */
 
 import axios, { AxiosError } from 'axios';
+import { spawn } from 'child_process';
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
 import { Model } from '../../types/index.js';
@@ -33,6 +34,7 @@ import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
 import { sanitizeErrorForLogging } from '../utils/sanitizeErrorForLogging.js';
 import { discoverLlamaBinaries } from './discovery.js';
 import { LlamaServerManager } from './manager.js';
+import { readGgufMetadata, GgufMetadata } from './gguf.js';
 
 function isDegenerate(text: string): boolean {
   if (!text || /^\s*$/.test(text)) return true; // empty or whitespace
@@ -65,6 +67,7 @@ export const llamaCppModule = {
     managedProcess: false,
     resolvedPort: null,
     restartCount: 0,
+    modelMetadata: null,
   } as LlamaCppCapabilities,
 
   /** Managed child process manager. */
@@ -72,6 +75,9 @@ export const llamaCppModule = {
 
   /** Resolved local binaries and their capabilities. */
   binaries: null as LlamaBinarySet | null,
+
+  /** GGUF metadata read from the configured model file. Null until populated. */
+  modelMetadata: null as GgufMetadata | null,
 
   /** In-memory cache of models reported by the server. */
   cachedModels: [] as LlamaCppApiModel[],
@@ -163,8 +169,15 @@ export const llamaCppModule = {
 
     if (binary && model) {
       try {
+        // Read GGUF metadata to inform flag selection before spawning
+        const metadata = await readGgufMetadata(model, config.llamaCppMaxCtx ?? null);
+        this.modelMetadata = metadata;
+        this.capabilities.modelMetadata = metadata;
+
+        const extraFlags = [...metadata.recommendedFlags, ...(config.llamaCppServerFlags ?? [])];
+
         const port = await this.manager.findFreePort(config.llamaCppPort);
-        await this.manager.spawnServer(binary, model, port);
+        await this.manager.spawnServer(binary, model, port, extraFlags);
         
         // Update config endpoint for subsequent calls
         (config as any).llamaCppEndpoint = `http://localhost:${port}`;
@@ -372,6 +385,83 @@ export const llamaCppModule = {
         error: this.classifyError(error instanceof Error ? error : new Error(String(error))),
       };
     }
+  },
+
+  /**
+   * Execute a task via the llama-cli binary (subprocess, no server required).
+   * Returns captured, filtered stdout.
+   */
+  async executeTaskViaCli(
+    modelId: string,
+    task: string,
+    options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number },
+  ): Promise<{ content: string; model: string }> {
+    const cliBin = this.binaries?.cli;
+    if (!cliBin) {
+      throw new Error('llama-cli binary not available');
+    }
+
+    const modelPath = config.llamaCppModelPath;
+    if (!modelPath) {
+      throw new Error('No model path configured (LLAMA_CPP_MODEL_PATH)');
+    }
+
+    const temperature = options?.temperature ?? config.defaultModelConfig?.temperature ?? 0.7;
+    const maxTokens = options?.maxTokens ?? config.defaultModelConfig?.maxTokens ?? 512;
+    const recommendedFlags = this.modelMetadata?.recommendedFlags ?? [];
+
+    const prompt = options?.systemPrompt
+      ? `${options.systemPrompt}\n\n${task}`
+      : task;
+
+    const args = [
+      '--model', modelPath,
+      '--prompt', prompt,
+      '--n-predict', String(maxTokens),
+      '--temp', String(temperature),
+      '--no-display-prompt',
+      '--log-disable',
+      ...recommendedFlags,
+    ];
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(cliBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const chunks: Buffer[] = [];
+
+      const timeoutMs = options?.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : 30000;
+      const timer = setTimeout(() => {
+        proc.kill('SIGKILL');
+        reject(new Error(`llama-cli timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      proc.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+      proc.on('exit', (code) => {
+        clearTimeout(timer);
+        if (code !== 0) {
+          reject(new Error(`llama-cli exited with code ${code}`));
+          return;
+        }
+
+        const raw = Buffer.concat(chunks).toString('utf-8');
+        const filtered = raw
+          .split('\n')
+          .filter((line) => {
+            if (/^llama_/.test(line)) return false;
+            if (/^\[/.test(line)) return false;
+            return true;
+          })
+          .join('\n')
+          .trim();
+
+        resolve({ content: filtered, model: modelId });
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
   },
 
   /**

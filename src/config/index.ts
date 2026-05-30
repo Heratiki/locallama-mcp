@@ -55,6 +55,10 @@ export interface Config {
   llamaCppHealthProbeEnabled: boolean;
   llamaCppHealthProbePrompt: string;
   llamaCppHealthProbeTimeoutMs: number;
+  /** Optional context window cap applied when building --ctx-size flag from GGUF metadata. */
+  llamaCppMaxCtx?: number;
+  /** Extra flags appended to recommended GGUF flags when spawning llama-server. */
+  llamaCppServerFlags: string[];
 
   // Model configuration
   defaultLocalModel: string;
@@ -151,6 +155,8 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'llamaCppModelPath',
   'llamaCppPort',
   'llamaCppStartupTimeoutMs',
+  'llamaCppMaxCtx',
+  'llamaCppServerFlags',
   'openRouterApiKey',
   'benchmark.resultsPath',
   'cacheEnabled',
@@ -240,6 +246,10 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     llamaCppHealthProbeEnabled: parseBool(env.LLAMA_CPP_HEALTH_PROBE_ENABLED, true),
     llamaCppHealthProbePrompt: env.LLAMA_CPP_HEALTH_PROBE_PROMPT || `write 'ok'`,
     llamaCppHealthProbeTimeoutMs: parseNumber(env.LLAMA_CPP_HEALTH_PROBE_TIMEOUT_MS, 10000, 1000),
+    llamaCppMaxCtx: env.LLAMA_CPP_MAX_CTX ? parseNumber(env.LLAMA_CPP_MAX_CTX, 0, 512) : undefined,
+    llamaCppServerFlags: env.LLAMA_CPP_SERVER_FLAGS
+      ? env.LLAMA_CPP_SERVER_FLAGS.trim().split(/\s+/).filter(Boolean)
+      : [],
 
     // Model configuration
     defaultLocalModel: env.DEFAULT_LOCAL_MODEL || 'llama2',
