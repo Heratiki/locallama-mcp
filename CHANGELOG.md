@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/Heratiki/locallama-mcp/compare/v1.22.0...v1.23.0) (2026-05-30)
+
+
+### Features
+
+* **llama-cpp:** GGUF metadata pre-read and direct CLI inference ([#107](https://github.com/Heratiki/locallama-mcp/issues/107)) ([fc1a3f3](https://github.com/Heratiki/locallama-mcp/commit/fc1a3f3f13d0f4993b36deaee3299bdb65e50a37)), closes [#93](https://github.com/Heratiki/locallama-mcp/issues/93) [#93](https://github.com/Heratiki/locallama-mcp/issues/93) [#95](https://github.com/Heratiki/locallama-mcp/issues/95)
+
 # [1.22.0](https://github.com/Heratiki/locallama-mcp/compare/v1.21.0...v1.22.0) (2026-05-26)
 
 
