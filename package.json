@@ -23,6 +23,7 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.json && npm run copy:assets",
+    "prepare": "git config core.hooksPath .githooks || true",
     "start": "node dist/index.js",
     "dev": "npm run copy:assets && tsc -w",
     "copy:assets": "node scripts/copy-assets.js",

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Args: $1 prev HEAD, $2 new HEAD, $3 flag (1 = branch checkout, 0 = file checkout).
+# Only rebuild on branch switches, not single-file checkouts.
+[ "$3" = "1" ] || exit 0
+. "$(dirname "$0")/_build.sh"

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs after `git pull` / `git merge`. Keep dist in sync with merged src.
+. "$(dirname "$0")/_build.sh"
