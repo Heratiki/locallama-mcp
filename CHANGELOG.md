@@ -1,3 +1,11 @@
+## [1.23.1](https://github.com/Heratiki/locallama-mcp/compare/v1.23.0...v1.23.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **deps:** bump axios to ^1.16.0 to resolve security alerts ([#108](https://github.com/Heratiki/locallama-mcp/issues/108)) ([5506332](https://github.com/Heratiki/locallama-mcp/commit/550633271690ed743fc6029acda9de98f7df88e7))
+* **server:** robust stdio lifecycle — exit on disconnect, drop singleton, clean update restart ([#109](https://github.com/Heratiki/locallama-mcp/issues/109)) ([6aa8338](https://github.com/Heratiki/locallama-mcp/commit/6aa8338e7005b403830ebe44494c86f8f8a19528))
+
 # [1.23.0](https://github.com/Heratiki/locallama-mcp/compare/v1.22.0...v1.23.0) (2026-05-30)
 
 
