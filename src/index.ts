@@ -246,6 +246,14 @@ export class LocalLamaMcpServer {
       // Registry may not have been initialized; ignore.
     }
     try {
+      // Close the JobTracker WebSocket server (binds from port 8080) so the
+      // port is released cleanly rather than only on process exit.
+      const { shutdownJobTracker } = await import('./modules/decision-engine/services/jobTracker.js');
+      await shutdownJobTracker();
+    } catch {
+      // JobTracker may not have been initialized; ignore.
+    }
+    try {
       await this.server.close();
       logger.info('Server closed successfully');
     } catch (err) {
