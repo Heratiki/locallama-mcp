@@ -612,7 +612,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
       },
       {
         name: 'update_server',
-        description: 'Pull the latest changes from GitHub and rebuild the server. Runs git pull, npm install, and npm run build in sequence. IMPORTANT: The server must be manually restarted after this completes for changes to take effect.',
+        description: 'Pull the latest changes from GitHub and rebuild the server. Runs git pull, npm install, and npm run build in sequence. The running process keeps serving the previous build until the client reconnects (e.g. /mcp), which triggers a graceful restart onto the new build — no manual process kill is required.',
         inputSchema: {
           type: 'object',
           properties: {},

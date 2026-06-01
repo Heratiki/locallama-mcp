@@ -29,14 +29,13 @@ export function createLockFile(additionalInfo = {}) {
       ...additionalInfo
     };
 
-    fs.writeFileSync(getLockFilePath(), JSON.stringify(lockInfo), { flag: 'wx' });
+    // The lock file is diagnostic only: it records the most recent instance and
+    // never blocks a new stdio MCP instance from starting (each MCP client owns
+    // its own server over a private stdio pipe). Overwrite any existing file.
+    fs.writeFileSync(getLockFilePath(), JSON.stringify(lockInfo), { flag: 'w' });
   } catch (error) {
-    if (error.code === 'EEXIST') {
-      console.log('Lock file already exists.');
-    } else {
-      console.error('Error creating lock file:', error);
-    }
-    process.exit(1);
+    // A failed lock write must never prevent the server from running.
+    console.error('Error creating lock file (continuing without it):', error);
   }
 }
 
@@ -54,10 +53,13 @@ export function isLockFilePresent() {
 export function removeLockFile() {
   try {
     const lockFilePath = getLockFilePath();
-    if (fs.existsSync(lockFilePath)) {
-      fs.unlinkSync(lockFilePath);
-      console.log('Lock file removed.');
-    }
+    if (!fs.existsSync(lockFilePath)) return;
+    // Only remove the lock if it belongs to this process. Another live instance
+    // (a different MCP client session) may legitimately own it.
+    const info = getLockFileInfo();
+    if (info && info.pid && info.pid !== process.pid) return;
+    fs.unlinkSync(lockFilePath);
+    console.log('Lock file removed.');
   } catch (error) {
     console.error('Error removing lock file:', error);
   }

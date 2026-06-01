@@ -34,25 +34,28 @@ afterEach(() => {
 });
 
 describe('lock file contention', () => {
-  it('calls process.exit(1) when createLockFile is called while a lock already exists', async () => {
+  it('overwrites an existing lock file without exiting (stdio MCP: no cross-process singleton)', async () => {
     const lockModule = await importFreshModule(
       path.resolve(originalCwd, 'dist/utils/lock-file.js'),
       `lock-contention-a=${Date.now()}`
     );
+    const lockPath = path.join(tempDir, 'locallama.lock');
 
-    // First call should create the lock file without error
-    lockModule.createLockFile({ port: 0 });
-    expect(fs.existsSync(path.join(tempDir, 'locallama.lock'))).toBe(true);
+    // Seed a lock file from a different (stale) instance.
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: 999999999, connectionInfo: 'stale' }));
 
-    // Mock process.exit so the test process doesn't actually exit
+    // process.exit must never be called: a new stdio instance must always start.
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation(
       ((code?: number) => { throw new Error(`process.exit(${code}) called`); }) as typeof process.exit
     );
 
     try {
-      // Second call should fail — lock file already exists (EEXIST)
-      expect(() => lockModule.createLockFile({ port: 0 })).toThrow();
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      // Second call should overwrite the existing lock with our own pid, not exit.
+      expect(() => lockModule.createLockFile({ connectionInfo: 'mine' })).not.toThrow();
+      expect(exitSpy).not.toHaveBeenCalled();
+      const info = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+      expect(info.pid).toBe(process.pid);
+      expect(info.connectionInfo).toBe('mine');
     } finally {
       exitSpy.mockRestore();
       lockModule.removeLockFile();
@@ -74,6 +77,33 @@ describe('lock file contention', () => {
     } finally {
       lockModule.removeLockFile();
     }
+  });
+
+  it('removeLockFile() leaves a lock owned by a different live process intact', async () => {
+    const lockModule = await importFreshModule(
+      path.resolve(originalCwd, 'dist/utils/lock-file.js'),
+      `lock-contention-own=${Date.now()}`
+    );
+    const lockPath = path.join(tempDir, 'locallama.lock');
+
+    // Lock owned by another live process (use the parent pid, guaranteed alive).
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.ppid, startTime: new Date().toISOString() }));
+
+    lockModule.removeLockFile();
+    expect(fs.existsSync(lockPath)).toBe(true); // not ours -> untouched
+  });
+
+  it('removeLockFile() removes a lock owned by the current process', async () => {
+    const lockModule = await importFreshModule(
+      path.resolve(originalCwd, 'dist/utils/lock-file.js'),
+      `lock-contention-own2=${Date.now()}`
+    );
+    const lockPath = path.join(tempDir, 'locallama.lock');
+
+    lockModule.createLockFile({ connectionInfo: 'mine' });
+    expect(fs.existsSync(lockPath)).toBe(true);
+    lockModule.removeLockFile();
+    expect(fs.existsSync(lockPath)).toBe(false);
   });
 
   it('isLockFileProcessRunning() returns false for a dead PID', async () => {
