@@ -1,21 +1,26 @@
 import { getProviderRegistry } from '../../core/provider/index.js';
 import { getModelRegistry } from '../../core/model/index.js';
-import type { ModelMetadata } from '../../core/model/types.js';
 import { logger } from '../../../utils/logger.js';
 import { modelsDbService } from './modelsDb.js';
 
-function findFirstOccurrence(text: string, keywords: string[]): number {
-  let minIndex = -1;
-  for (const keyword of keywords) {
-    const regex = new RegExp(`\\b${keyword}\\b`, 'i');
-    const match = text.match(regex);
-    if (match && match.index !== undefined) {
-      if (minIndex === -1 || match.index < minIndex) {
-        minIndex = match.index;
-      }
-    }
+function parseProseVerdict(trimmed: string): { passed: boolean | null; parsedCleanly: boolean } {
+  const lowerOutput = trimmed.toLowerCase();
+  
+  // Negation pattern, e.g. "not correct", "never pass", "fails to be correct", "doesn't pass"
+  const negationRegex = /\b(not|never|no|n't|incorrect|fails?|without)\b\s+(?:[a-z]+\s+)?\b(pass|passes|passing|correct|yes)\b/i;
+  
+  // Word boundary checks for positive and negative keywords with inflections
+  const hasYes = /\b(pass|passes|passing|correct|yes)\b/i.test(lowerOutput);
+  const hasNo = /\b(fail|fails|failed|incorrect|no)\b/i.test(lowerOutput);
+  const hasNegatedYes = negationRegex.test(lowerOutput);
+
+  if (hasYes && !hasNegatedYes && !hasNo) {
+    return { passed: true, parsedCleanly: false };
+  } else if (hasNo || hasNegatedYes) {
+    return { passed: false, parsedCleanly: false };
   }
-  return minIndex;
+  
+  return { passed: null, parsedCleanly: false };
 }
 
 function calculateConfidence(explanation: string): number {
@@ -53,96 +58,22 @@ function calculateConfidence(explanation: string): number {
   return parseFloat(Math.max(0, Math.min(1, conf)).toFixed(2));
 }
 
-async function updateValidatorReputation(modelId: string, parsedCleanly: boolean): Promise<void> {
-  const registry = getModelRegistry();
-  const modelMetadata = registry.getModel(modelId);
-  
-  let oldScore = 0.5;
-  
-  if (modelMetadata?.capabilities?.scores?.validate !== undefined) {
-    oldScore = modelMetadata.capabilities.scores.validate;
-  } else if (modelMetadata?.benchmarkSummary?.scores?.validate !== undefined) {
-    oldScore = modelMetadata.benchmarkSummary.scores.validate;
-  } else if (modelMetadata?.capabilities?.scores?.code !== undefined) {
-    oldScore = modelMetadata.capabilities.scores.code * 0.8;
-  } else if (modelMetadata?.benchmarkSummary?.scores?.code !== undefined) {
-    oldScore = modelMetadata.benchmarkSummary.scores.code * 0.8;
-  } else if (modelMetadata?.benchmarkSummary?.qualityScore !== undefined) {
-    oldScore = modelMetadata.benchmarkSummary.qualityScore * 0.8;
-  }
-
-  const signal = parsedCleanly ? 1.0 : 0.0;
-  const newScore = oldScore * 0.95 + signal * 0.05;
-  
-  logger.debug(`[OutputValidator] Updating validator reputation for ${modelId}: old=${oldScore.toFixed(4)}, signal=${signal}, new=${newScore.toFixed(4)}`);
-  
-  if (modelMetadata) {
-    const currentSummary = modelMetadata.benchmarkSummary || {
-      lastRunAt: Date.now(),
-      taskCategories: [],
-      scores: {},
-      benchmarkCount: 0
-    };
-    const currentScores = currentSummary.scores || {};
-    const updatedSummary = {
-      ...currentSummary,
-      lastRunAt: Date.now(),
-      scores: {
-        ...currentScores,
-        validate: newScore
-      },
-      benchmarkCount: (currentSummary.benchmarkCount || 0) + 1
-    };
-    registry.updateBenchmarkSummary(modelId, updatedSummary);
-  }
-  
-  try {
-    const modelsDb = modelsDbService.getDatabase();
-    const existingDbModel = modelsDb.models[modelId];
-    if (existingDbModel) {
-      const dbScores = existingDbModel.scores || {};
-      const updatedScores = {
-        ...dbScores,
-        validate: newScore
-      };
-      
-      await modelsDbService.updateModelData(modelId, {
-        scores: updatedScores,
-        benchmarkCount: (existingDbModel.benchmarkCount || 0) + 1,
-        lastBenchmarked: new Date().toISOString()
-      });
-    } else {
-      await modelsDbService.updateModelData(modelId, {
-        id: modelId,
-        name: modelId,
-        provider: modelId.split('-')[0] || 'unknown',
-        lastSeen: new Date().toISOString(),
-        contextWindow: modelMetadata?.contextWindow || 4096,
-        successRate: modelMetadata?.benchmarkSummary?.successRate || 1.0,
-        qualityScore: modelMetadata?.benchmarkSummary?.qualityScore || 0.5,
-        avgResponseTime: modelMetadata?.benchmarkSummary?.avgResponseTime || 1000,
-        complexityScore: 0.5,
-        lastBenchmarked: new Date().toISOString(),
-        benchmarkCount: 1,
-        isFree: true,
-        scores: { validate: newScore }
-      });
-    }
-  } catch (error) {
-    logger.error(`[OutputValidator] Failed to update model db validation score for ${modelId}:`, error);
-  }
-}
-
 export class OutputValidator {
+  /**
+   * Validates generated output against a task.
+   * Completely decoupled from registry/DB side-effects for testability.
+   */
   static async validate(
     task: string,
     output: string,
-    validatorModel: ModelMetadata
+    provider: { executeTask: (modelId: string, prompt: string, options?: any) => Promise<{ content: string }> },
+    modelId: string
   ): Promise<{
-    passed: boolean;
+    passed: boolean | null;
     confidence: number;
     reason: string;
     parsed_cleanly: boolean;
+    skipped: boolean;
   }> {
     const prompt = [
       "Does this output correctly and completely satisfy the task? Answer only YES or NO on the first line, then explain.",
@@ -150,24 +81,30 @@ export class OutputValidator {
       `Output: ${output}`
     ].join('\n\n');
 
-    let passed = true;
+    let passed: boolean | null = null;
     let parsedCleanly = true;
     let confidence = 1.0;
     let reason = '';
+    let skipped = false;
 
     try {
-      const providerRegistry = getProviderRegistry();
-      const provider = providerRegistry.get(validatorModel.providerId);
-      if (!provider) {
-        throw new Error(`Provider not found: ${validatorModel.providerId}`);
-      }
-
-      const execResult = await provider.executeTask(validatorModel.id, prompt, {
+      const execResult = await provider.executeTask(modelId, prompt, {
         temperature: 0.1,
         maxTokens: 500
       });
 
       const trimmed = execResult.content.trim();
+      
+      if (!trimmed) {
+        return {
+          passed: null,
+          confidence: 0,
+          reason: 'Empty response from validator model',
+          parsed_cleanly: false,
+          skipped: true
+        };
+      }
+
       const lines = trimmed.split(/\r?\n/);
       const firstLine = lines[0].trim().toUpperCase();
 
@@ -180,41 +117,119 @@ export class OutputValidator {
         reason = lines.slice(1).join('\n').trim() || 'Failed validation';
         confidence = calculateConfidence(reason);
       } else {
-        parsedCleanly = false;
-        const lowerOutput = trimmed.toLowerCase();
-        const yesIndex = findFirstOccurrence(lowerOutput, ['pass', 'correct', 'yes']);
-        const noIndex = findFirstOccurrence(lowerOutput, ['fail', 'incorrect', 'no']);
-
-        if (yesIndex !== -1 && (noIndex === -1 || yesIndex < noIndex)) {
-          passed = true;
+        // Keyword fallback matching
+        const fallback = parseProseVerdict(trimmed);
+        passed = fallback.passed;
+        parsedCleanly = fallback.parsedCleanly;
+        
+        if (passed !== null) {
           reason = trimmed;
-          confidence = calculateConfidence(trimmed) * 0.8;
-        } else if (noIndex !== -1 && (yesIndex === -1 || noIndex < yesIndex)) {
-          passed = false;
-          reason = trimmed;
-          confidence = calculateConfidence(trimmed) * 0.8;
+          confidence = 0.5; // pinned confidence for keyword fallback
         } else {
-          passed = true; // graceful skip
+          skipped = true;
           reason = 'Unparseable response: ' + (trimmed.substring(0, 100) || '(empty)');
           confidence = 0;
         }
       }
     } catch (error) {
       parsedCleanly = false;
-      passed = true; // graceful skip on provider error
+      passed = null;
+      skipped = true;
       reason = `Provider error: ${error instanceof Error ? error.message : String(error)}`;
       confidence = 0;
       logger.error(`[OutputValidator] Error during validation execution:`, error);
     }
 
-    // Update EMA reputation
-    await updateValidatorReputation(validatorModel.id, parsedCleanly);
-
     return {
       passed,
       confidence,
       reason,
-      parsed_cleanly: parsedCleanly
+      parsed_cleanly: parsedCleanly,
+      skipped
     };
+  }
+
+  /**
+   * Updates validator model reputation via EMA.
+   * Promoted as an explicit side-effect method to avoid hidden side effects inside validate().
+   */
+  static async updateReputation(modelId: string, parsedCleanly: boolean): Promise<void> {
+    const registry = getModelRegistry();
+    const modelMetadata = registry.getModel(modelId);
+    
+    let oldScore = 0.5;
+    
+    if (modelMetadata?.capabilities?.scores?.validate !== undefined) {
+      oldScore = modelMetadata.capabilities.scores.validate;
+    } else if (modelMetadata?.benchmarkSummary?.scores?.validate !== undefined) {
+      oldScore = modelMetadata.benchmarkSummary.scores.validate;
+    } else if (modelMetadata?.capabilities?.scores?.code !== undefined) {
+      oldScore = modelMetadata.capabilities.scores.code * 0.8;
+    } else if (modelMetadata?.benchmarkSummary?.scores?.code !== undefined) {
+      oldScore = modelMetadata.benchmarkSummary.scores.code * 0.8;
+    } else if (modelMetadata?.benchmarkSummary?.qualityScore !== undefined) {
+      oldScore = modelMetadata.benchmarkSummary.qualityScore * 0.8;
+    }
+
+    const signal = parsedCleanly ? 1.0 : 0.0;
+    const newScore = oldScore * 0.95 + signal * 0.05;
+    
+    logger.debug(`[OutputValidator] Updating validator reputation for ${modelId}: old=${oldScore.toFixed(4)}, signal=${signal}, new=${newScore.toFixed(4)}`);
+    
+    if (modelMetadata) {
+      const currentSummary = modelMetadata.benchmarkSummary || {
+        lastRunAt: Date.now(),
+        taskCategories: [],
+        scores: {},
+        benchmarkCount: 0
+      };
+      const currentScores = currentSummary.scores || {};
+      const updatedSummary = {
+        ...currentSummary,
+        lastRunAt: Date.now(),
+        scores: {
+          ...currentScores,
+          validate: newScore
+        },
+        benchmarkCount: (currentSummary.benchmarkCount || 0) + 1
+      };
+      registry.updateBenchmarkSummary(modelId, updatedSummary);
+    }
+    
+    try {
+      const modelsDb = modelsDbService.getDatabase();
+      const existingDbModel = modelsDb.models[modelId];
+      if (existingDbModel) {
+        const dbScores = existingDbModel.scores || {};
+        const updatedScores = {
+          ...dbScores,
+          validate: newScore
+        };
+        
+        await modelsDbService.updateModelData(modelId, {
+          scores: updatedScores,
+          benchmarkCount: (existingDbModel.benchmarkCount || 0) + 1,
+          lastBenchmarked: new Date().toISOString()
+        });
+      } else {
+        await modelsDbService.updateModelData(modelId, {
+          id: modelId,
+          name: modelId,
+          provider: modelId.split('-')[0] || 'unknown',
+          lastSeen: new Date().toISOString(),
+          contextWindow: modelMetadata?.contextWindow || 4096,
+          successRate: modelMetadata?.benchmarkSummary?.successRate || 1.0,
+          qualityScore: modelMetadata?.benchmarkSummary?.qualityScore || 0.5,
+          avgResponseTime: modelMetadata?.benchmarkSummary?.avgResponseTime || 1000,
+          complexityScore: 0.5,
+          lastBenchmarked: new Date().toISOString(),
+          benchmarkCount: 1,
+          isFree: true,
+          scores: { validate: newScore }
+        });
+      }
+    } catch (error) {
+      logger.error(`[OutputValidator] Failed to update model db validation score for ${modelId}:`, error);
+    }
   }
 }

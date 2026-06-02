@@ -1,16 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import type { ModelMetadata } from '../../../dist/modules/core/model/types.js';
 
 jest.unstable_mockModule('../../../dist/utils/logger.js', () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
-}));
-
-const mockExecuteTask = jest.fn();
-const mockGetProvider = jest.fn();
-jest.unstable_mockModule('../../../dist/modules/core/provider/index.js', () => ({
-  getProviderRegistry: () => ({
-    get: mockGetProvider,
-  }),
 }));
 
 const mockGetModel = jest.fn();
@@ -33,116 +24,140 @@ jest.unstable_mockModule('../../../dist/modules/decision-engine/services/modelsD
 
 const { OutputValidator } = await import('../../../dist/modules/decision-engine/services/outputValidator.js');
 
-describe('OutputValidator.validate test suite', () => {
-  const mockModel: ModelMetadata = {
-    id: 'test-model',
-    providerId: 'test-provider',
-    displayName: 'Test Model',
-    contextWindow: 4096,
-    capabilities: { chat: true, code: true, vision: false, toolUse: false, largeContext: false, maxContextTokens: 4096 },
-    cost: { prompt: 0, completion: 0 },
-    promptingStrategyId: 'default',
-  };
-
+describe('OutputValidator.validate (Unit Tests)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetDatabase.mockReturnValue({ models: {} });
   });
 
   it('verifies happy path with YES first line', async () => {
-    mockGetProvider.mockReturnValue({
-      id: 'test-provider',
-      executeTask: mockExecuteTask.mockResolvedValue({
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockResolvedValue({
         content: 'YES\nThe code is perfectly correct and meets all requirements.',
       }),
-    });
+    };
 
-    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockModel);
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockProvider, 'test-model');
 
     expect(result.passed).toBe(true);
     expect(result.parsed_cleanly).toBe(true);
+    expect(result.skipped).toBe(false);
     expect(result.confidence).toBeGreaterThanOrEqual(0.8);
     expect(result.reason).toBe('The code is perfectly correct and meets all requirements.');
   });
 
   it('verifies path with NO first line', async () => {
-    mockGetProvider.mockReturnValue({
-      id: 'test-provider',
-      executeTask: mockExecuteTask.mockResolvedValue({
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockResolvedValue({
         content: 'NO\nThe code has syntax errors and is missing return type.',
       }),
-    });
+    };
 
-    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a-b; }', mockModel);
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a-b; }', mockProvider, 'test-model');
 
     expect(result.passed).toBe(false);
     expect(result.parsed_cleanly).toBe(true);
+    expect(result.skipped).toBe(false);
     expect(result.confidence).toBeGreaterThanOrEqual(0.8);
     expect(result.reason).toBe('The code has syntax errors and is missing return type.');
   });
 
-  it('performs keyword fallback for YES in prose', async () => {
-    mockGetProvider.mockReturnValue({
-      id: 'test-provider',
-      executeTask: mockExecuteTask.mockResolvedValue({
-        content: 'This solution is correct because the add function is implemented correctly.',
+  it('performs keyword fallback for YES in prose with pinned confidence', async () => {
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockResolvedValue({
+        content: 'This solution is correct.',
       }),
-    });
+    };
 
-    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockModel);
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockProvider, 'test-model');
 
     expect(result.passed).toBe(true);
     expect(result.parsed_cleanly).toBe(false);
-    expect(result.reason).toContain('correct');
+    expect(result.skipped).toBe(false);
+    expect(result.confidence).toBe(0.5); // pinned confidence
   });
 
-  it('performs keyword fallback for NO in prose', async () => {
-    mockGetProvider.mockReturnValue({
-      id: 'test-provider',
-      executeTask: mockExecuteTask.mockResolvedValue({
-        content: 'This solution is incorrect and fails the main unit test case.',
+  it('performs keyword fallback for NO in prose with pinned confidence', async () => {
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockResolvedValue({
+        content: 'This solution fails the tests.',
       }),
-    });
+    };
 
-    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a-b; }', mockModel);
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a-b; }', mockProvider, 'test-model');
 
     expect(result.passed).toBe(false);
     expect(result.parsed_cleanly).toBe(false);
-    expect(result.reason).toContain('incorrect');
+    expect(result.skipped).toBe(false);
+    expect(result.confidence).toBe(0.5); // pinned confidence
   });
 
-  it('performs graceful skip on completely unparseable prose', async () => {
-    mockGetProvider.mockReturnValue({
-      id: 'test-provider',
-      executeTask: mockExecuteTask.mockResolvedValue({
-        content: 'I am a model and this is some completely neutral text that does not have keywords.',
+  it('handles negation trap: not correct', async () => {
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockResolvedValue({
+        content: 'This output is not correct.',
       }),
-    });
+    };
 
-    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockModel);
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a-b; }', mockProvider, 'test-model');
 
-    expect(result.passed).toBe(true);
+    expect(result.passed).toBe(false); // correctly identified negation
     expect(result.parsed_cleanly).toBe(false);
-    expect(result.confidence).toBe(0);
-    expect(result.reason).toContain('Unparseable response');
+    expect(result.skipped).toBe(false);
   });
 
-  it('degrades gracefully and returns true when provider throws error', async () => {
-    mockGetProvider.mockReturnValue({
-      id: 'test-provider',
-      executeTask: mockExecuteTask.mockRejectedValue(new Error('Connection failure')),
-    });
+  it('handles empty output gracefully', async () => {
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockResolvedValue({
+        content: '   ',
+      }),
+    };
 
-    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockModel);
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockProvider, 'test-model');
 
-    expect(result.passed).toBe(true);
+    expect(result.passed).toBeNull();
     expect(result.parsed_cleanly).toBe(false);
+    expect(result.skipped).toBe(true);
     expect(result.confidence).toBe(0);
-    expect(result.reason).toContain('Provider error: Connection failure');
+    expect(result.reason).toContain('Empty response');
+  });
+
+  it('handles unparseable prose gracefully (skipped)', async () => {
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockResolvedValue({
+        content: 'I am not sure what is happening here.',
+      }),
+    };
+
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockProvider, 'test-model');
+
+    expect(result.passed).toBeNull(); // skipped
+    expect(result.parsed_cleanly).toBe(false);
+    expect(result.skipped).toBe(true);
+    expect(result.confidence).toBe(0);
+  });
+
+  it('handles provider throw gracefully (skipped)', async () => {
+    const mockProvider = {
+      executeTask: jest.fn<any>().mockRejectedValue(new Error('API failure')),
+    };
+
+    const result = await OutputValidator.validate('write add function', 'function add(a,b) { return a+b; }', mockProvider, 'test-model');
+
+    expect(result.passed).toBeNull();
+    expect(result.parsed_cleanly).toBe(false);
+    expect(result.skipped).toBe(true);
+    expect(result.confidence).toBe(0);
+    expect(result.reason).toContain('Provider error: API failure');
+  });
+});
+
+describe('OutputValidator.updateReputation (Integration / Decoupled Unit Test)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetDatabase.mockReturnValue({ models: {} });
   });
 
   it('updates validator model reputation in registry and db via EMA', async () => {
-    // 1. Initial setup: model has validate score of 0.8 in registry and db
     mockGetModel.mockReturnValue({
       id: 'test-model',
       benchmarkSummary: {
@@ -161,17 +176,8 @@ describe('OutputValidator.validate test suite', () => {
       },
     });
 
-    mockGetProvider.mockReturnValue({
-      id: 'test-provider',
-      executeTask: mockExecuteTask.mockResolvedValue({
-        content: 'YES\nThe code is correct.',
-      }),
-    });
+    await OutputValidator.updateReputation('test-model', true);
 
-    // 2. Execute validation (parsed_cleanly = true, signal = 1.0)
-    await OutputValidator.validate('task', 'output', mockModel);
-
-    // newScore = 0.8 * 0.95 + 1.0 * 0.05 = 0.76 + 0.05 = 0.81
     expect(mockUpdateBenchmarkSummary).toHaveBeenCalledWith(
       'test-model',
       expect.objectContaining({
