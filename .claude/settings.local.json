@@ -67,7 +67,8 @@
       "Bash(python3 -c \"import json,sys; issues=json.load\\(sys.stdin\\); [print\\(f'#{i[\\\\\"number\\\\\"]} {i[\\\\\"title\\\\\"]} | {[l[\\\\\"name\\\\\"] for l in i[\\\\\"labels\\\\\"]]}'\\) for i in issues]\")",
       "mcp__locallama-dev__cancel_task",
       "PowerShell($env:TEMP)",
-      "Bash(npm outdated *)"
+      "Bash(npm outdated *)",
+      "Bash(grep -n \"^  },$\\\\|^  }$\" /home/heratiki/Source/locallama-mcp/src/modules/decision-engine/services/codeTaskAnalyzer.ts)"
     ]
   },
   "enableAllProjectMcpServers": true,

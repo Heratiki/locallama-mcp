@@ -39,6 +39,7 @@ and this file for the current snapshot.
 - Issue #32 was accidentally merged to `main` via PR #35 with no implementation diff. A fresh `future-testing` implementation was completed as of 2026-05-20: `route_task` queues a persistent Task/Job and returns `task_id` immediately; callers poll `get_task_status` or use `cancel_task`.
 - Issue #34 dashboard implementation moved from blocked intent to active baseline as of 2026-05-20: the web UI now supports manual `route_task` submission, task/job cancellation, benchmark history, and queue/task monitoring with server-side filters, pagination, queue-position range, and ETA fields (`eta_ms`/`eta`).
 - Issue #51 is implemented as of 2026-05-20: MCP `benchmark_free_models` now uses the modular benchmark engine, writes free-model results through `benchmarks.db`, and returns structured provider/rate-limit errors instead of delegating to the legacy decision-engine benchmark service.
+- Issue #115 validation loop and retry ladder implemented as of 2026-06-02: synchronous validation is wired into background task execution. Supports `validate: false` bypass, free-tier budget awareness, and deterministic retry ladder escalation (`good` -> `better` -> `best`) without re-routing. Returns structured validation outcome metadata. All 482 tests pass.
 
 ## What to keep out of docs
 
