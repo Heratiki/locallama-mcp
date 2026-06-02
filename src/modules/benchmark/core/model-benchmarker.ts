@@ -14,6 +14,7 @@ import { evaluateQuality } from '../evaluation/quality.js';
 import { initBenchmarkDb, saveBenchmarkResult } from '../storage/benchmarkDb.js';
 import { getDynamicTimeout } from './runner.js';
 import { logger } from '../../../utils/logger.js';
+import { withSpan } from '../../telemetry/index.js';
 
 // ---------------------------------------------------------------------------
 // Task category definitions
@@ -221,6 +222,24 @@ function scoreValidationVerdict(output: string, expectedVerdict: 'YES' | 'NO'): 
 export async function benchmarkModel(
   params: BenchmarkModelParams,
 ): Promise<BenchmarkModelResult> {
+  return withSpan(
+    'mcp.benchmark_model',
+    {
+      'model.id': params.modelId,
+      'benchmark.categories': (params.taskCategories ?? ['code', 'chat']).join(','),
+    },
+    async (span) => {
+      const result = await _benchmarkModelInner(params);
+      span.setAttribute('benchmark.success_rate', result.summary.successRate ?? 0);
+      span.setAttribute('benchmark.quality_score', result.summary.qualityScore ?? 0);
+      return result;
+    },
+  );
+}
+
+async function _benchmarkModelInner(
+  params: BenchmarkModelParams,
+): Promise<BenchmarkModelResult> {
   const { modelId, taskCategories = ['code', 'chat'] } = params;
 
   const registry = getProviderRegistry();
@@ -319,7 +338,7 @@ export async function benchmarkModel(
         const execResult = await registry.executeWithConcurrencyLimit(
           provider,
           async () => await provider.executeTask(executableModelId, benchTask.task, { timeoutMs }),
-          { workload: 'benchmark', priority: 'background' },
+          { workload: 'benchmark', priority: 'background', modelId: executableModelId },
         );
         const elapsed = Date.now() - startMs;
         const quality = benchTask.expectedVerdict

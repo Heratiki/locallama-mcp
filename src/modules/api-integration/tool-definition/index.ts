@@ -152,6 +152,25 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         }
       },
       {
+        name: 'get_telemetry_summary',
+        description:
+          'Return an analytics summary of LLM call telemetry recorded across all runs. ' +
+          'Includes per-model latency (avg, p95), token usage, error rates, quality scores, ' +
+          'per-provider reliability stats, pipeline flow durations, and actionable recommendations ' +
+          'for improving model selection and routing. ' +
+          'Data persists across restarts in ~/.locallama/telemetry.jsonl.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            lookback_hours: {
+              type: 'number',
+              description: 'How many hours of history to include (default: 168 = 7 days).',
+            },
+          },
+          required: [],
+        },
+      },
+      {
         name: 'get_system_state',
         description:
           'Return a structured snapshot of current runtime health: local slot occupancy (inference vs benchmark vs idle), ' +

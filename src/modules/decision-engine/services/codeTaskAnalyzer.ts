@@ -1,5 +1,6 @@
 import { logger } from '../../../utils/logger.js';
 import { costMonitor } from '../../cost-monitor/index.js';
+import { withSpan } from '../../telemetry/index.js';
 import { 
   CodeTaskAnalysisOptions, 
   CodeComplexityResult, 
@@ -94,8 +95,9 @@ export const codeTaskAnalyzer = {
     task: string,
     options: CodeTaskAnalysisOptions = {}
   ): Promise<DecomposedCodeTask> {
+    return withSpan('decision_engine.decompose', { 'task.length': task.length }, async (span) => {
     logger.debug('Decomposing code task:', task);
-        
+
     try {
       // First, analyze the complexity to determine if decomposition is necessary
       const complexityResult = await this.analyzeComplexity(task);
@@ -314,8 +316,9 @@ export const codeTaskAnalyzer = {
       // Fallback to a simple decomposition
       return this.createFallbackDecomposition(task);
     }
+    }); // end withSpan decompose
   },
-  
+
   /**
    * Analyze the complexity of a code task
    * 
@@ -323,6 +326,7 @@ export const codeTaskAnalyzer = {
    * @returns A complexity analysis result
    */
   async analyzeComplexity(task: string | undefined): Promise<CodeComplexityResult> {
+    return withSpan('decision_engine.analyze_complexity', { 'task.length': task?.length ?? 0 }, async (span) => {
     // Enhanced validation for undefined, null, or empty string task
     if (!task || task.trim() === '') {
       logger.warn('Task is undefined, null, or empty, returning default complexity.');
@@ -520,8 +524,9 @@ export const codeTaskAnalyzer = {
         explanation: `Failed to analyze complexity: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
+    }); // end withSpan analyzeComplexity
   },
-  
+
   /**
    * Parse subtasks from the model response
    *

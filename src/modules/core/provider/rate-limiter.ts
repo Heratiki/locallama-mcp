@@ -7,6 +7,8 @@ type QueuePriority = 'normal' | 'background';
 export interface ProviderScheduleOptions {
   workload?: WorkloadKind;
   priority?: QueuePriority;
+  /** Model id hint — used by telemetry to tag the span; not consumed by rate limiter logic. */
+  modelId?: string;
 }
 
 interface QueueEntry<T> {

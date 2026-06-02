@@ -5,6 +5,7 @@ import { ProviderQueueStats, ProviderRateLimiter, ProviderScheduleOptions } from
 import { config } from '../../../config/index.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { withSpan } from '../../telemetry/index.js';
 
 /**
  * Central registry of `LLMProvider` implementations. Lookups are by provider
@@ -149,12 +150,38 @@ export class ProviderRegistry {
     this.circuitBreaker.recordFailure(providerId);
   }
 
-  async executeWithConcurrencyLimit<T>(provider: LLMProvider, run: () => Promise<T>, options?: ProviderScheduleOptions): Promise<T> {
-    return await this.rateLimiter.schedule(
-      provider.id,
-      provider.isLocal ? 'local' : 'remote',
-      run,
-      options,
+  async executeWithConcurrencyLimit<T>(
+    provider: LLMProvider,
+    run: () => Promise<T>,
+    options?: ProviderScheduleOptions & { modelId?: string },
+  ): Promise<T> {
+    const modelId = options?.modelId ?? 'unknown';
+    return withSpan(
+      'provider.execute_task',
+      {
+        'model.id': modelId,
+        'model.provider': provider.id,
+        'provider.cost_class': provider.costClass,
+        'provider.is_local': provider.isLocal,
+        'workload.type': options?.workload ?? 'task',
+      },
+      async (span) => {
+        const result = await this.rateLimiter.schedule(
+          provider.id,
+          provider.isLocal ? 'local' : 'remote',
+          run,
+          options,
+        );
+        // If the run returned a TaskExecutionResult, record token/latency attrs
+        if (result && typeof result === 'object') {
+          const r = result as Record<string, unknown>;
+          if (typeof r.promptTokens === 'number') span.setAttribute('llm.prompt_tokens', r.promptTokens);
+          if (typeof r.completionTokens === 'number') span.setAttribute('llm.completion_tokens', r.completionTokens);
+          if (typeof r.totalTokens === 'number') span.setAttribute('llm.total_tokens', r.totalTokens);
+          if (typeof r.timeTakenMs === 'number') span.setAttribute('llm.latency_ms', r.timeTakenMs);
+        }
+        return result;
+      },
     );
   }
 
