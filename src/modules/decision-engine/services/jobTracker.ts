@@ -48,6 +48,7 @@ export interface Job {
   results?: string[]; // Array to store generated code blocks
   ranked_trio?: RankedTrio;
   benchmarking_recommended?: Recommendation[];
+  validation?: any;
 }
 
 export interface JobTrackerMonitoringInfo {
@@ -94,7 +95,8 @@ export class JobTracker extends EventEmitter {
       startTime: p.created_at,
       model: p.model_id ?? undefined,
       error: p.error ?? undefined,
-      results: p.result ? (JSON.parse(p.result) as string[]) : undefined
+      results: p.result ? (JSON.parse(p.result) as string[]) : undefined,
+      validation: (p as any).validation ? JSON.parse((p as any).validation) : undefined
     };
   }
 
@@ -284,7 +286,7 @@ export class JobTracker extends EventEmitter {
     this.emit('jobProgress', job);
   }
 
-  async completeJob(id: string, results?: string[]): Promise<void> {
+  async completeJob(id: string, results?: string[], validation?: any): Promise<void> {
     // Allow operation even if not fully initialized
     if (!this.initialized) {
       logger.warn(`Attempted to complete job ${id} before JobTracker was initialized`);
@@ -301,7 +303,8 @@ export class JobTracker extends EventEmitter {
       status: JobStatus.COMPLETED,
       progress: '100%',
       estimated_time_remaining: '0',
-      results: results ?? existing?.results
+      results: results ?? existing?.results,
+      validation: validation ?? existing?.validation
     };
     this.activeJobs.set(id, job);
 
@@ -313,7 +316,8 @@ export class JobTracker extends EventEmitter {
         result: results ? JSON.stringify(results) : null,
         completed_at: now,
         queue_position: null,
-        poll_again_after_ms: 0
+        poll_again_after_ms: 0,
+        validation: validation ? JSON.stringify(validation) : null
       });
     } catch (dbError) {
       logger.warn(`Failed to persist completion for job ${id}:`, dbError);
@@ -372,7 +376,7 @@ export class JobTracker extends EventEmitter {
     await refreshAlertState();
   }
 
-  async failJob(id: string, error?: string): Promise<void> {
+  async failJob(id: string, error?: string, validation?: any): Promise<void> {
     // Allow operation even if not fully initialized
     if (!this.initialized) {
       logger.warn(`Attempted to fail job ${id} before JobTracker was initialized`);
@@ -388,7 +392,8 @@ export class JobTracker extends EventEmitter {
       status: JobStatus.FAILED,
       progress: 'Failed',
       estimated_time_remaining: 'N/A',
-      error
+      error,
+      validation: validation ?? existing?.validation
     };
     this.activeJobs.set(id, job);
 
@@ -398,7 +403,8 @@ export class JobTracker extends EventEmitter {
         status: 'failed', 
         error: error ?? null,
         queue_position: null,
-        poll_again_after_ms: 0
+        poll_again_after_ms: 0,
+        validation: validation ? JSON.stringify(validation) : null
       });
     } catch (dbError) {
       logger.warn(`Failed to persist failure for job ${id}:`, dbError);

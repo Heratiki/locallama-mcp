@@ -1,5 +1,6 @@
 import { decisionEngine } from '../../decision-engine/index.js';
 import { getJobTracker, JobStatus } from '../../decision-engine/services/jobTracker.js';
+import { OutputValidator } from '../../decision-engine/services/outputValidator.js';
 import { withSpan } from '../../telemetry/index.js';
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
@@ -536,7 +537,10 @@ export class Router implements IRouter {
 
   private async runQueuedRouteTask(taskId: string, providerId: string, params: RouteTaskParams): Promise<void> {
     const tracker = await getJobTracker();
-    const releaseSlot = await this.acquireQueuedRouteExecutionSlot(providerId);
+    let currentReleaseSlot: (() => void) | null = null;
+    const validationAttempts: any[] = [];
+    const shouldValidate = params.validate !== false;
+
     try {
       const jobsForTask = await getJobsByTaskId(taskId);
       const persistedTopLevelJob = jobsForTask.find((job) => job.id === taskId);
@@ -545,17 +549,233 @@ export class Router implements IRouter {
         return;
       }
 
+      const liveJob = tracker.getJob(taskId);
+      const rankedTrio = liveJob?.ranked_trio;
+
+      if (!rankedTrio) {
+        // Fallback: no trio available (e.g. legacy callers/tests). Run once without forcing/validating.
+        currentReleaseSlot = await this.acquireQueuedRouteExecutionSlot(providerId);
+        await updateJob({ id: taskId, status: 'in_progress', progress_pct: 1, started_at: Date.now(), poll_again_after_ms: 15_000 });
+        await updateTask({ id: taskId, status: 'in_progress' });
+
+        const result = await this.executeRouteTaskBlocking(params, taskId);
+        await tracker.completeJob(taskId, [result.resultCode]);
+        await updateTask({ id: taskId, status: 'completed', completed_count: 1, failed_count: 0 });
+        return;
+      }
+
+      let attemptSlot: 'good' | 'better' | 'best' = 'good';
+      let currentMember = rankedTrio[attemptSlot];
+      let finalResult: RouteTaskResult | null = null;
+      let overallPassed = false;
+
+      // Acquire first slot before marking job/task in_progress (preserving task concurrency ordering)
+      currentReleaseSlot = await this.acquireQueuedRouteExecutionSlot(currentMember.provider_id);
+
       await updateJob({ id: taskId, status: 'in_progress', progress_pct: 1, started_at: Date.now(), poll_again_after_ms: 15_000 });
       await updateTask({ id: taskId, status: 'in_progress' });
-      const result = await this.executeRouteTaskBlocking(params, taskId);
-      await tracker.completeJob(taskId, [result.resultCode]);
+
+      while (currentMember) {
+        logger.info(`Running validation ladder attempt: slot=${attemptSlot}, model=${currentMember.model_id}, provider=${currentMember.provider_id}`);
+
+        if (!currentReleaseSlot) {
+          currentReleaseSlot = await this.acquireQueuedRouteExecutionSlot(currentMember.provider_id);
+        }
+
+        const attemptResult = await this.executeRouteTaskBlocking(
+          params,
+          taskId,
+          currentMember.model_id,
+          currentMember.provider_id
+        );
+
+        if (!shouldValidate) {
+          finalResult = attemptResult;
+          overallPassed = true;
+          break;
+        }
+
+        // a. Self-validation
+        let selfValResult: any = undefined;
+        let selfValPassed: boolean | null = null;
+        let selfValSkipped = false;
+
+        const currentProvider = getProviderRegistry().get(currentMember.provider_id);
+        const modelMeta = getModelRegistry().getModel(currentMember.model_id);
+        const isFree = currentMember.provider_id === 'openrouter' && (
+          !(modelMeta as any)?.costPerToken ||
+          ((modelMeta as any).costPerToken.prompt === 0 && (modelMeta as any).costPerToken.completion === 0) ||
+          costMonitor.freeModelsCache?.some(m => m.id === currentMember?.model_id)
+        );
+
+        let hasBudget = true;
+        if (currentProvider && typeof (currentProvider as any).hasRateLimitBudget === 'function') {
+          hasBudget = (currentProvider as any).hasRateLimitBudget();
+        }
+
+        if (isFree && !hasBudget) {
+          selfValSkipped = true;
+          selfValResult = {
+            passed: null,
+            confidence: 0,
+            reason: 'Skipped self-validation: OpenRouterProvider rate limit budget exhausted.',
+            parsed_cleanly: false,
+            skipped: true
+          };
+        } else if (currentProvider) {
+          try {
+            selfValResult = await OutputValidator.validate(
+              params.task,
+              attemptResult.resultCode,
+              currentProvider,
+              currentMember.model_id
+            );
+            selfValPassed = selfValResult.passed;
+            selfValSkipped = selfValResult.skipped;
+          } catch (err) {
+            selfValSkipped = true;
+            selfValResult = {
+              passed: null,
+              confidence: 0,
+              reason: `Error during self-validation execution: ${err instanceof Error ? err.message : String(err)}`,
+              parsed_cleanly: false,
+              skipped: true
+            };
+          }
+        } else {
+          selfValSkipped = true;
+          selfValResult = {
+            passed: null,
+            confidence: 0,
+            reason: `Provider ${currentMember.provider_id} not found`,
+            parsed_cleanly: false,
+            skipped: true
+          };
+        }
+
+        // Update reputation if self-validation completed
+        if (selfValResult && !selfValSkipped && selfValResult.parsed_cleanly !== undefined) {
+          try {
+            await OutputValidator.updateReputation(currentMember.model_id, selfValResult.parsed_cleanly);
+          } catch (err) {
+            logger.warn(`Failed to update reputation for ${currentMember.model_id}:`, err);
+          }
+        }
+
+        // b. External validation
+        let extValResult: any = undefined;
+        let extValPassed: boolean | null = null;
+        let extValSkipped = false;
+
+        if (selfValPassed !== false) {
+          const valModel = await decisionEngine.getBestValidatorModel(
+            params.complexity || 0.5,
+            params.contextLength + (params.expectedOutputLength || 0),
+            currentMember.model_id
+          );
+          if (valModel) {
+            const valProvider = getProviderRegistry().get(valModel.provider);
+            if (valProvider) {
+              try {
+                extValResult = await OutputValidator.validate(
+                  params.task,
+                  attemptResult.resultCode,
+                  valProvider,
+                  valModel.id
+                );
+                extValPassed = extValResult.passed;
+                extValSkipped = extValResult.skipped;
+              } catch (err) {
+                extValSkipped = true;
+                extValResult = {
+                  passed: null,
+                  confidence: 0,
+                  reason: `Error during external validation execution: ${err instanceof Error ? err.message : String(err)}`,
+                  parsed_cleanly: false,
+                  skipped: true
+                };
+              }
+            } else {
+              extValSkipped = true;
+              extValResult = {
+                passed: null,
+                confidence: 0,
+                reason: `Validator provider ${valModel.provider} not found`,
+                parsed_cleanly: false,
+                skipped: true
+              };
+            }
+          } else {
+            extValSkipped = true;
+            extValResult = {
+              passed: null,
+              confidence: 0,
+              reason: 'No qualified validator model found',
+              parsed_cleanly: false,
+              skipped: true
+            };
+          }
+        }
+
+        const attemptPassed = (selfValPassed !== false) && (extValPassed !== false);
+
+        validationAttempts.push({
+          model_id: currentMember.model_id,
+          slot: attemptSlot,
+          self_validation: selfValResult,
+          external_validation: extValResult,
+          passed: attemptPassed
+        });
+
+        if (attemptPassed) {
+          finalResult = attemptResult;
+          overallPassed = true;
+          break;
+        }
+
+        // Validation failed, release slot and escalate
+        if (currentReleaseSlot) {
+          currentReleaseSlot();
+          currentReleaseSlot = null;
+        }
+
+        if (attemptSlot === 'good' && rankedTrio.better && rankedTrio.better.model_id !== 'unknown') {
+          attemptSlot = 'better';
+          currentMember = rankedTrio.better;
+        } else if (attemptSlot === 'better' && rankedTrio.best && rankedTrio.best.model_id !== 'unknown') {
+          attemptSlot = 'best';
+          currentMember = rankedTrio.best;
+        } else {
+          finalResult = attemptResult;
+          break;
+        }
+      }
+
+      const validationMetadata = {
+        validate: shouldValidate,
+        attempts: validationAttempts,
+        passed: overallPassed
+      };
+
+      if (shouldValidate && !overallPassed) {
+        throw new Error(`Validation failed on all attempts in retry ladder.`);
+      }
+
+      await tracker.completeJob(taskId, [finalResult!.resultCode], validationMetadata);
       await updateTask({ id: taskId, status: 'completed', completed_count: 1, failed_count: 0 });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await tracker.failJob(taskId, message);
+      const validationMetadata = {
+        validate: shouldValidate,
+        attempts: validationAttempts,
+        passed: false
+      };
+      await tracker.failJob(taskId, message, validationMetadata);
       await updateTask({ id: taskId, status: 'failed', completed_count: 0, failed_count: 1 });
     } finally {
-      releaseSlot();
+      if (currentReleaseSlot) {
+        currentReleaseSlot();
+      }
       await refreshAlertState();
     }
   }
@@ -722,7 +942,12 @@ export class Router implements IRouter {
     };
   }
 
-  private async executeRouteTaskBlocking(params: RouteTaskParams, existingJobId?: string): Promise<RouteTaskResult> {
+  private async executeRouteTaskBlocking(
+    params: RouteTaskParams,
+    existingJobId?: string,
+    forcedModelId?: string,
+    forcedProviderId?: string,
+  ): Promise<RouteTaskResult> {
     try {
       const routeTraceId = `route-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       logger.info(`Routing task with complexity ${params.complexity || 0.5}, context length ${params.contextLength}, priority ${params.priority || 'quality'}`);
@@ -778,20 +1003,25 @@ export class Router implements IRouter {
       }
 
       // Decision Engine routing
-      const decision = await decisionEngine.routeTask({
-        task: params.task,
-        contextLength: params.contextLength,
-        expectedOutputLength: params.expectedOutputLength || 0,
-        complexity: params.complexity || 0.5,
-        priority: params.priority || 'quality',
-      });
+      let decision: { provider: string; model: string; explanation?: string; confidence?: number; preemptive?: boolean; scores?: any };
+      if (forcedModelId && forcedProviderId) {
+        decision = { provider: forcedProviderId, model: forcedModelId, confidence: 1 };
+      } else {
+        decision = await decisionEngine.routeTask({
+          task: params.task,
+          contextLength: params.contextLength,
+          expectedOutputLength: params.expectedOutputLength || 0,
+          complexity: params.complexity || 0.5,
+          priority: params.priority || 'quality',
+        });
+      }
 
       logger.debug(`[${routeTraceId}] decisionEngine.routeTask decision`, {
         provider: decision.provider,
         model: decision.model,
-        confidence: decision.confidence,
-        preemptive: decision.preemptive || false,
-        scores: decision.scores,
+        confidence: (decision as any).confidence,
+        preemptive: (decision as any).preemptive || false,
+        scores: (decision as any).scores,
       });
 
       const paidResult = await this.executePaidDecisionDirectly(
@@ -820,13 +1050,25 @@ export class Router implements IRouter {
 
       const { decomposedTask, modelAssignments, executionOrder } = processingResult;
 
-      await this.preserveLocalDecisionModelAssignments(
-        { provider: decision.provider, model: decision.model },
-        decomposedTask,
-        modelAssignments,
-        executionOrder,
-        routeTraceId,
-      );
+      if (forcedModelId && forcedProviderId) {
+        const modelRegistry = getModelRegistry();
+        const forcedModel = modelRegistry.getModel(forcedModelId) || {
+          id: forcedModelId,
+          providerId: forcedProviderId,
+          contextWindow: 8192,
+        };
+        for (const subtask of decomposedTask.subtasks) {
+          modelAssignments.set(subtask.id, forcedModel as any);
+        }
+      } else {
+        await this.preserveLocalDecisionModelAssignments(
+          { provider: decision.provider, model: decision.model },
+          decomposedTask,
+          modelAssignments,
+          executionOrder,
+          routeTraceId,
+        );
+      }
 
       const assignmentSummary = executionOrder.map((subtask) => {
         const assignedModel = modelAssignments.get(subtask.id);
@@ -1144,6 +1386,7 @@ export class Router implements IRouter {
           result,
           error: job.error ?? undefined,
           progress_pct: job.progress_pct,
+          validation: job.validation ? (typeof job.validation === 'string' ? JSON.parse(job.validation) : job.validation) : undefined,
         };
       }),
     };
