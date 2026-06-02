@@ -1,5 +1,6 @@
 import { decisionEngine } from '../../decision-engine/index.js';
 import { getJobTracker, JobStatus } from '../../decision-engine/services/jobTracker.js';
+import { withSpan } from '../../telemetry/index.js';
 import { loadUserPreferences } from '../../user-preferences/index.js';
 import { config } from '../../../config/index.js';
 import { taskExecutor } from '../task-execution/index.js';
@@ -626,8 +627,24 @@ export class Router implements IRouter {
    * Route a coding task to either a local LLM, Free API LLM, or paid API LLM based on cost and complexity
    */
   async routeTask(params: RouteTaskParams): Promise<QueuedRouteTaskResult> {
-    this.assertTaskWithinLargestKnownContextWindow(params.task);
+    return withSpan(
+      'mcp.route_task',
+      {
+        'task.complexity': params.complexity ?? 0.5,
+        'task.context_length': params.contextLength ?? 0,
+        'task.priority': params.priority ?? 'quality',
+      },
+      async (span) => {
+        this.assertTaskWithinLargestKnownContextWindow(params.task);
+        const result = await this._routeTaskInner(params);
+        span.setAttribute('routing.provider_id', result.provider);
+        span.setAttribute('routing.model_id', result.model);
+        return result;
+      },
+    );
+  }
 
+  private async _routeTaskInner(params: RouteTaskParams): Promise<QueuedRouteTaskResult> {
     const decision = await decisionEngine.routeTask({
       task: params.task,
       contextLength: params.contextLength,
@@ -873,6 +890,23 @@ export class Router implements IRouter {
    * Quickly route a coding task without making API calls (faster but less accurate)
    */
   async preemptiveRouting(params: RouteTaskParams): Promise<RouteTaskResult> {
+    return withSpan(
+      'mcp.preemptive_route_task',
+      {
+        'task.complexity': params.complexity ?? 0.5,
+        'task.priority': params.priority ?? 'quality',
+      },
+      async (span) => {
+        const result = await this._preemptiveRoutingInner(params);
+        span.setAttribute('routing.provider_id', result.providerId ?? '');
+        span.setAttribute('routing.model_id', result.model ?? '');
+        span.setAttribute('routing.cost_class', result.costClass ?? '');
+        return result;
+      },
+    );
+  }
+
+  private async _preemptiveRoutingInner(params: RouteTaskParams): Promise<RouteTaskResult> {
     try {
       logger.info(`Performing preemptive routing for task with complexity ${params.complexity || 0.5}`);
       

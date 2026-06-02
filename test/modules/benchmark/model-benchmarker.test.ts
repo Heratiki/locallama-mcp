@@ -137,7 +137,7 @@ describe('benchmarkModel', () => {
     expect(executeWithConcurrencyLimitMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'test-provider' }),
       expect.any(Function),
-      { workload: 'benchmark', priority: 'background' },
+      expect.objectContaining({ workload: 'benchmark', priority: 'background' }),
     );
     expect(executeTaskMock.mock.calls[0][0]).toBe('qwen2.5-coder-7b');
     expect(typeof executeTaskMock.mock.calls[0][1]).toBe('string');

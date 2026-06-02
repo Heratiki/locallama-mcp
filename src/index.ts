@@ -23,6 +23,7 @@ import { BenchmarkProviderError } from './modules/benchmark/core/runner.js';
 import { reloadConfig } from './config/index.js';
 import { claimServerReminderIfDue } from './modules/server-reminder/gate.js';
 import { getCachedMonitoringReachability } from './modules/server-reminder/reachability.js';
+import { initTelemetry, shutdownTelemetry } from './modules/telemetry/index.js';
 
 // Get the current file's directory path in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -239,6 +240,12 @@ export class LocalLamaMcpServer {
   private async shutdown(): Promise<void> {
     logger.info('Shutting down LocalLama MCP Server...');
     try {
+      // Flush any buffered OTel spans before the process exits.
+      await shutdownTelemetry();
+    } catch {
+      // Telemetry shutdown is best-effort; don't block exit.
+    }
+    try {
       // Stop health probe and clean up providers (e.g. managed child processes)
       const { getProviderRegistry } = await import('./modules/core/provider/index.js');
       await getProviderRegistry().shutdown();
@@ -433,6 +440,13 @@ export class LocalLamaMcpServer {
                   const { getSystemState } = await import('./modules/api-integration/system-state/index.js');
                   return await getSystemState();
                 }
+                case 'get_telemetry_summary': {
+                  const lookbackHours = typeof args?.lookback_hours === 'number' && args.lookback_hours > 0
+                    ? args.lookback_hours
+                    : 168;
+                  const { computeTelemetrySummary } = await import('./modules/telemetry/analytics.js');
+                  return await computeTelemetrySummary(lookbackHours);
+                }
                 case 'reload_config':
                   return reloadConfig();
                 case 'get_free_models':
@@ -618,6 +632,9 @@ export class LocalLamaMcpServer {
 
       // Record this instance in the (diagnostic-only) lock file.
       createLockFile({ connectionInfo: 'LocalLama MCP Server running on stdio' });
+
+      // Initialise OTel tracing before any provider/routing code runs.
+      initTelemetry(version);
 
       // Bootstrap the provider registry before anything that needs to know which
       // providers exist (decision engine, tool listing). Provider init failures

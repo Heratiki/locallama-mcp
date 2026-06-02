@@ -1,4 +1,5 @@
 import { logger } from '../../../utils/logger.js';
+import { withSpan } from '../../telemetry/index.js';
 import { codeTaskAnalyzer } from './codeTaskAnalyzer.js';
 import { dependencyMapper } from './dependencyMapper.js';
 import { codeModelSelector } from './codeModelSelector.js';
@@ -317,8 +318,28 @@ ${result}
     subtask: CodeSubtask,
     model: Model,
     fullContext?: string,
-    originalTask?: string, // Add originalTask parameter
-    jobTracker?: JobTracker | null // Add jobTracker parameter
+    originalTask?: string,
+    jobTracker?: JobTracker | null
+  ): Promise<string> {
+    return withSpan(
+      'decision_engine.execute_subtask',
+      {
+        'subtask.id': subtask.id,
+        'subtask.complexity': subtask.complexity,
+        'subtask.code_type': subtask.codeType ?? 'other',
+        'model.id': model.id,
+        'model.provider': model.provider,
+      },
+      async () => this._executeSubtaskInner(subtask, model, fullContext, originalTask, jobTracker),
+    );
+  },
+
+  async _executeSubtaskInner(
+    subtask: CodeSubtask,
+    model: Model,
+    fullContext?: string,
+    originalTask?: string,
+    jobTracker?: JobTracker | null,
   ): Promise<string> {
     // Enhanced logging: Log detailed subtask information
     logger.info(`------- SUBTASK EXECUTION START -------`);
@@ -403,7 +424,7 @@ Rules:
             }
             return await provider.executeTask(bareId, prompt, { timeoutMs: timeout });
           },
-          { workload: 'task' },
+          { workload: 'task', modelId: bareId },
         );
         resultText = execResult.content;
         logger.info(`Successfully executed subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
@@ -674,6 +695,18 @@ Rules:
     if (subtasksToIntegrate.length === 0) return '';
     if (subtasksToIntegrate.length === 1) return subtaskResults.get(subtasksToIntegrate[0].id) || '';
 
+    return withSpan(
+      'decision_engine.integrate_results',
+      { 'subtask.count': subtasksToIntegrate.length },
+      async () => this._integrateSubtasksInner(subtasksToIntegrate, subtaskResults, originalTask),
+    );
+  },
+
+  async _integrateSubtasksInner(
+    subtasksToIntegrate: CodeSubtask[],
+    subtaskResults: Map<string, string>,
+    originalTask: string,
+  ): Promise<string> {
     logger.info(`Integrating ${subtasksToIntegrate.length} subtasks: ${subtasksToIntegrate.map(s => s.id).join(', ')}`);
 
     let integrationContext = `Original Task: ${originalTask}\n\nSubtasks to Integrate:\n`;
