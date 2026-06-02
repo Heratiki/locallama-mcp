@@ -79,6 +79,120 @@ function computeLocalModelHeuristicScore(modelId: string, complexity: number): n
   }
 }
 
+function getValidationQualityScore(model: Model): number {
+  const registry = getModelRegistry();
+  const meta = registry.getModel(model.id);
+  const benchmarkSummary = meta?.benchmarkSummary;
+  
+  if (benchmarkSummary) {
+    const taskCategorySignal = getTaskCategorySignal(model.id, 'validate');
+    if (taskCategorySignal) {
+      return taskCategorySignal.score;
+    }
+    return benchmarkSummary.qualityScore ?? 0.3;
+  }
+  
+  const modelsDb = modelsDbService.getDatabase();
+  const dbModel = modelsDb.models[model.id];
+  if (dbModel) {
+    const dbScores = (dbModel as any).scores || {};
+    if (dbScores.validate !== undefined) {
+      return dbScores.validate;
+    }
+    if (dbScores.code !== undefined) {
+      return dbScores.code * 0.8;
+    }
+    return dbModel.qualityScore ?? 0.3;
+  }
+  
+  return 0.3;
+}
+
+function getModelValidationScore(model: Model, complexity: number): number {
+  const registry = getModelRegistry();
+  const meta = registry.getModel(model.id);
+  const benchmarkSummary = meta?.benchmarkSummary;
+
+  if (benchmarkSummary) {
+    const successRate = benchmarkSummary.successRate ?? 0;
+    const taskCategorySignal = getTaskCategorySignal(model.id, 'validate');
+    const taskCategoryScore = taskCategorySignal?.score;
+    const qualitySignal = taskCategoryScore ?? (benchmarkSummary.qualityScore ?? 0);
+
+    const avgResponseTime = benchmarkSummary.avgResponseTime ?? 0;
+    const responseTimeFactor = Math.max(0, 1 - (avgResponseTime / 15000));
+
+    const empiricalScore =
+      successRate * 0.3 +
+      qualitySignal * 0.4 +
+      responseTimeFactor * 0.3;
+
+    const benchmarkCount = taskCategorySignal?.seeded ? 1 : (benchmarkSummary.benchmarkCount ?? 1);
+    const confidence = Math.min(1, benchmarkCount / config.reliableBenchmarkCount);
+    
+    let heuristicScore = 0.3;
+    if (isProviderLocal(model.provider)) {
+      heuristicScore = computeLocalModelHeuristicScore(model.id, complexity);
+    } else {
+      heuristicScore = benchmarkSummary.qualityScore ?? 0.3;
+    }
+
+    return empiricalScore * confidence + heuristicScore * (1 - confidence);
+  } else {
+    const modelsDb = modelsDbService.getDatabase();
+    const dbModel = modelsDb.models[model.id];
+    if (dbModel && dbModel.benchmarkCount > 0) {
+      const successRate = dbModel.successRate ?? 0;
+      const dbScores = (dbModel as any).scores || {};
+      let qualitySignal = dbScores.validate;
+      if (qualitySignal === undefined) {
+        qualitySignal = dbScores.code !== undefined ? dbScores.code * 0.8 : (dbModel.qualityScore ?? 0.3);
+      }
+      
+      const avgResponseTime = dbModel.avgResponseTime ?? 0;
+      const responseTimeFactor = Math.max(0, 1 - (avgResponseTime / 15000));
+
+      const empiricalScore =
+        successRate * 0.3 +
+        qualitySignal * 0.4 +
+        responseTimeFactor * 0.3;
+
+      const confidence = Math.min(1, dbModel.benchmarkCount / config.reliableBenchmarkCount);
+      let heuristicScore = 0.3;
+      if (isProviderLocal(model.provider)) {
+        heuristicScore = computeLocalModelHeuristicScore(model.id, complexity);
+      } else {
+        heuristicScore = dbModel.qualityScore ?? 0.3;
+      }
+
+      return empiricalScore * confidence + heuristicScore * (1 - confidence);
+    }
+    
+    let score = 0.3;
+    if (isProviderLocal(model.provider)) {
+      score = computeLocalModelHeuristicScore(model.id, complexity);
+      if (model.id.toLowerCase().includes('instruct')) {
+        score += 0.05;
+      }
+    } else {
+      if (model.id.toLowerCase().includes('instruct')) {
+        score += 0.1;
+      }
+      if (model.id.toLowerCase().includes('mistral') ||
+          model.id.toLowerCase().includes('llama') ||
+          model.id.toLowerCase().includes('gemini') ||
+          model.id.toLowerCase().includes('phi-3') ||
+          model.id.toLowerCase().includes('google') ||
+          model.id.toLowerCase().includes('meta') ||
+          model.id.toLowerCase().includes('microsoft') ||
+          model.id.toLowerCase().includes('deepseek')) {
+        score += 0.2;
+      }
+    }
+    return score;
+  }
+}
+
 /**
  * Model Selector Service
  * Handles finding the best models based on task parameters
@@ -378,6 +492,93 @@ export const modelSelector = {
       return bestModel;
     } catch (error) {
       logger.error('Error getting best free model:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get the best validator model based on confidence-blended scoring and threshold gating.
+   */
+  async getBestValidatorModel(
+    complexity: number,
+    totalTokens: number,
+    excludeGeneratorId?: string,
+  ): Promise<Model | null> {
+    try {
+      const allModels = await costMonitor.getAvailableModels();
+      const filteredModels = allModels.filter(model =>
+        model.contextWindow === undefined || model.contextWindow >= totalTokens
+      );
+
+      if (filteredModels.length === 0) {
+        return null;
+      }
+
+      const freeModels = await costMonitor.getFreeModels();
+      const freeModelIds = new Set(freeModels.map(m => m.id));
+
+      const localOrFreeCandidates: Model[] = [];
+      const paidCandidates: Model[] = [];
+
+      for (const model of filteredModels) {
+        if (isProviderLocal(model.provider) || freeModelIds.has(model.id)) {
+          localOrFreeCandidates.push(model);
+        } else {
+          paidCandidates.push(model);
+        }
+      }
+
+      const minScore = config.minValidatorScore;
+
+      const evaluateTier = (candidates: Model[]): Model | null => {
+        const qualifiedCandidates = candidates.filter(model => {
+          const quality = getValidationQualityScore(model);
+          return quality >= minScore;
+        });
+
+        const scored = qualifiedCandidates.map(model => ({
+          model,
+          score: getModelValidationScore(model, complexity)
+        }));
+
+        const qualified = scored;
+
+        if (qualified.length === 0) {
+          return null;
+        }
+
+        const nonGenerator = qualified.filter(c => c.model.id !== excludeGeneratorId);
+
+        if (nonGenerator.length > 0) {
+          nonGenerator.sort((a, b) => b.score - a.score);
+          return nonGenerator[0].model;
+        }
+
+        const generator = qualified.filter(c => c.model.id === excludeGeneratorId);
+        if (generator.length > 0) {
+          generator.sort((a, b) => b.score - a.score);
+          return generator[0].model;
+        }
+
+        return null;
+      };
+
+      const bestLocalOrFree = evaluateTier(localOrFreeCandidates);
+      if (bestLocalOrFree) {
+        logger.debug(`Selected best local/free validator: ${bestLocalOrFree.id}`);
+        return bestLocalOrFree;
+      }
+
+      const bestPaid = evaluateTier(paidCandidates);
+      if (bestPaid) {
+        logger.debug(`Selected best paid validator: ${bestPaid.id}`);
+        return bestPaid;
+      }
+
+      logger.debug(`No qualified validator found (minValidatorScore=${minScore})`);
+      return null;
+    } catch (error) {
+      logger.error('Error getting best validator model:', error);
       return null;
     }
   }
