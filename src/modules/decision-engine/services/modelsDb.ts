@@ -12,7 +12,7 @@ function toBenchmarkSummary(data: ModelPerformanceData): BenchmarkSummary {
   return {
     lastRunAt: data.lastBenchmarked ? new Date(data.lastBenchmarked).getTime() : Date.now(),
     taskCategories: [],
-    scores: {},
+    scores: data.scores || {},
     successRate: data.successRate,
     qualityScore: data.qualityScore,
     avgResponseTime: data.avgResponseTime,

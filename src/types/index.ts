@@ -274,6 +274,12 @@ export interface ModelPerformanceData {
   lastBenchmarked: string;
   benchmarkCount: number;
   isFree: boolean; // Whether this is a free model
+  scores?: {
+    code?: number;
+    reasoning?: number;
+    speed?: number;
+    validate?: number;
+  };
   tokenEfficiency?: number;
   systemResourceUsage?: number;
   memoryFootprint?: number;
