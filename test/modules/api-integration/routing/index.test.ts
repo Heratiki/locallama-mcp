@@ -15,7 +15,47 @@ jest.unstable_mockModule('../../../../dist/config/index.js', () => ({
     openRouterFreeOnly: false,
     costThreshold: 0.02,
     providerMaxConcurrentLocal: 1,
+    cacheDir: 'test-cache',
   },
+}));
+
+const mockGetModelRegistry = jest.fn().mockReturnValue({
+  getModel: jest.fn().mockImplementation((modelId) => {
+    if (modelId === 'qwen2.5-coder:7b') {
+      return {
+        id: 'qwen2.5-coder:7b',
+        providerId: 'ollama',
+        displayName: 'Qwen 2.5 Coder 7B',
+        benchmarkSummary: { benchmarkCount: 5, successRate: 0.8, qualityScore: 0.85, avgResponseTime: 2000, scores: { code: 0.9 } },
+      };
+    }
+    if (modelId === 'llama3:8b') {
+      return {
+        id: 'llama3:8b',
+        providerId: 'ollama',
+        displayName: 'Llama 3 8B',
+        benchmarkSummary: { benchmarkCount: 2, successRate: 0.6, qualityScore: 0.7, avgResponseTime: 3000, scores: { code: 0.75 } },
+      };
+    }
+    if (modelId === 'phi3:3.8b') {
+      return {
+        id: 'phi3:3.8b',
+        providerId: 'ollama',
+        displayName: 'Phi 3 3.8B',
+        benchmarkSummary: { benchmarkCount: 0, successRate: 0, qualityScore: 0, avgResponseTime: 0 },
+      };
+    }
+    return undefined;
+  }),
+  listAll: jest.fn().mockReturnValue([
+    { id: 'qwen2.5-coder:7b', contextWindow: 8000 },
+    { id: 'llama3:8b', contextWindow: 8000 },
+    { id: 'phi3:3.8b', contextWindow: 8000 },
+  ]),
+});
+
+jest.unstable_mockModule('../../../../dist/modules/core/model/index.js', () => ({
+  getModelRegistry: mockGetModelRegistry,
 }));
 
 const mockRouteTaskDecision = jest.fn().mockResolvedValue({
@@ -111,9 +151,12 @@ jest.unstable_mockModule('../../../../dist/modules/cost-monitor/codeSearchEngine
   getCodeSearchEngine: jest.fn(),
 }));
 
+const mockGetFreeModels = jest.fn().mockResolvedValue([]);
+
 jest.unstable_mockModule('../../../../dist/modules/cost-monitor/index.js', () => ({
   costMonitor: {
     getAvailableModels: mockGetAvailableModels,
+    getFreeModels: mockGetFreeModels,
   },
 }));
 
@@ -208,7 +251,14 @@ describe('api-integration routing', () => {
       status: 'queued',
       job_count: 1,
     }));
-    expect(mockCreateJob).toHaveBeenCalledWith(result.task_id, expect.stringContaining('implementation plan'), 'openai/gpt-4o', 'openrouter');
+    expect(mockCreateJob).toHaveBeenCalledWith(
+      result.task_id,
+      expect.stringContaining('implementation plan'),
+      'openai/gpt-4o',
+      'openrouter',
+      expect.any(Object),
+      expect.any(Array)
+    );
   });
 
   it('keeps later local queued tasks out of in_progress until a local slot is available', async () => {
@@ -681,5 +731,94 @@ describe('api-integration routing', () => {
     expect(result.providerId).toBe('paid');
     expect(result.costClass).toBe('paid');
     expect(result.model).toBe('openai/gpt-4o-mini');
+  });
+
+  describe('Ranked Trio and Recommendations', () => {
+    it('returns ranked_trio with good/better/best and recommends benchmarks for unbenchmarked models', async () => {
+      mockRouteTaskDecision.mockResolvedValueOnce({
+        provider: 'local',
+        model: 'qwen2.5-coder:7b',
+        explanation: 'Local route decision.',
+      });
+      mockGetAvailableModels.mockResolvedValue([
+        { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', provider: 'ollama', contextWindow: 8000 },
+        { id: 'llama3:8b', name: 'Llama 3 8B', provider: 'ollama', contextWindow: 8000 },
+        { id: 'phi3:3.8b', name: 'Phi 3 3.8B', provider: 'ollama', contextWindow: 8000 },
+      ]);
+      mockRegistry.list.mockReturnValue([
+        { id: 'ollama', supportsModel: jest.fn().mockResolvedValue(true), isLocal: true, costClass: 'local' }
+      ]);
+      
+      const result = await routeTask({
+        task: 'Write a python script.',
+        contextLength: 100,
+        complexity: 0.5,
+      });
+
+      expect(result.ranked_trio).toBeDefined();
+      expect(result.ranked_trio?.good.model_id).toBe('qwen2.5-coder:7b');
+      expect(result.ranked_trio?.better.model_id).toBe('llama3:8b');
+      expect(result.ranked_trio?.best.model_id).toBe('phi3:3.8b');
+      expect(result.ranked_trio?.fallback_notice).toBeUndefined();
+      
+      expect(result.benchmarking_recommended).toBeDefined();
+      expect(result.benchmarking_recommended?.length).toBe(1);
+      expect(result.benchmarking_recommended?.[0].model_id).toBe('phi3:3.8b');
+      expect(result.benchmarking_recommended?.[0].suggested_categories).toContain('code');
+    });
+
+    it('returns fallback_notice when fewer than 3 models are available in the tier', async () => {
+      mockRouteTaskDecision.mockResolvedValueOnce({
+        provider: 'local',
+        model: 'qwen2.5-coder:7b',
+        explanation: 'Local route decision.',
+      });
+      mockGetAvailableModels.mockResolvedValue([
+        { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', provider: 'ollama', contextWindow: 8000 },
+      ]);
+      mockRegistry.list.mockReturnValue([
+        { id: 'ollama', supportsModel: jest.fn().mockResolvedValue(true), isLocal: true, costClass: 'local' }
+      ]);
+      
+      const result = await routeTask({
+        task: 'Write code.',
+        contextLength: 100,
+        complexity: 0.5,
+      });
+
+      expect(result.ranked_trio).toBeDefined();
+      expect(result.ranked_trio?.good.model_id).toBe('qwen2.5-coder:7b');
+      expect(result.ranked_trio?.better.model_id).toBe('qwen2.5-coder:7b');
+      expect(result.ranked_trio?.best.model_id).toBe('qwen2.5-coder:7b');
+      expect(result.ranked_trio?.fallback_notice).toBe('Only 1 distinct model(s) available in local tier.');
+    });
+
+    it('preemptive_route_task returns the same trio shape and metadata contract', async () => {
+      const { decisionEngine } = await import('../../../../dist/modules/decision-engine/index.js');
+      (decisionEngine.preemptiveRouting as jest.Mock).mockResolvedValueOnce({
+        provider: 'local',
+        model: 'qwen2.5-coder:7b',
+        explanation: 'Preemptive decision.',
+      });
+      mockGetAvailableModels.mockResolvedValue([
+        { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', provider: 'ollama', contextWindow: 8000 },
+        { id: 'llama3:8b', name: 'Llama 3 8B', provider: 'ollama', contextWindow: 8000 },
+        { id: 'phi3:3.8b', name: 'Phi 3 3.8B', provider: 'ollama', contextWindow: 8000 },
+      ]);
+      mockRegistry.list.mockReturnValue([
+        { id: 'ollama', supportsModel: jest.fn().mockResolvedValue(true), isLocal: true, costClass: 'local' }
+      ]);
+
+      const result = await preemptiveRouteTask({
+        task: 'Write a python script.',
+        contextLength: 100,
+        complexity: 0.5,
+      });
+
+      expect(result.ranked_trio).toBeDefined();
+      expect(result.ranked_trio?.good.model_id).toBe('qwen2.5-coder:7b');
+      expect(result.ranked_trio?.better.model_id).toBe('llama3:8b');
+      expect(result.ranked_trio?.best.model_id).toBe('phi3:3.8b');
+    });
   });
 });

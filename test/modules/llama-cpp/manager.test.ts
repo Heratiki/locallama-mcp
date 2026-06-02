@@ -65,19 +65,19 @@ describe('LlamaServerManager', () => {
   describe('findFreePort', () => {
     it('returns the requested port if it is free', async () => {
       const manager = new LlamaServerManager();
-      const port = await manager.findFreePort(8080);
-      expect(port).toBe(8080);
+      const port = await manager.findFreePort(28085);
+      expect(port).toBe(28085);
     });
 
     it('returns the next free port if the requested one is taken', async () => {
       const manager = new LlamaServerManager();
       
       const server = net.createServer();
-      await new Promise<void>((resolve) => server.listen(8080, resolve));
+      await new Promise<void>((resolve) => server.listen(28085, resolve));
 
       try {
-        const port = await manager.findFreePort(8080);
-        expect(port).toBeGreaterThan(8080);
+        const port = await manager.findFreePort(28085);
+        expect(port).toBeGreaterThan(28085);
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }

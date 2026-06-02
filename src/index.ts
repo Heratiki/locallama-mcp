@@ -402,6 +402,8 @@ export class LocalLamaMcpServer {
                     providerId: preemptiveResult.providerId,
                     modelId: preemptiveResult.model,
                     reason: preemptiveResult.reason,
+                    ranked_trio: preemptiveResult.ranked_trio,
+                    benchmarking_recommended: preemptiveResult.benchmarking_recommended,
                   };
                 }
                 case 'get_cost_estimate':

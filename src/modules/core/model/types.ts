@@ -19,6 +19,7 @@ export interface ModelCapabilities {
     code?: number;
     reasoning?: number;
     speed?: number;
+    validate?: number;
   };
 }
 
@@ -31,6 +32,7 @@ export interface BenchmarkSummary {
     code?: number;
     reasoning?: number;
     speed?: number;
+    validate?: number;
   };
   successRate?: number;
   qualityScore?: number;
