@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/Heratiki/locallama-mcp/compare/v1.23.1...v1.24.0) (2026-06-02)
+
+
+### Features
+
+* **routing:** implement ranked trio and benchmark recommendations for route_task and preemptive_route_task ([#110](https://github.com/Heratiki/locallama-mcp/issues/110)) ([#120](https://github.com/Heratiki/locallama-mcp/issues/120)) ([7281765](https://github.com/Heratiki/locallama-mcp/commit/7281765908a417824663094102f36487845da490))
+
 ## [1.23.1](https://github.com/Heratiki/locallama-mcp/compare/v1.23.0...v1.23.1) (2026-06-01)
 
 
