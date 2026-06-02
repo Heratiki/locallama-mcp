@@ -357,16 +357,20 @@ ${result}
     }
     
     // Create a clear, focused prompt for the subtask, including original task context
-    const prompt = `You are an expert software developer assisting with a larger coding task.
-Original Task: ${originalTask || '[Not Provided]'}
+    const prompt = `You are an expert software engineer implementing one subtask within a larger project.
 
-You are now focused *only* on implementing the following specific subtask:
-Subtask Description: ${subtask.description}
-${fullContext ? `Context from dependent subtasks:\n${fullContext}\n\n` : ''}Code Type Expected: ${subtask.codeType}
-Complexity Level: ${subtask.complexity.toFixed(2)} (0-1 scale)
+Original task context: ${originalTask || '[Not Provided]'}
+${fullContext ? `\nOutput from prerequisite subtasks:\n${fullContext}\n` : ''}
+YOUR CURRENT SUBTASK: ${subtask.description}
+Expected artifact type: ${subtask.codeType}
+Complexity: ${subtask.complexity.toFixed(2)}/1.0
 ${relevantCodeSnippets}
-Please provide a high-quality implementation for *only this subtask*, ensuring it aligns with the original task's requirements (including the programming language mentioned in the original task, if any).
-Output only the code required for this subtask. Do not include explanations unless they are comments within the code.`;
+Rules:
+- Implement ONLY this subtask — do not re-implement prerequisite work.
+- Use the language from the original task context; infer it if not stated.
+- Output a complete, working implementation in a fenced code block with the language tag.
+- Include type annotations. Handle edge cases. No placeholder TODOs.
+- Comments only where the logic is genuinely non-obvious.`;
 
     // Log the prompt we're sending to the model
     logger.debug(`Prompt for subtask ${subtask.id}:\n${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}`);
@@ -681,13 +685,16 @@ Output only the code required for this subtask. Do not include explanations unle
       }
     }
 
-    const integrationPrompt = `You are an expert software developer tasked with integrating code components.
-Given the original task and the following code snippets generated for specific subtasks, please integrate them into a single, coherent code block.
-Ensure that functions call each other correctly, data flows appropriately, and the combined code addresses the integration requirements implied by the subtask descriptions and original task.
+    const integrationPrompt = `You are an expert software engineer. Integrate the subtask implementations below into a single, cohesive codebase.
 
 ${integrationContext}
 
-Please provide only the integrated code, without explanations or wrappers, unless the integration itself requires comments.`;
+Integration requirements:
+- Merge all components so they interoperate correctly (correct imports, call signatures, data flow).
+- Eliminate duplicate declarations. Preserve all behaviour from each subtask.
+- Use the language and conventions present in the provided code.
+- Output ONLY the integrated code in a fenced code block with the language tag.
+- Add integration-level comments only where call flow is non-obvious. No prose outside the code block.`;
 
     // Model selection logic (similar to synthesizeFinalResult, maybe slightly smaller models are okay here)
     const modelsToTry = await this.selectModelsForIntegration(integrationContext.length);
