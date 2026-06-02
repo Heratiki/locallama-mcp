@@ -145,6 +145,18 @@ class OpenRouterProvider implements LLMProvider {
     return this.cachedCosts.get(modelId) ?? { prompt: 0, completion: 0 };
   }
 
+  hasRateLimitBudget(): boolean {
+    const limit = config.openRouterRateLimitPerMinute;
+    if (limit === 0) return true;
+
+    const now = Date.now();
+    const windowMs = 60_000;
+    // Prune old entries
+    this.callTimestamps = this.callTimestamps.filter((t) => now - t < windowMs);
+
+    return (limit - this.callTimestamps.length) >= 2;
+  }
+
   async getVersion(): Promise<string | null> {
     if (!config.openRouterApiKey) return null;
     try {

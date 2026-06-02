@@ -76,6 +76,13 @@ export async function initJobStore(): Promise<void> {
       // Column already exists — safe to ignore.
     }
 
+    // Add validation column to existing DBs.
+    try {
+      await db.exec(`ALTER TABLE jobs ADD COLUMN validation TEXT`);
+    } catch {
+      // Column already exists — safe to ignore.
+    }
+
     dbInstance = db;
     logger.debug('Job store database initialized');
   } catch (error) {
@@ -114,8 +121,8 @@ export async function insertJob(job: PersistedJob): Promise<void> {
   try {
     await db.run(
       `INSERT INTO jobs (id, task_id, status, provider_id, model_id, task_text, result, error,
-        queue_position, is_local, progress_pct, poll_again_after_ms, retry_count, created_at, started_at, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        queue_position, is_local, progress_pct, poll_again_after_ms, retry_count, created_at, started_at, completed_at, validation)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         job.id,
         job.task_id,
@@ -132,7 +139,8 @@ export async function insertJob(job: PersistedJob): Promise<void> {
         job.retry_count,
         job.created_at,
         job.started_at,
-        job.completed_at
+        job.completed_at,
+        job.validation ?? null
       ]
     );
   } catch (error) {
@@ -161,6 +169,7 @@ export async function updateJob(job: Partial<PersistedJob> & { id: string }): Pr
     if (job.retry_count !== undefined) { fields.push('retry_count = ?'); values.push(job.retry_count); }
     if (job.started_at !== undefined) { fields.push('started_at = ?'); values.push(job.started_at); }
     if (job.completed_at !== undefined) { fields.push('completed_at = ?'); values.push(job.completed_at); }
+    if (job.validation !== undefined) { fields.push('validation = ?'); values.push(job.validation); }
 
     if (fields.length === 0) return;
 

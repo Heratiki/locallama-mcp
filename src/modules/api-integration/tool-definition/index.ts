@@ -66,6 +66,10 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
             preemptive: {
               type: 'boolean',
               description: 'If true, use a fast heuristic pre-check for routing instead of full analysis. Faster but less accurate; useful when latency matters more than optimality.'
+            },
+            validate: {
+              type: 'boolean',
+              description: 'If false, bypass synchronous self-validation and retry loops entirely. Default: true.'
             }
           },
           required: ['task', 'context_length']

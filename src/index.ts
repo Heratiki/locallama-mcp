@@ -299,7 +299,8 @@ export class LocalLamaMcpServer {
                   expectedOutputLength: args.expected_output_length as number | undefined,
                   complexity: args.complexity as number | undefined,
                   priority: args.priority as 'speed' | 'cost' | 'quality' | undefined,
-                  preemptive: args.preemptive as boolean | undefined
+                  preemptive: args.preemptive as boolean | undefined,
+                  validate: args.validate as boolean | undefined
                 };
               };
 

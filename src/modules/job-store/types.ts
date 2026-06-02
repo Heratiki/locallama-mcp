@@ -19,6 +19,7 @@ export interface PersistedJob {
   created_at: number;   // unix ms
   started_at: number | null;
   completed_at: number | null;
+  validation?: string | null;
 }
 
 export interface PersistedTask {

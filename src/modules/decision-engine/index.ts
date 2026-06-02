@@ -206,6 +206,14 @@ export const decisionEngine = {
     }
   },
 
+  async getBestValidatorModel(
+    complexity: number,
+    totalTokens: number,
+    excludeGeneratorId?: string,
+  ): Promise<Model | null> {
+    return await modelSelector.getBestValidatorModel(complexity, totalTokens, excludeGeneratorId);
+  },
+
   /**
    * Pre-emptively determine if a task should be routed to a local LLM or paid API
    * This is a fast decision based on task characteristics without making API calls

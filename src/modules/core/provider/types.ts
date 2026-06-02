@@ -66,6 +66,8 @@ export interface LLMProvider {
 
   getVersion?(): Promise<string | null>;
 
+  hasRateLimitBudget?(): boolean;
+
   /** Clean up resources (e.g. child processes) on server shutdown. */
   shutdown?(): Promise<void>;
 }

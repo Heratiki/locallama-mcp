@@ -306,6 +306,16 @@ describe('api-integration routing', () => {
       expect.any(Object),
       expect.any(Array)
     );
+
+    // Wait for the background task to complete to avoid race conditions/leaks
+    await new Promise<void>((resolve) => {
+      const check = setInterval(() => {
+        if (mockCompleteJob.mock.calls.length > 0) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 5);
+    });
   });
 
   it('keeps later local queued tasks out of in_progress until a local slot is available', async () => {

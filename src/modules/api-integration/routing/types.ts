@@ -11,6 +11,7 @@ export interface RouteTaskParams {
   complexity?: number;
   priority?: 'speed' | 'cost' | 'quality';
   preemptive?: boolean;
+  validate?: boolean;
 }
 
 export interface RouteTaskResult {
