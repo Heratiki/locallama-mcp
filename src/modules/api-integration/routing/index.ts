@@ -27,6 +27,7 @@ import { Model } from '../../../types/index.js'; // Import Model type
 import { getModelRegistry } from '../../core/model/index.js';
 import { countTokens } from '../../utils/tokenCount.js';
 import { ContextWindowError } from '../../utils/contextWindow.js';
+import { openRouterModule } from '../../openrouter/index.js';
 import {
   cancelJobsForTask,
   getTask,
@@ -39,9 +40,9 @@ import {
 import { refreshAlertState } from '../../job-store/alert.js';
 import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus } from '../../job-store/types.js';
 import { COMPLEXITY_THRESHOLDS } from '../../decision-engine/types/index.js';
-import { modelsDbService } from '../../decision-engine/services/modelsDb.js';
 
 const CODE_TASK_PATTERN = /\b(code|function|class|implement|debug|test|refactor|fix|bug|method|module|api|script|parse|algorithm|compile)\b/i;
+const RECENT_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -218,6 +219,51 @@ export class Router implements IRouter {
     }
   }
 
+  private normalizeOpenRouterModelId(modelId: string): string {
+    return modelId.startsWith('openrouter:') ? modelId.substring('openrouter:'.length) : modelId;
+  }
+
+  private getFreeTierUpstreamProvider(modelId: string): string {
+    const normalizedModelId = this.normalizeOpenRouterModelId(modelId);
+    return (
+      openRouterModule.modelTracking.models[normalizedModelId]?.provider ||
+      openRouterModule.getProviderFromModelId(normalizedModelId)
+    );
+  }
+
+  private getRegistryBenchmarkScore(modelId: string, taskCategory?: string): number | undefined {
+    const benchmarkSummary = getModelRegistry().getModel(modelId)?.benchmarkSummary;
+    if (!benchmarkSummary) return undefined;
+
+    const successRate = benchmarkSummary.successRate ?? 0;
+    const categoryScores = benchmarkSummary.scores as Record<string, number | undefined> | undefined;
+    const qualitySignal = (taskCategory ? categoryScores?.[taskCategory] : undefined) ?? benchmarkSummary.qualityScore ?? 0;
+    const avgResponseTime = benchmarkSummary.avgResponseTime ?? 0;
+    const responseTimeFactor = Math.max(0, 1 - (avgResponseTime / 15000));
+    const empiricalScore = successRate * 0.3 + qualitySignal * 0.5 + responseTimeFactor * 0.2;
+    const confidence = Math.min(1, (benchmarkSummary.benchmarkCount ?? 0) / 3);
+
+    return empiricalScore * confidence;
+  }
+
+  private getRecentFreeTierRateLimitPenalty(modelId: string): number {
+    const normalizedModelId = this.normalizeOpenRouterModelId(modelId);
+    const health = openRouterModule.modelTracking.freeModelHealth?.[normalizedModelId];
+    if (!health) return 0;
+
+    const failurePenalty = Math.min(0.15, (health.consecutiveFailures ?? 0) * 0.05);
+    if (health.lastErrorType !== 'rate_limit' || !health.lastFailureAt) {
+      return failurePenalty;
+    }
+
+    const lastFailureTime = new Date(health.lastFailureAt).getTime();
+    if (!Number.isFinite(lastFailureTime)) return failurePenalty;
+
+    return Date.now() - lastFailureTime <= RECENT_RATE_LIMIT_WINDOW_MS
+      ? failurePenalty + 0.3
+      : failurePenalty;
+  }
+
   private async buildRankedTrio(
     selectedModelId: string,
     tier: 'local' | 'free' | 'paid',
@@ -322,22 +368,9 @@ export class Router implements IRouter {
           }
         }
       } else if (tier === 'free') {
-        const modelsDb = modelsDbService.getDatabase();
-        const modelData = modelsDb?.models?.[model.id] as any;
-        if (modelData && modelData.benchmarkCount > 0) {
-          const successRateWeight = 0.4;
-          const qualityScoreWeight = 0.4;
-          const responseTimeWeight = 0.2;
-          const complexityMatchWeight = 0.1;
-          score += modelData.successRate * successRateWeight;
-          score += modelData.qualityScore * qualityScoreWeight;
-          const responseTimeFactor = Math.max(0, 1 - (modelData.avgResponseTime / 15000));
-          score += responseTimeFactor * responseTimeWeight;
-          const complexityMatchFactor = 1 - Math.abs(modelData.complexityScore - complexity);
-          score += complexityMatchFactor * complexityMatchWeight;
-          if (modelData.benchmarkCount >= 3) {
-            score += 0.1;
-          }
+        const registryScore = this.getRegistryBenchmarkScore(model.id, taskCategory);
+        if (registryScore !== undefined) {
+          score += registryScore;
         } else {
           score += 0.3;
           if (model.id.toLowerCase().includes('instruct')) {
@@ -357,6 +390,12 @@ export class Router implements IRouter {
             score += 0.2;
           }
         }
+        const selectedUpstreamProvider = this.getFreeTierUpstreamProvider(selectedModelId);
+        const candidateUpstreamProvider = this.getFreeTierUpstreamProvider(model.id);
+        if (candidateUpstreamProvider !== selectedUpstreamProvider) {
+          score += 0.08;
+        }
+        score -= this.getRecentFreeTierRateLimitPenalty(model.id);
       } else {
         const benchmarkSummary = getModelRegistry().getModel(model.id)?.benchmarkSummary;
         if (benchmarkSummary) {
@@ -880,9 +919,9 @@ export class Router implements IRouter {
       // Return a routing recommendation — actual execution happens via route_task
       return {
         model: decision.model,
-        providerId: decision.provider,
-        costClass: providerCostClass(decision.provider),
-        provider: decision.provider,
+        providerId,
+        costClass: tier,
+        provider: providerId,
         reason: `Preemptive routing selected ${decision.model} (${decision.provider}). Call route_task to execute. ${routingReason}`,
         resultCode: '',
         details: {},
