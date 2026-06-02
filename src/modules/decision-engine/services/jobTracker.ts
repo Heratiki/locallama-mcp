@@ -45,6 +45,8 @@ export interface Job {
   model?: string;
   error?: string;
   results?: string[]; // Array to store generated code blocks
+  ranked_trio?: any;
+  benchmarking_recommended?: any;
 }
 
 export interface JobTrackerMonitoringInfo {
@@ -183,7 +185,7 @@ export class JobTracker extends EventEmitter {
     }
   }
 
-  async createJob(id: string, task: string, model?: string, provider?: string): Promise<string> {
+  async createJob(id: string, task: string, model?: string, provider?: string, rankedTrio?: any, benchmarkingRecommended?: any): Promise<string> {
     // Allow operation even if not fully initialized
     if (!this.initialized) {
       logger.warn(`Attempted to create job ${id} before JobTracker was initialized`);
@@ -222,7 +224,9 @@ export class JobTracker extends EventEmitter {
       progress: 'Pending',
       estimated_time_remaining: 'N/A',
       startTime: now,
-      model
+      model,
+      ranked_trio: rankedTrio,
+      benchmarking_recommended: benchmarkingRecommended
     };
 
     this.activeJobs.set(id, job);

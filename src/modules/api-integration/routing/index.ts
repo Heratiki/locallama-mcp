@@ -11,6 +11,9 @@ import {
   QueuedRouteTaskResult,
   TaskStatusResult,
   CancelTaskResult,
+  RankedTrio,
+  Recommendation,
+  TrioMember,
 } from './types.js';
 import { getProviderRegistry, providerCostClass, isProviderLocal } from '../../core/provider/index.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,6 +38,10 @@ import {
 } from '../../job-store/index.js';
 import { refreshAlertState } from '../../job-store/alert.js';
 import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus } from '../../job-store/types.js';
+import { COMPLEXITY_THRESHOLDS } from '../../decision-engine/types/index.js';
+import { modelsDbService } from '../../decision-engine/services/modelsDb.js';
+
+const CODE_TASK_PATTERN = /\b(code|function|class|implement|debug|test|refactor|fix|bug|method|module|api|script|parse|algorithm|compile)\b/i;
 
 let jobTracker: Awaited<ReturnType<typeof getJobTracker>>;
 
@@ -211,6 +218,239 @@ export class Router implements IRouter {
     }
   }
 
+  private async buildRankedTrio(
+    selectedModelId: string,
+    tier: 'local' | 'free' | 'paid',
+    complexity: number,
+    totalTokens: number,
+    taskCategory?: string,
+  ): Promise<{
+    ranked_trio: RankedTrio;
+    benchmarking_recommended?: Recommendation[];
+  }> {
+    const allAvailableModels = await costMonitor.getAvailableModels();
+    
+    let tierModels: Model[] = [];
+    if (tier === 'local') {
+      tierModels = allAvailableModels.filter(m => isProviderLocal(m.provider));
+    } else {
+      const freeModels = await costMonitor.getFreeModels();
+      const freeIds = new Set(freeModels.map(m => m.id));
+      
+      if (tier === 'free') {
+        tierModels = allAvailableModels.filter(m =>
+          !isProviderLocal(m.provider) &&
+          (freeIds.has(m.id) || (m.costPerToken?.prompt === 0 && m.costPerToken?.completion === 0))
+        );
+      } else {
+        tierModels = allAvailableModels.filter(m =>
+          !isProviderLocal(m.provider) &&
+          !freeIds.has(m.id) &&
+          !(m.costPerToken?.prompt === 0 && m.costPerToken?.completion === 0)
+        );
+      }
+    }
+    
+    const candidates = tierModels.filter(m => m.contextWindow === undefined || m.contextWindow >= totalTokens);
+    const scoredCandidates: Array<{ model: Model; score: number }> = [];
+    
+    for (const model of candidates) {
+      let score = 0;
+      if (tier === 'local') {
+        const benchmarkSummary = getModelRegistry().getModel(model.id)?.benchmarkSummary;
+        if (benchmarkSummary) {
+          const successRate = benchmarkSummary.successRate ?? 0;
+          const scores = getModelRegistry().getModel(model.id)?.benchmarkSummary?.scores;
+          let taskCategoryScore: number | undefined;
+          if (taskCategory === 'code') taskCategoryScore = scores?.code;
+          else if (taskCategory === 'reasoning') taskCategoryScore = scores?.reasoning;
+          else if (taskCategory === 'speed') taskCategoryScore = scores?.speed;
+          
+          const qualitySignal = taskCategoryScore ?? (benchmarkSummary.qualityScore ?? 0);
+          const avgResponseTime = benchmarkSummary.avgResponseTime ?? 0;
+          const responseTimeFactor = Math.max(0, 1 - (avgResponseTime / 15000));
+          const empiricalScore = successRate * 0.3 + qualitySignal * 0.4 + responseTimeFactor * 0.3;
+          const benchmarkCount = benchmarkSummary.benchmarkCount ?? 1;
+          const confidence = Math.min(1, benchmarkCount / 3);
+          
+          let heuristicScore = 0.30;
+          const normalizedId = model.id.toLowerCase()
+            .replace(/:e(\d+)b\b/, ':$1b')
+            .replace(/\be(\d+)b\b/, '$1b');
+          if (complexity >= COMPLEXITY_THRESHOLDS.MEDIUM) {
+            if (/\b(70b|72b|65b)\b/.test(normalizedId)) heuristicScore = 0.75;
+            else if (/\b(40b|41b|47b)\b/.test(normalizedId)) heuristicScore = 0.65;
+            else if (/\b(20b|22b|27b|32b)\b/.test(normalizedId)) heuristicScore = 0.55;
+            else if (/\b(13b|14b)\b/.test(normalizedId)) heuristicScore = 0.45;
+            else if (/\b(7b|8b|9b|10b|11b|12b)\b/.test(normalizedId)) heuristicScore = 0.40;
+            else if (/\b(4b|5b|6b)\b/.test(normalizedId)) heuristicScore = 0.25;
+            else if (/\b(1b|1\.5b|2b|3b)\b/.test(normalizedId)) heuristicScore = 0.15;
+          } else {
+            if (/\b(1b|1\.5b|2b)\b/.test(normalizedId)) heuristicScore = 0.75;
+            else if (/\b(3b|4b)\b/.test(normalizedId)) heuristicScore = 0.65;
+            else if (/\b(5b|6b|7b)\b/.test(normalizedId)) heuristicScore = 0.50;
+            else if (/\b(8b|9b|10b|11b|12b)\b/.test(normalizedId)) heuristicScore = 0.35;
+            else if (/\b(13b|14b)\b/.test(normalizedId)) heuristicScore = 0.25;
+            else if (/\b(20b|22b|27b|32b|40b|65b|70b|72b)\b/.test(normalizedId)) heuristicScore = 0.15;
+          }
+          
+          score = empiricalScore * confidence + heuristicScore * (1 - confidence);
+        } else {
+          let heuristicScore = 0.30;
+          const normalizedId = model.id.toLowerCase()
+            .replace(/:e(\d+)b\b/, ':$1b')
+            .replace(/\be(\d+)b\b/, '$1b');
+          if (complexity >= COMPLEXITY_THRESHOLDS.MEDIUM) {
+            if (/\b(70b|72b|65b)\b/.test(normalizedId)) heuristicScore = 0.75;
+            else if (/\b(40b|41b|47b)\b/.test(normalizedId)) heuristicScore = 0.65;
+            else if (/\b(20b|22b|27b|32b)\b/.test(normalizedId)) heuristicScore = 0.55;
+            else if (/\b(13b|14b)\b/.test(normalizedId)) heuristicScore = 0.45;
+            else if (/\b(7b|8b|9b|10b|11b|12b)\b/.test(normalizedId)) heuristicScore = 0.40;
+            else if (/\b(4b|5b|6b)\b/.test(normalizedId)) heuristicScore = 0.25;
+            else if (/\b(1b|1\.5b|2b|3b)\b/.test(normalizedId)) heuristicScore = 0.15;
+          } else {
+            if (/\b(1b|1\.5b|2b)\b/.test(normalizedId)) heuristicScore = 0.75;
+            else if (/\b(3b|4b)\b/.test(normalizedId)) heuristicScore = 0.65;
+            else if (/\b(5b|6b|7b)\b/.test(normalizedId)) heuristicScore = 0.50;
+            else if (/\b(8b|9b|10b|11b|12b)\b/.test(normalizedId)) heuristicScore = 0.35;
+            else if (/\b(13b|14b)\b/.test(normalizedId)) heuristicScore = 0.25;
+            else if (/\b(20b|22b|27b|32b|40b|65b|70b|72b)\b/.test(normalizedId)) heuristicScore = 0.15;
+          }
+          score = heuristicScore;
+          if (model.id.toLowerCase().includes('instruct')) {
+            score += 0.05;
+          }
+        }
+      } else if (tier === 'free') {
+        const modelsDb = modelsDbService.getDatabase();
+        const modelData = modelsDb?.models?.[model.id] as any;
+        if (modelData && modelData.benchmarkCount > 0) {
+          const successRateWeight = 0.4;
+          const qualityScoreWeight = 0.4;
+          const responseTimeWeight = 0.3;
+          const complexityMatchWeight = 0.1;
+          score += modelData.successRate * successRateWeight;
+          score += modelData.qualityScore * qualityScoreWeight;
+          const responseTimeFactor = Math.max(0, 1 - (modelData.avgResponseTime / 15000));
+          score += responseTimeFactor * responseTimeWeight;
+          const complexityMatchFactor = 1 - Math.abs(modelData.complexityScore - complexity);
+          score += complexityMatchFactor * complexityMatchWeight;
+          if (modelData.benchmarkCount >= 3) {
+            score += 0.1;
+          }
+        } else {
+          score += 0.3;
+          if (model.id.toLowerCase().includes('instruct')) {
+            score += 0.1;
+          }
+          if (complexity >= COMPLEXITY_THRESHOLDS.MEDIUM) {
+            score += (model.contextWindow || 0) / 100000;
+          }
+          if (model.id.toLowerCase().includes('mistral') ||
+              model.id.toLowerCase().includes('llama') ||
+              model.id.toLowerCase().includes('gemini') ||
+              model.id.toLowerCase().includes('phi-3') ||
+              model.id.toLowerCase().includes('google') ||
+              model.id.toLowerCase().includes('meta') ||
+              model.id.toLowerCase().includes('microsoft') ||
+              model.id.toLowerCase().includes('deepseek')) {
+            score += 0.2;
+          }
+        }
+      } else {
+        const benchmarkSummary = getModelRegistry().getModel(model.id)?.benchmarkSummary;
+        if (benchmarkSummary) {
+          const successRate = benchmarkSummary.successRate ?? 0;
+          const qualityScore = benchmarkSummary.qualityScore ?? 0;
+          const avgResponseTime = benchmarkSummary.avgResponseTime ?? 0;
+          const responseTimeFactor = Math.max(0, 1 - (avgResponseTime / 15000));
+          score = successRate * 0.3 + qualityScore * 0.4 + responseTimeFactor * 0.3;
+        } else {
+          score = 0.3;
+          if (complexity >= COMPLEXITY_THRESHOLDS.COMPLEX) {
+            if (model.id === 'openai/gpt-4o') score = 0.9;
+            else if (model.id === 'openai/gpt-4o-mini') score = 0.7;
+          } else {
+            if (model.id === 'openai/gpt-4o-mini') score = 0.9;
+            else if (model.id === 'openai/gpt-4o') score = 0.7;
+          }
+          if (model.id.toLowerCase().includes('instruct')) {
+            score += 0.05;
+          }
+        }
+      }
+      scoredCandidates.push({ model, score });
+    }
+    
+    scoredCandidates.sort((a, b) => b.score - a.score);
+    
+    let goodModel = candidates.find(m => m.id === selectedModelId);
+    if (!goodModel) {
+      goodModel = scoredCandidates[0]?.model ?? {
+        id: selectedModelId,
+        name: selectedModelId,
+        provider: tier === 'local' ? 'local' : 'openrouter',
+        capabilities: { chat: true, completion: true },
+        costPerToken: { prompt: 0, completion: 0 }
+      };
+    }
+    
+    const remainingScored = scoredCandidates.filter(c => c.model.id !== goodModel!.id);
+    const betterModel = remainingScored[0]?.model ?? goodModel;
+    const bestModel = remainingScored[1]?.model ?? betterModel;
+    
+    const distinctModels = new Set(candidates.map(m => m.id));
+    distinctModels.add(goodModel.id);
+    
+    let fallback_notice: string | undefined;
+    if (distinctModels.size < 3) {
+      fallback_notice = `Only ${distinctModels.size} distinct model(s) available in ${tier} tier.`;
+    }
+    
+    const getTrioMember = async (model: Model): Promise<TrioMember> => {
+      const providerId = await this.resolveProviderIdForModel(model.id, model.provider);
+      const benchmark_runs = getModelRegistry().getModel(model.id)?.benchmarkSummary?.benchmarkCount ?? 0;
+      const validation_score_seeded = getModelRegistry().getModel(model.id)?.benchmarkSummary?.scores?.validate === undefined;
+      return {
+        model_id: model.id,
+        provider_id: providerId,
+        benchmark_runs,
+        validation_score_seeded
+      };
+    };
+    
+    const ranked_trio: RankedTrio = {
+      good: await getTrioMember(goodModel),
+      better: await getTrioMember(betterModel),
+      best: await getTrioMember(bestModel),
+      fallback_notice
+    };
+    
+    const recommendations: Recommendation[] = [];
+    const recommendedSet = new Set<string>();
+    
+    const checkAndRecommend = (member: TrioMember) => {
+      if (member.benchmark_runs === 0 && !recommendedSet.has(member.model_id)) {
+        recommendedSet.add(member.model_id);
+        recommendations.push({
+          model_id: member.model_id,
+          provider_id: member.provider_id,
+          suggested_categories: ['code', 'chat', 'validate'],
+          reason: `Model ${member.model_id} has no benchmark data.`
+        });
+      }
+    };
+    
+    checkAndRecommend(ranked_trio.good);
+    checkAndRecommend(ranked_trio.better);
+    checkAndRecommend(ranked_trio.best);
+    
+    return {
+      ranked_trio,
+      benchmarking_recommended: recommendations.length > 0 ? recommendations : undefined
+    };
+  }
+
   private calculatePollAgainAfterMs(jobs: Array<{ status: PersistedJobStatus; poll_again_after_ms: number | null }>): number {
     const activeHints = jobs
       .filter((job) => job.status === 'queued' || job.status === 'in_progress')
@@ -363,7 +603,22 @@ export class Router implements IRouter {
       failed_count: 0,
       created_at: now,
     });
-    await tracker.createJob(taskId, params.task, decision.model, providerId);
+    const totalTokens = params.contextLength + (params.expectedOutputLength || 0);
+    const isLocalModel = isProviderLocal(providerId);
+    const freeModels = await costMonitor.getFreeModels();
+    const isFreeModel = freeModels.some(m => m.id === decision.model);
+    const tier = isLocalModel ? 'local' : (isFreeModel ? 'free' : 'paid');
+    const taskCategory = CODE_TASK_PATTERN.test(params.task) ? 'code' : undefined;
+
+    const { ranked_trio, benchmarking_recommended } = await this.buildRankedTrio(
+      decision.model,
+      tier,
+      params.complexity || 0.5,
+      totalTokens,
+      taskCategory
+    );
+
+    await tracker.createJob(taskId, params.task, decision.model, providerId, ranked_trio, benchmarking_recommended);
     await updateJob({
       id: taskId,
       task_id: taskId,
@@ -398,6 +653,8 @@ export class Router implements IRouter {
       provider: providerId,
       model: decision.model,
       benchmark_contention: benchmarkContention,
+      ranked_trio,
+      benchmarking_recommended,
     };
   }
 
@@ -605,6 +862,22 @@ export class Router implements IRouter {
       // Generate a reason if it doesn't exist in the decision object
       const routingReason = generateRoutingReason(decision);
       
+      const providerId = await this.resolveProviderIdForModel(decision.model, decision.provider);
+      const isLocalModel = isProviderLocal(providerId);
+      const freeModels = await costMonitor.getFreeModels();
+      const isFreeModel = freeModels.some(m => m.id === decision.model);
+      const tier = isLocalModel ? 'local' : (isFreeModel ? 'free' : 'paid');
+      const totalTokens = params.contextLength + (params.expectedOutputLength || 0);
+      const taskCategory = CODE_TASK_PATTERN.test(params.task) ? 'code' : undefined;
+
+      const { ranked_trio, benchmarking_recommended } = await this.buildRankedTrio(
+        decision.model,
+        tier,
+        params.complexity || 0.5,
+        totalTokens,
+        taskCategory
+      );
+
       // Return a routing recommendation — actual execution happens via route_task
       return {
         model: decision.model,
@@ -613,7 +886,9 @@ export class Router implements IRouter {
         provider: decision.provider,
         reason: `Preemptive routing selected ${decision.model} (${decision.provider}). Call route_task to execute. ${routingReason}`,
         resultCode: '',
-        details: {}
+        details: {},
+        ranked_trio,
+        benchmarking_recommended,
       };
     } catch (error) {
       logger.error('Error in preemptive routing:', error);

@@ -43,6 +43,29 @@ export interface RouteTaskResult {
     retrivResults?: RetrivSearchResult[];
     taskAnalysis?: DecomposedCodeTask;
   };
+  ranked_trio?: RankedTrio;
+  benchmarking_recommended?: Recommendation[];
+}
+
+export interface TrioMember {
+  model_id: string;
+  provider_id: string;
+  benchmark_runs: number;
+  validation_score_seeded: boolean;
+}
+
+export interface RankedTrio {
+  good: TrioMember;
+  better: TrioMember;
+  best: TrioMember;
+  fallback_notice?: string;
+}
+
+export interface Recommendation {
+  model_id: string;
+  provider_id: string;
+  suggested_categories: Array<'code' | 'chat' | 'validate'>;
+  reason: string;
 }
 
 export interface QueuedRouteTaskResult {
@@ -59,6 +82,8 @@ export interface QueuedRouteTaskResult {
     queued_benchmark_runs: number;
     message: string;
   };
+  ranked_trio?: RankedTrio;
+  benchmarking_recommended?: Recommendation[];
 }
 
 export interface TaskStatusJobSummary {
