@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/Heratiki/locallama-mcp/compare/v1.25.0...v1.26.0) (2026-06-02)
+
+
+### Features
+
+* **telemetry:** add OpenTelemetry tracing and persistent analytics ([#124](https://github.com/Heratiki/locallama-mcp/issues/124)) ([9b1f228](https://github.com/Heratiki/locallama-mcp/commit/9b1f228ad0fb19fd9cd6d2bede0c89d36ef8cffb)), closes [hi#error-rate](https://github.com/hi/issues/error-rate)
+
 # [1.25.0](https://github.com/Heratiki/locallama-mcp/compare/v1.24.0...v1.25.0) (2026-06-02)
 
 
