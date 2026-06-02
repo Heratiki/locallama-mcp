@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/Heratiki/locallama-mcp/compare/v1.28.0...v1.29.0) (2026-06-02)
+
+
+### Features
+
+* **routing:** wire sync validation & retry loop ([7888d0a](https://github.com/Heratiki/locallama-mcp/commit/7888d0a02811acfcaad0bcbbd0ecf0032caeb98e)), closes [#115](https://github.com/Heratiki/locallama-mcp/issues/115)
+
 # [1.28.0](https://github.com/Heratiki/locallama-mcp/compare/v1.27.0...v1.28.0) (2026-06-02)
 
 
