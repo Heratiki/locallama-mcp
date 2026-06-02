@@ -1,3 +1,10 @@
+# [1.28.0](https://github.com/Heratiki/locallama-mcp/compare/v1.27.0...v1.28.0) (2026-06-02)
+
+
+### Features
+
+* **routing:** add getBestValidatorModel selector ([#126](https://github.com/Heratiki/locallama-mcp/issues/126)) ([fbda47d](https://github.com/Heratiki/locallama-mcp/commit/fbda47db8f409f9722c324289ca0b01d988f3fc0)), closes [#114](https://github.com/Heratiki/locallama-mcp/issues/114)
+
 # [1.27.0](https://github.com/Heratiki/locallama-mcp/compare/v1.26.0...v1.27.0) (2026-06-02)
 
 
