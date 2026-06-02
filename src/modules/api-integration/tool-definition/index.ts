@@ -362,7 +362,7 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
               type: 'array',
               items: {
                 type: 'string',
-                enum: ['code', 'chat', 'tool-use', 'long-context']
+                enum: ['code', 'chat', 'tool-use', 'long-context', 'validate']
               },
               description: 'Which task categories to run. Defaults to ["code", "chat"] when omitted.'
             }

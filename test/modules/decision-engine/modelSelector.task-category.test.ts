@@ -21,7 +21,15 @@ jest.unstable_mockModule('../../../dist/modules/decision-engine/services/modelsD
   },
 }));
 
-const mockGetModel = jest.fn<(modelId: string) => { benchmarkSummary?: { scores?: { code?: number } } } | undefined>(() => undefined);
+const mockGetModel = jest.fn<(modelId: string) => {
+  benchmarkSummary?: {
+    scores?: { code?: number; validate?: number };
+    successRate?: number;
+    qualityScore?: number;
+    avgResponseTime?: number;
+    benchmarkCount?: number;
+  };
+} | undefined>(() => undefined);
 jest.unstable_mockModule('../../../dist/modules/core/model/index.js', () => ({
   getModelRegistry: () => ({
     getModel: mockGetModel,
@@ -114,6 +122,42 @@ describe('modelSelector.getBestLocalModel task-category scoring (issue #50)', ()
     mockGetModel.mockReturnValue(undefined);
 
     const selected = await modelSelector.getBestLocalModel(0.5, 500, undefined, 'code');
+    expect(selected?.id).toBe('model-a');
+  });
+
+  it('seeds validate score from code score with sparse confidence when no real validate run exists', async () => {
+    mockGetAvailableModels.mockResolvedValue([
+      { id: 'model-a', provider: 'ollama', contextWindow: 8192 },
+      { id: 'model-b', provider: 'ollama', contextWindow: 8192 },
+    ]);
+
+    mockGetModel.mockImplementation((id: string) => {
+      if (id === 'model-a') {
+        return {
+          benchmarkSummary: {
+            scores: { validate: 0.4 },
+            successRate: 1,
+            qualityScore: 0.4,
+            avgResponseTime: 1000,
+            benchmarkCount: 3,
+          },
+        };
+      }
+      if (id === 'model-b') {
+        return {
+          benchmarkSummary: {
+            scores: { code: 0.9 },
+            successRate: 1,
+            qualityScore: 0.9,
+            avgResponseTime: 1000,
+            benchmarkCount: 3,
+          },
+        };
+      }
+      return undefined;
+    });
+
+    const selected = await modelSelector.getBestLocalModel(0.5, 500, undefined, 'validate');
     expect(selected?.id).toBe('model-a');
   });
 });

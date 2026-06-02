@@ -8,8 +8,14 @@ import { COMPLEXITY_THRESHOLDS } from '../types/index.js';
 import { isOpenRouterConfigured } from '../../api-integration/tool-definition/index.js';
 import { isProviderLocal } from '../../core/provider/index.js';
 import { getModelRegistry } from '../../core/model/index.js';
+import { config } from '../../../config/index.js';
 
-function getTaskCategoryScore(modelId: string, taskCategory?: string): number | undefined {
+interface TaskCategorySignal {
+  score: number;
+  seeded: boolean;
+}
+
+function getTaskCategorySignal(modelId: string, taskCategory?: string): TaskCategorySignal | undefined {
   if (!taskCategory) return undefined;
 
   const scores = getModelRegistry().getModel(modelId)?.benchmarkSummary?.scores;
@@ -17,11 +23,19 @@ function getTaskCategoryScore(modelId: string, taskCategory?: string): number | 
 
   switch (taskCategory) {
     case 'code':
-      return scores.code;
+      return scores.code === undefined ? undefined : { score: scores.code, seeded: false };
     case 'reasoning':
-      return scores.reasoning;
+      return scores.reasoning === undefined ? undefined : { score: scores.reasoning, seeded: false };
     case 'speed':
-      return scores.speed;
+      return scores.speed === undefined ? undefined : { score: scores.speed, seeded: false };
+    case 'validate':
+      if (scores.validate !== undefined) {
+        return { score: scores.validate, seeded: false };
+      }
+      if (scores.code !== undefined) {
+        return { score: scores.code * 0.8, seeded: true };
+      }
+      return undefined;
     default:
       return undefined;
   }
@@ -126,10 +140,6 @@ export const modelSelector = {
         return null;
       }
 
-      // Number of benchmark runs required before empirical data is treated as
-      // fully reliable. Below this, scores are blended with the size heuristic.
-      const RELIABLE_BENCHMARK_COUNT = 3;
-
       let bestModel: Model | null = null;
       let bestScore = 0;
 
@@ -144,7 +154,8 @@ export const modelSelector = {
 
           // Prefer task-category benchmark score when available (e.g. code score
           // for a code task); fall back to the overall quality score.
-          const taskCategoryScore = getTaskCategoryScore(model.id, taskCategory);
+          const taskCategorySignal = getTaskCategorySignal(model.id, taskCategory);
+          const taskCategoryScore = taskCategorySignal?.score;
           const qualitySignal = taskCategoryScore ?? (benchmarkSummary.qualityScore ?? 0);
 
           const avgResponseTime = benchmarkSummary.avgResponseTime ?? 0;
@@ -160,8 +171,8 @@ export const modelSelector = {
           // A single run on a small model can produce numbers that outclass a
           // large model, but may not be representative. Blend with the
           // size-based heuristic until we have enough runs.
-          const benchmarkCount = benchmarkSummary.benchmarkCount ?? 1;
-          const confidence = Math.min(1, benchmarkCount / RELIABLE_BENCHMARK_COUNT);
+          const benchmarkCount = taskCategorySignal?.seeded ? 1 : (benchmarkSummary.benchmarkCount ?? 1);
+          const confidence = Math.min(1, benchmarkCount / config.reliableBenchmarkCount);
           const heuristicScore = computeLocalModelHeuristicScore(model.id, complexity);
 
           score = empiricalScore * confidence + heuristicScore * (1 - confidence);
@@ -169,7 +180,7 @@ export const modelSelector = {
           logger.debug(
             `Local model ${model.id} has benchmark data: ` +
             `success=${successRate.toFixed(2)}, ` +
-            `quality=${qualitySignal.toFixed(2)}${taskCategoryScore !== undefined ? ` (task:${taskCategory})` : ''}, ` +
+            `quality=${qualitySignal.toFixed(2)}${taskCategoryScore !== undefined ? ` (task:${taskCategory}${taskCategorySignal?.seeded ? ':seeded' : ''})` : ''}, ` +
             `time=${avgResponseTime.toFixed(0)}ms, runs=${benchmarkCount}, ` +
             `confidence=${confidence.toFixed(2)}, score=${score.toFixed(2)}`,
           );

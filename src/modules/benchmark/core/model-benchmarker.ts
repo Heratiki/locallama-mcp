@@ -19,13 +19,14 @@ import { logger } from '../../../utils/logger.js';
 // Task category definitions
 // ---------------------------------------------------------------------------
 
-export type TaskCategory = 'code' | 'chat' | 'tool-use' | 'long-context';
+export type TaskCategory = 'code' | 'chat' | 'tool-use' | 'long-context' | 'validate';
 
 interface CategoryTask {
   task: string;
   contextLength: number;
   expectedOutputLength: number;
   complexity: number;
+  expectedVerdict?: 'YES' | 'NO';
 }
 
 /**
@@ -76,6 +77,30 @@ const CATEGORY_TASKS: Record<TaskCategory, CategoryTask[]> = {
       contextLength: 500,
       expectedOutputLength: 400,
       complexity: 0.6,
+    },
+  ],
+  validate: [
+    {
+      task: [
+        'You are validating a coding-agent answer. Return YES on the first line if the answer satisfies the task, otherwise return NO.',
+        'Task: Write a TypeScript add(a, b) function that returns the sum.',
+        'Answer: function add(a: number, b: number): number { return a + b; }',
+      ].join('\n'),
+      contextLength: 140,
+      expectedOutputLength: 8,
+      complexity: 0.3,
+      expectedVerdict: 'YES',
+    },
+    {
+      task: [
+        'You are validating a coding-agent answer. Return YES on the first line if the answer satisfies the task, otherwise return NO.',
+        'Task: Write a TypeScript add(a, b) function that returns the sum.',
+        'Answer: function add(a: number, b: number): number { return a - b; }',
+      ].join('\n'),
+      contextLength: 140,
+      expectedOutputLength: 8,
+      complexity: 0.3,
+      expectedVerdict: 'NO',
     },
   ],
 };
@@ -167,6 +192,12 @@ async function resolveExecutableModelId(
   }
 
   return requestedModelId;
+}
+
+function scoreValidationVerdict(output: string, expectedVerdict: 'YES' | 'NO'): number {
+  const firstLine = output.trim().split(/\r?\n/, 1)[0]?.trim().toUpperCase() ?? '';
+  const verdict = firstLine.startsWith('YES') ? 'YES' : firstLine.startsWith('NO') ? 'NO' : undefined;
+  return verdict === expectedVerdict ? 1 : 0;
 }
 
 /**
@@ -285,7 +316,9 @@ export async function benchmarkModel(
           { workload: 'benchmark', priority: 'background' },
         );
         const elapsed = Date.now() - startMs;
-        const quality = evaluateQuality(benchTask.task, execResult.content);
+        const quality = benchTask.expectedVerdict
+          ? scoreValidationVerdict(execResult.content, benchTask.expectedVerdict)
+          : evaluateQuality(benchTask.task, execResult.content);
 
         totalSuccess++;
         totalQuality += quality;
@@ -397,6 +430,7 @@ export async function benchmarkModel(
       code: categoryResults['code']?.qualityScore,
       reasoning: categoryResults['chat']?.qualityScore,
       speed: speedScore,
+      validate: categoryResults['validate']?.qualityScore,
     },
     successRate: overallSuccessRate,
     qualityScore: overallQuality,

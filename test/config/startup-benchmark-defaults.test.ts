@@ -16,6 +16,9 @@ import { randomUUID } from 'crypto';
 const originalRootDir = process.env.LOCALLAMA_ROOT_DIR;
 const originalStartupTargets = process.env.STARTUP_BENCHMARK_TARGETS;
 const originalFreshnessHours = process.env.BENCHMARK_FRESHNESS_HOURS;
+const originalReliableBenchmarkCount = process.env.RELIABLE_BENCHMARK_COUNT;
+const originalMinValidatorScore = process.env.MIN_VALIDATOR_SCORE;
+const originalValidationRetryBudget = process.env.VALIDATION_RETRY_BUDGET;
 
 function importFreshConfigModule(cacheKey: string) {
   const modulePath = path.resolve(process.cwd(), 'dist/config/index.js');
@@ -45,6 +48,9 @@ beforeAll(async () => {
   // Delete env vars that could bleed into config at module init time
   delete process.env.STARTUP_BENCHMARK_TARGETS;
   delete process.env.BENCHMARK_FRESHNESS_HOURS;
+  delete process.env.RELIABLE_BENCHMARK_COUNT;
+  delete process.env.MIN_VALIDATOR_SCORE;
+  delete process.env.VALIDATION_RETRY_BUDGET;
   configModule = await importFreshConfigModule(`startup-cfg-${randomUUID()}`);
 });
 
@@ -53,6 +59,9 @@ afterAll(() => {
   restoreEnv('LOCALLAMA_ROOT_DIR', originalRootDir);
   restoreEnv('STARTUP_BENCHMARK_TARGETS', originalStartupTargets);
   restoreEnv('BENCHMARK_FRESHNESS_HOURS', originalFreshnessHours);
+  restoreEnv('RELIABLE_BENCHMARK_COUNT', originalReliableBenchmarkCount);
+  restoreEnv('MIN_VALIDATOR_SCORE', originalMinValidatorScore);
+  restoreEnv('VALIDATION_RETRY_BUDGET', originalValidationRetryBudget);
 });
 
 // Helper: write a .env with base content plus extra lines and trigger a reload.
@@ -62,7 +71,18 @@ function reloadWith(extraLines: string[]) {
   // Align process.env with what we wrote so values not in .env are controlled
   delete process.env.STARTUP_BENCHMARK_TARGETS;
   delete process.env.BENCHMARK_FRESHNESS_HOURS;
-  return configModule.reloadConfig() as { activeConfig: { startupBenchmarkTargets: string[]; benchmarkFreshnessHours: number } };
+  delete process.env.RELIABLE_BENCHMARK_COUNT;
+  delete process.env.MIN_VALIDATOR_SCORE;
+  delete process.env.VALIDATION_RETRY_BUDGET;
+  return configModule.reloadConfig() as {
+    activeConfig: {
+      startupBenchmarkTargets: string[];
+      benchmarkFreshnessHours: number;
+      reliableBenchmarkCount: number;
+      minValidatorScore: number;
+      validationRetryBudget: number;
+    };
+  };
 }
 
 describe('startupBenchmarkTargets default', () => {
@@ -89,6 +109,28 @@ describe('startupBenchmarkTargets default', () => {
   it('honours STARTUP_BENCHMARK_TARGETS=local,free', () => {
     const result = reloadWith(['STARTUP_BENCHMARK_TARGETS=local,free']);
     expect(result.activeConfig.startupBenchmarkTargets).toEqual(['local', 'free']);
+  });
+});
+
+describe('validation scoring config gates', () => {
+  it('defaults shared validation gates when absent from .env', () => {
+    const result = reloadWith([]);
+
+    expect(result.activeConfig.reliableBenchmarkCount).toBe(3);
+    expect(result.activeConfig.minValidatorScore).toBe(0.6);
+    expect(result.activeConfig.validationRetryBudget).toBe(1);
+  });
+
+  it('reads shared validation gates from .env', () => {
+    const result = reloadWith([
+      'RELIABLE_BENCHMARK_COUNT=5',
+      'MIN_VALIDATOR_SCORE=0.75',
+      'VALIDATION_RETRY_BUDGET=2',
+    ]);
+
+    expect(result.activeConfig.reliableBenchmarkCount).toBe(5);
+    expect(result.activeConfig.minValidatorScore).toBe(0.75);
+    expect(result.activeConfig.validationRetryBudget).toBe(2);
   });
 });
 
