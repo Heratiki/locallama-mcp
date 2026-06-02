@@ -1,3 +1,10 @@
+# [1.27.0](https://github.com/Heratiki/locallama-mcp/compare/v1.26.0...v1.27.0) (2026-06-02)
+
+
+### Features
+
+* **validation:** add OutputValidator module ([#125](https://github.com/Heratiki/locallama-mcp/issues/125)) ([826fc1b](https://github.com/Heratiki/locallama-mcp/commit/826fc1bf8458d8b3ffa61a7085abfb972b38cfe6)), closes [#113](https://github.com/Heratiki/locallama-mcp/issues/113) [#113](https://github.com/Heratiki/locallama-mcp/issues/113)
+
 # [1.26.0](https://github.com/Heratiki/locallama-mcp/compare/v1.25.0...v1.26.0) (2026-06-02)
 
 
