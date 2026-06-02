@@ -327,7 +327,7 @@ export class Router implements IRouter {
         if (modelData && modelData.benchmarkCount > 0) {
           const successRateWeight = 0.4;
           const qualityScoreWeight = 0.4;
-          const responseTimeWeight = 0.3;
+          const responseTimeWeight = 0.2;
           const complexityMatchWeight = 0.1;
           score += modelData.successRate * successRateWeight;
           score += modelData.qualityScore * qualityScoreWeight;
@@ -399,12 +399,11 @@ export class Router implements IRouter {
     const betterModel = remainingScored[0]?.model ?? goodModel;
     const bestModel = remainingScored[1]?.model ?? betterModel;
     
-    const distinctModels = new Set(candidates.map(m => m.id));
-    distinctModels.add(goodModel.id);
+    const distinctTrioIds = new Set([goodModel.id, betterModel.id, bestModel.id]);
     
     let fallback_notice: string | undefined;
-    if (distinctModels.size < 3) {
-      fallback_notice = `Only ${distinctModels.size} distinct model(s) available in ${tier} tier.`;
+    if (distinctTrioIds.size < 3) {
+      fallback_notice = `Only ${distinctTrioIds.size} distinct model(s) available in ${tier} tier.`;
     }
     
     const getTrioMember = async (model: Model): Promise<TrioMember> => {

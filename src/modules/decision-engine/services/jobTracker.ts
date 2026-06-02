@@ -2,6 +2,7 @@ import { logger } from '../../../utils/logger.js';
 import { WebSocketServer } from 'ws';
 // Import this type but don't import the function directly to avoid circular dependency
 import type { BroadcastJobsFunction } from '../../websocket-server/ws-server-types.js';
+import type { RankedTrio, Recommendation } from '../../api-integration/routing/types.js';
 import net from 'net';
 import EventEmitter from 'events';
 import {
@@ -45,8 +46,8 @@ export interface Job {
   model?: string;
   error?: string;
   results?: string[]; // Array to store generated code blocks
-  ranked_trio?: any;
-  benchmarking_recommended?: any;
+  ranked_trio?: RankedTrio;
+  benchmarking_recommended?: Recommendation[];
 }
 
 export interface JobTrackerMonitoringInfo {
@@ -185,7 +186,7 @@ export class JobTracker extends EventEmitter {
     }
   }
 
-  async createJob(id: string, task: string, model?: string, provider?: string, rankedTrio?: any, benchmarkingRecommended?: any): Promise<string> {
+  async createJob(id: string, task: string, model?: string, provider?: string, rankedTrio?: RankedTrio, benchmarkingRecommended?: Recommendation[]): Promise<string> {
     // Allow operation even if not fully initialized
     if (!this.initialized) {
       logger.warn(`Attempted to create job ${id} before JobTracker was initialized`);

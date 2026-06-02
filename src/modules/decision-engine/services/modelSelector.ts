@@ -261,7 +261,7 @@ export const modelSelector = {
           // Weight factors based on importance
           const successRateWeight = 0.4;  // Increased weight for success rate
           const qualityScoreWeight = 0.4;
-          const responseTimeWeight = 0.3; // Increased weight for speed
+          const responseTimeWeight = 0.2; // Increased weight for speed
           const complexityMatchWeight = 0.1;
           
           // Success rate factor (0-1)
