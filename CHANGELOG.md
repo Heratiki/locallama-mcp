@@ -1,3 +1,10 @@
+# [1.25.0](https://github.com/Heratiki/locallama-mcp/compare/v1.24.0...v1.25.0) (2026-06-02)
+
+
+### Features
+
+* **prompts:** upgrade system prompts across all features ([#123](https://github.com/Heratiki/locallama-mcp/issues/123)) ([47a999a](https://github.com/Heratiki/locallama-mcp/commit/47a999a497ea1187e1aec9d9df3b5bfb9f8f2aff))
+
 # [1.24.0](https://github.com/Heratiki/locallama-mcp/compare/v1.23.1...v1.24.0) (2026-06-02)
 
 
