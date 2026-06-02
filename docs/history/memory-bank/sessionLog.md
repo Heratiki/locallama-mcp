@@ -156,3 +156,20 @@ Verification:
 
 Follow-ups:
 - Full live OpenRouter validation was not run in this pass to avoid remote-provider side effects.
+
+## 2026-06-02 - Issue #112 Validation Scoring Primitives
+
+Author: Codex
+
+Summary:
+- Added `validate` as a first-class `benchmark_model` task category and MCP schema option.
+- Added binary validation fixtures that score first-line YES/NO verdicts and persist `summary.scores.validate`.
+- Added seeded validation-score behavior: when real validate scores are absent, validation scoring derives `scores.code * 0.8` and treats it as one confidence-discounted run.
+- Exposed shared config gates `RELIABLE_BENCHMARK_COUNT`, `MIN_VALIDATOR_SCORE`, and `VALIDATION_RETRY_BUDGET` with defaults documented in README and `.env.example`.
+
+Verification:
+- Focused Jest run passes: `npm test -- --runTestsByPath test/modules/benchmark/model-benchmarker.test.ts test/config/startup-benchmark-defaults.test.ts test/modules/decision-engine/modelSelector.task-category.test.ts`.
+- Full Jest run passes: `npm test` (61 suites / 464 tests). Jest still prints the existing forced-worker-exit warning after completion.
+
+Follow-ups:
+- Full external validator selection and validation retry loops remain future work from `docs/PRD-validator-benchmarking.md`.

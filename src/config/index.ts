@@ -69,6 +69,9 @@ export interface Config {
   costThreshold: number;
   qualityThreshold: number;
   codeScoreThreshold: number;
+  reliableBenchmarkCount: number;
+  minValidatorScore: number;
+  validationRetryBudget: number;
 
   // API Keys
   openRouterApiKey?: string;
@@ -124,6 +127,9 @@ export const HOT_RELOADABLE_CONFIG_FIELDS = [
   'costThreshold',
   'qualityThreshold',
   'codeScoreThreshold',
+  'reliableBenchmarkCount',
+  'minValidatorScore',
+  'validationRetryBudget',
   'openRouterFreeOnly',
   'openRouterRateLimitPerMinute',
   'providerTimeoutMs',
@@ -179,6 +185,9 @@ export interface ReloadConfigResult {
     costThreshold: number;
     qualityThreshold: number;
     codeScoreThreshold: number;
+    reliableBenchmarkCount: number;
+    minValidatorScore: number;
+    validationRetryBudget: number;
     openRouterFreeOnly: boolean;
     openRouterRateLimitPerMinute: number;
     providerTimeoutMs: number;
@@ -266,6 +275,9 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     costThreshold: parseFloat(env.COST_THRESHOLD || '0.02'),
     qualityThreshold: parseFloat(env.QUALITY_THRESHOLD || '0.7'),
     codeScoreThreshold: parseNumber(env.CODE_SCORE_THRESHOLD, 0.3),
+    reliableBenchmarkCount: Math.round(parseNumber(env.RELIABLE_BENCHMARK_COUNT, 3, 1)),
+    minValidatorScore: parseNumber(env.MIN_VALIDATOR_SCORE, 0.6, 0, 1),
+    validationRetryBudget: Math.round(parseNumber(env.VALIDATION_RETRY_BUDGET, 1, 0)),
 
     // API Keys
     openRouterApiKey: env.OPENROUTER_API_KEY,
@@ -327,6 +339,9 @@ function getActiveHotReloadSnapshot(cfg: Config): ReloadConfigResult['activeConf
     costThreshold: cfg.costThreshold,
     qualityThreshold: cfg.qualityThreshold,
     codeScoreThreshold: cfg.codeScoreThreshold,
+    reliableBenchmarkCount: cfg.reliableBenchmarkCount,
+    minValidatorScore: cfg.minValidatorScore,
+    validationRetryBudget: cfg.validationRetryBudget,
     openRouterFreeOnly: cfg.openRouterFreeOnly,
     openRouterRateLimitPerMinute: cfg.openRouterRateLimitPerMinute,
     providerTimeoutMs: cfg.providerTimeoutMs,
@@ -355,6 +370,9 @@ function applyHotReloadableFields(target: Config, source: Config): void {
   target.costThreshold = source.costThreshold;
   target.qualityThreshold = source.qualityThreshold;
   target.codeScoreThreshold = source.codeScoreThreshold;
+  target.reliableBenchmarkCount = source.reliableBenchmarkCount;
+  target.minValidatorScore = source.minValidatorScore;
+  target.validationRetryBudget = source.validationRetryBudget;
   target.openRouterFreeOnly = source.openRouterFreeOnly;
   target.openRouterRateLimitPerMinute = source.openRouterRateLimitPerMinute;
   target.providerTimeoutMs = source.providerTimeoutMs;
@@ -411,6 +429,15 @@ function validateConfigValues(cfg: Config): void {
   }
   if (cfg.codeScoreThreshold < 0 || cfg.codeScoreThreshold > 1) {
     errors.push(`Invalid codeScoreThreshold: ${cfg.codeScoreThreshold}`);
+  }
+  if (cfg.reliableBenchmarkCount <= 0) {
+    errors.push(`Invalid reliableBenchmarkCount: ${cfg.reliableBenchmarkCount}`);
+  }
+  if (cfg.minValidatorScore < 0 || cfg.minValidatorScore > 1) {
+    errors.push(`Invalid minValidatorScore: ${cfg.minValidatorScore}`);
+  }
+  if (cfg.validationRetryBudget < 0) {
+    errors.push(`Invalid validationRetryBudget: ${cfg.validationRetryBudget}`);
   }
   // Validate model config
   const { temperature, topP, maxTokens } = cfg.defaultModelConfig;

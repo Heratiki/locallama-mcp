@@ -227,6 +227,20 @@ describe('benchmarkModel', () => {
     expect(typeof result.summary.scores.code).toBe('number');
   });
 
+  it('populates summary.scores.validate from validate category quality', async () => {
+    const result = await benchmarkModel({ modelId: 'qwen2.5-coder-7b', taskCategories: ['validate'] });
+
+    expect(result.categoryResults.validate?.tasksRan).toBeGreaterThan(0);
+    expect(typeof result.summary.scores.validate).toBe('number');
+    expect(updateBenchmarkSummaryMock).toHaveBeenCalledWith(
+      'qwen2.5-coder-7b',
+      expect.objectContaining({
+        taskCategories: ['validate'],
+        scores: expect.objectContaining({ validate: expect.any(Number) }),
+      }),
+    );
+  });
+
   it('falls back to scanning providers when model is not in ModelRegistry', async () => {
     modelRegistryMock.getModel.mockReturnValue(undefined);
     supportsModelMock.mockReturnValue(true); // provider claims to support it

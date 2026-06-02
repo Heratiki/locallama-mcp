@@ -417,7 +417,7 @@ The detector lives in `src/modules/core/capability/detector.ts`. It is called by
 
 ### Design
 
-- New `benchmark_model` MCP tool (added to [tool-definition/index.ts](src/modules/api-integration/tool-definition/index.ts) + dispatcher in [src/index.ts](src/index.ts)) takes `{ modelId, taskCategories?: ['code','chat','tool-use','long-context'] }` and runs the matching benchmark suites against that model **via the provider abstraction**.
+- New `benchmark_model` MCP tool (added to [tool-definition/index.ts](src/modules/api-integration/tool-definition/index.ts) + dispatcher in [src/index.ts](src/index.ts)) takes `{ modelId, taskCategories?: ['code','chat','tool-use','long-context','validate'] }` and runs the matching benchmark suites against that model **via the provider abstraction**.
 - Results flow into `ModelRegistry.updateBenchmarkSummary` and persist to the existing `data/benchmarks.db` (via [benchmark/storage/benchmarkDb.ts](src/modules/benchmark/storage/benchmarkDb.ts)).
 - Existing `benchmark_task`, `benchmark_tasks`, and `benchmark_free_models` tools continue to work but use the provider abstraction internally — drop the hardcoded `provider === 'lm-studio'` / `'ollama'` branches in [benchmark/core/runner.ts:81-93](src/modules/benchmark/core/runner.ts#L81-L93).
 - Startup benchmark (`STARTUP_BENCHMARK_TARGETS`) iterates providers by `costClass` instead of name, so adding a new "local" provider Just Works.
@@ -1367,5 +1367,4 @@ The webapp is explicitly single-developer-at-a-time, localhost-only. Scalability
 - How are errors distinguished from expected "routing decided local" responses? The UI must differentiate tool-level errors (MCP error codes) from application-level decisions (model selected, cost estimated).
 - Benchmark results are opaque numbers without context. A "compare to baseline" feature (pin a result, then re-run to see delta) would make benchmarks actionable.
 - The webapp should surface the OPERATIONAL_TEST_PLAN.md's suite structure (smoke / routing / LLM) as pre-built test sequences, not just raw tool invocations. Users unfamiliar with the server's tool surface should be able to run a smoke check with one click.
-
 

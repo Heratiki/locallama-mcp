@@ -237,11 +237,17 @@ export class Router implements IRouter {
 
     const successRate = benchmarkSummary.successRate ?? 0;
     const categoryScores = benchmarkSummary.scores as Record<string, number | undefined> | undefined;
-    const qualitySignal = (taskCategory ? categoryScores?.[taskCategory] : undefined) ?? benchmarkSummary.qualityScore ?? 0;
+    const taskCategoryScore = taskCategory === 'validate' && categoryScores?.validate === undefined
+      ? (categoryScores?.code === undefined ? undefined : categoryScores.code * 0.8)
+      : (taskCategory ? categoryScores?.[taskCategory] : undefined);
+    const qualitySignal = taskCategoryScore ?? benchmarkSummary.qualityScore ?? 0;
     const avgResponseTime = benchmarkSummary.avgResponseTime ?? 0;
     const responseTimeFactor = Math.max(0, 1 - (avgResponseTime / 15000));
     const empiricalScore = successRate * 0.3 + qualitySignal * 0.5 + responseTimeFactor * 0.2;
-    const confidence = Math.min(1, (benchmarkSummary.benchmarkCount ?? 0) / 3);
+    const benchmarkCount = taskCategory === 'validate' && categoryScores?.validate === undefined && categoryScores?.code !== undefined
+      ? 1
+      : benchmarkSummary.benchmarkCount ?? 0;
+    const confidence = Math.min(1, benchmarkCount / config.reliableBenchmarkCount);
 
     return empiricalScore * confidence;
   }
@@ -311,13 +317,16 @@ export class Router implements IRouter {
           if (taskCategory === 'code') taskCategoryScore = scores?.code;
           else if (taskCategory === 'reasoning') taskCategoryScore = scores?.reasoning;
           else if (taskCategory === 'speed') taskCategoryScore = scores?.speed;
+          else if (taskCategory === 'validate') taskCategoryScore = scores?.validate ?? (scores?.code === undefined ? undefined : scores.code * 0.8);
           
           const qualitySignal = taskCategoryScore ?? (benchmarkSummary.qualityScore ?? 0);
           const avgResponseTime = benchmarkSummary.avgResponseTime ?? 0;
           const responseTimeFactor = Math.max(0, 1 - (avgResponseTime / 15000));
           const empiricalScore = successRate * 0.3 + qualitySignal * 0.4 + responseTimeFactor * 0.3;
-          const benchmarkCount = benchmarkSummary.benchmarkCount ?? 1;
-          const confidence = Math.min(1, benchmarkCount / 3);
+          const benchmarkCount = taskCategory === 'validate' && scores?.validate === undefined && scores?.code !== undefined
+            ? 1
+            : benchmarkSummary.benchmarkCount ?? 1;
+          const confidence = Math.min(1, benchmarkCount / config.reliableBenchmarkCount);
           
           let heuristicScore = 0.30;
           const normalizedId = model.id.toLowerCase()

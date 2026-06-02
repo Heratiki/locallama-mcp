@@ -72,6 +72,9 @@ BENCHMARK_MAX_PARALLEL_TASKS=2
 BENCHMARK_TASK_TIMEOUT=60000
 BENCHMARK_SAVE_RESULTS=true
 BENCHMARK_RESULTS_PATH=./benchmark-results
+RELIABLE_BENCHMARK_COUNT=3
+MIN_VALIDATOR_SCORE=0.6
+VALIDATION_RETRY_BUDGET=1
 
 # Lock file
 LOCK_FILE_CHECK_ACTIVE_PROCESS=true
@@ -99,6 +102,9 @@ LOG_LEVEL=debug
 | `TOKEN_THRESHOLD` | `1500` | Token count above which local offload is considered |
 | `COST_THRESHOLD` | `0.02` | USD cost above which local offload is preferred |
 | `QUALITY_THRESHOLD` | `0.7` | Quality score below which paid API is always used |
+| `RELIABLE_BENCHMARK_COUNT` | `3` | Benchmark runs required before empirical scores are treated as fully reliable |
+| `MIN_VALIDATOR_SCORE` | `0.6` | Minimum validation score required before a model is eligible for external validation |
+| `VALIDATION_RETRY_BUDGET` | `1` | Validation retry attempts allowed after an initial failed validation |
 | `PROVIDER_MAX_CONCURRENT_LOCAL` | `1` | Shared local execution slot count |
 | `PROVIDER_MAX_CONCURRENT_REMOTE` | `5` | Per-remote-provider slot count |
 | `OPENROUTER_API_KEY` | — | Enables OpenRouter provider and related tools |

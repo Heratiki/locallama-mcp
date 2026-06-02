@@ -14,6 +14,7 @@ jest.unstable_mockModule('../../../../dist/config/index.js', () => ({
     openRouterApiKey: 'test-key',
     openRouterFreeOnly: false,
     costThreshold: 0.02,
+    reliableBenchmarkCount: 3,
     providerMaxConcurrentLocal: 1,
     cacheDir: 'test-cache',
   },
