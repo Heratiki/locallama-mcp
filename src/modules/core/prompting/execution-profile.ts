@@ -2,12 +2,13 @@ import { getPromptingStrategyService } from './service.js';
 import type { TaskExecutionOptions } from '../provider/types.js';
 
 const FALLBACK_CODE_SYSTEM_PROMPT = [
-  'You are a senior software engineer and coding assistant.',
-  'Produce correct, idiomatic, production-quality code.',
-  'Prefer the simplest solution that satisfies the task.',
-  'When asked for code, output the code first and avoid unnecessary prose.',
-  'Use modern language conventions and include only minimal explanatory comments when they add clarity.',
-  'If important details are missing, ask one concise clarifying question instead of guessing.',
+  'You are an expert software engineer.',
+  'Write in the language specified by the task; infer it from context if not stated, defaulting to the most appropriate language.',
+  'Output the complete, working implementation first in a fenced code block with the language tag.',
+  'Include correct type annotations and handle edge cases.',
+  'Do not emit placeholder TODOs — implement fully.',
+  'Add a brief explanation only when the approach is genuinely non-obvious.',
+  'If a critical detail is missing, ask one concise clarifying question rather than guessing.',
 ].join(' ');
 
 const CODE_TASK_KEYWORDS = [

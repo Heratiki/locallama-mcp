@@ -27,65 +27,57 @@ type RawSubtask = {
 };
 
 // Prompt for decomposing a task into subtasks
-const DECOMPOSE_TASK_PROMPT = `
-You are an expert software architect. Your task is to decompose a given coding task into smaller, manageable subtasks.
-For each subtask, provide:
-1. A unique UUID (use version 4 UUID format).
-2. A clear, concise description of the subtask.
-3. An estimated complexity score (0.0 to 1.0, where 1.0 is most complex).
-4. The type of code artifact this subtask produces (e.g., function, class, component, module, test, documentation, configuration, other).
-5. A list of dependencies, specified ONLY by the UUIDs of other subtasks it depends on. If a subtask has no dependencies, provide an empty list [].
+const DECOMPOSE_TASK_PROMPT = `You are an expert software architect. Decompose the coding task below into the minimal set of concrete, independently-implementable subtasks.
 
-**IMPORTANT**: When listing dependencies, you MUST use the exact UUID generated for the prerequisite subtask. Do NOT use the subtask description or any other name.
-
-Task to decompose: {task}
-
-Output the result as a JSON array of subtask objects. Example format:
-[
-  {
-    "id": "uuid-generated-for-subtask-1",
-    "description": "Subtask 1 description",
-    "complexity": 0.5,
-    "codeType": "function",
-    "dependencies": [] 
-  },
-  {
-    "id": "uuid-generated-for-subtask-2",
-    "description": "Subtask 2 description",
-    "complexity": 0.7,
-    "codeType": "class",
-    "dependencies": ["uuid-generated-for-subtask-1"] 
-  }
-]
-`;
-
-// Update COMPLEXITY_ANALYSIS_PROMPT to include more detailed integration analysis
-const COMPLEXITY_ANALYSIS_PROMPT = `You are an expert in software development complexity analysis. 
-Analyze the complexity of the following coding task:
+Rules:
+- Assign each subtask a unique UUID v4 id.
+- Dependencies must reference other subtask ids by UUID only — never by description.
+- complexity is a float 0.0–1.0 (0 = trivial, 1 = highly complex).
+- codeType must be one of: function | class | module | interface | type | method | test | configuration | other.
+- Produce between 2 and 8 subtasks. Do not over-decompose simple tasks.
 
 Task: {task}
 
-For this analysis:
-1. Assess algorithmic complexity (simple loops vs complex algorithms)
-2. Evaluate integration complexity considering:
-   - Number of systems/components that need to interact
-   - Data format transformations required
-   - Communication protocols involved
-   - State management complexity
-   - Error handling across boundaries
-3. Consider domain knowledge requirements
-4. Evaluate technical requirements
+CRITICAL: Output ONLY a raw JSON array — no prose, no markdown fences, no explanation. The response must start with [ and end with ].
 
-For integration complexity specifically, consider:
-- External system dependencies
-- API integration points
-- Data transformation requirements
-- State synchronization needs
-- Error handling complexity
-- Transaction management
-- Security requirements
+Schema for each element:
+{
+  "id": "<uuid-v4>",
+  "description": "<concise action phrase>",
+  "complexity": <0.0–1.0>,
+  "codeType": "<one of the allowed values>",
+  "dependencies": ["<uuid-of-prerequisite>"]
+}
 
-Provide a detailed analysis with complexity scores (0-1 scale) for each factor, an overall complexity score, and a brief explanation.`;
+Example (2 subtasks):
+[{"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","description":"Define the Result<T,E> type interface","complexity":0.2,"codeType":"interface","dependencies":[]},{"id":"b2c3d4e5-f6a7-8901-bcde-f12345678901","description":"Implement parseJSON returning Result<T,E>","complexity":0.5,"codeType":"function","dependencies":["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]}]`;
+
+// Update COMPLEXITY_ANALYSIS_PROMPT to include more detailed integration analysis
+const COMPLEXITY_ANALYSIS_PROMPT = `You are a software complexity analyst. Evaluate the coding task below and return a complexity assessment.
+
+Task: {task}
+
+Score each factor on a 0.0–1.0 scale (0 = negligible, 1 = maximum complexity):
+- algorithmic: algorithm difficulty, data structure choice, Big-O concerns
+- integration: external systems, APIs, data transformation, protocol handling
+- domainKnowledge: specialized domain expertise required (business rules, standards, regulations)
+- technical: infrastructure, performance, security, scalability, testing requirements
+
+Derive overallComplexity as a weighted average (algorithmic 30%, integration 25%, domainKnowledge 20%, technical 25%).
+
+CRITICAL: Output ONLY a raw JSON object — no prose, no markdown fences. The response must start with { and end with }.
+
+Schema:
+{
+  "overallComplexity": <0.0–1.0>,
+  "factors": {
+    "algorithmic": <0.0–1.0>,
+    "integration": <0.0–1.0>,
+    "domainKnowledge": <0.0–1.0>,
+    "technical": <0.0–1.0>
+  },
+  "explanation": "<one sentence summarising the dominant complexity driver>"
+}`;
 
 /**
  * Service for analyzing and decomposing code tasks

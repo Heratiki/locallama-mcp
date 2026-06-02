@@ -369,53 +369,41 @@ For a binary search implementation:
     }
     
     // Base prompt for code evaluation
-    const basePrompt = `You are a code quality evaluator. Analyze the following code that was written in response to the task provided.
-TASK DESCRIPTION:
+    const basePrompt = `You are a rigorous code reviewer. Evaluate the code below against the task specification.
+
+TASK:
 ${task}
-CODE TO EVALUATE:
+
+CODE:
 ${response}
 ${taskSpecificGuidance}
-Evaluate the code on the following criteria:
-1. Correctness: Does the code correctly solve the given task?
-2. Efficiency: Is the algorithm and implementation efficient?
-3. Readability: Is the code well-structured and easy to understand?
-4. Best practices: Does the code follow coding best practices?
-5. Error handling: Does the code handle edge cases and errors appropriately?`;
+Assess on these dimensions:
+1. Correctness — does it solve the task exactly? Are there logic errors or missing cases?
+2. Efficiency — is the algorithm appropriate? Any obvious O(n²) where O(n) suffices?
+3. Readability — clear naming, structure, and minimal necessary comments?
+4. Best practices — idiomatic for the language, no anti-patterns?
+5. Error handling — edge cases (null/empty/overflow) handled where relevant?`;
     // For basic evaluation, just request a score and brief explanation
     if (!detailedAnalysis) {
       return `${basePrompt}
-Provide your evaluation in the following JSON format:
-\`\`\`json
-{
-  "qualityScore": 0.0,  // A value between 0.0 and 1.0, with 1.0 being perfect
-  "explanation": "",    // Brief explanation of the score
-  "isValid": true       // Whether the code correctly solves the task
-}
-\`\`\`
-Keep your explanation concise. Focus on whether the code works as expected and any major issues.`;
+
+CRITICAL: Output ONLY a raw JSON object — no prose, no markdown fences. Start with { end with }.
+{"qualityScore":<0.0-1.0>,"explanation":"<one sentence>","isValid":<true|false>}`;
     }
-    
+
     // For detailed analysis, request more comprehensive feedback
     return `${basePrompt}
-Provide a detailed evaluation in the following JSON format:
-\`\`\`json
+
+CRITICAL: Output ONLY a raw JSON object — no prose, no markdown fences. Start with { end with }.
+Schema:
 {
-  "qualityScore": 0.0,  // A value between 0.0 and 1.0, with 1.0 being perfect
-  "explanation": "",    // Detailed explanation of your evaluation
-  "isValid": true,      // Whether the code correctly solves the task
-  "implementationIssues": [
-    // List specific issues or bugs in the implementation, if any
-  ],
-  "suggestions": [
-    // List specific suggestions for improvement
-  ],
-  "alternativeSolutions": [
-    // Optional: If there are better approaches, briefly describe them
-  ]
-}
-\`\`\`
-Be thorough in your analysis. If the solution is correct but could be improved, explain how.
-If there are bugs or edge cases not handled, identify them specifically.`;
+  "qualityScore": <0.0–1.0>,
+  "explanation": "<concise overall assessment>",
+  "isValid": <true|false>,
+  "implementationIssues": ["<specific bug or missing case>"],
+  "suggestions": ["<concrete improvement>"],
+  "alternativeSolutions": ["<better approach if one exists>"]
+}`;
   },
   
   /**
