@@ -139,3 +139,20 @@ Verification:
 
 Follow-ups:
 - Full live OpenRouter benchmarking was not run in this pass to avoid paid/free-provider side effects; use an explicit operational run when provider credentials and rate budget are available.
+
+## 2026-06-02 - Issue #111 Free-tier Trio Ranking
+
+Author: Codex
+
+Summary:
+- Updated free-tier ranked trio scoring to read benchmark summaries from `ModelRegistry` instead of the legacy `modelsDb` path.
+- Added OpenRouter upstream-provider diversity scoring so retries prefer a different free-model upstream when scores are close.
+- Added a recent rate-limit penalty using OpenRouter free-model health state so recently rate-limited candidates drop in the trio.
+- Normalized `preemptive_route_task` provider metadata so free OpenRouter models report `providerId: openrouter` and `costClass: free`.
+
+Verification:
+- Focused Jest run passes: `npm test -- --runInBand test/modules/api-integration/routing/index.test.ts`.
+- Full Jest run passes unsandboxed: `npm test` (61 suites / 460 tests).
+
+Follow-ups:
+- Full live OpenRouter validation was not run in this pass to avoid remote-provider side effects.

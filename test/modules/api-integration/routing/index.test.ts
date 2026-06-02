@@ -19,8 +19,7 @@ jest.unstable_mockModule('../../../../dist/config/index.js', () => ({
   },
 }));
 
-const mockGetModelRegistry = jest.fn().mockReturnValue({
-  getModel: jest.fn().mockImplementation((modelId) => {
+const mockRegistryGetModel = jest.fn().mockImplementation((modelId) => {
     if (modelId === 'qwen2.5-coder:7b') {
       return {
         id: 'qwen2.5-coder:7b',
@@ -46,7 +45,10 @@ const mockGetModelRegistry = jest.fn().mockReturnValue({
       };
     }
     return undefined;
-  }),
+  });
+
+const mockGetModelRegistry = jest.fn().mockReturnValue({
+  getModel: mockRegistryGetModel,
   listAll: jest.fn().mockReturnValue([
     { id: 'qwen2.5-coder:7b', contextWindow: 8000 },
     { id: 'llama3:8b', contextWindow: 8000 },
@@ -56,6 +58,20 @@ const mockGetModelRegistry = jest.fn().mockReturnValue({
 
 jest.unstable_mockModule('../../../../dist/modules/core/model/index.js', () => ({
   getModelRegistry: mockGetModelRegistry,
+}));
+
+const mockOpenRouterModelTracking = {
+  models: {},
+  lastUpdated: new Date().toISOString(),
+  freeModels: [],
+  freeModelHealth: {},
+};
+
+jest.unstable_mockModule('../../../../dist/modules/openrouter/index.js', () => ({
+  openRouterModule: {
+    modelTracking: mockOpenRouterModelTracking,
+    getProviderFromModelId: jest.fn((modelId: string) => modelId.split('/')[0] || 'unknown'),
+  },
 }));
 
 const mockRouteTaskDecision = jest.fn().mockResolvedValue({
@@ -202,6 +218,36 @@ describe('api-integration routing', () => {
     mockGetQueuePositionForJob.mockResolvedValue(1);
     mockCancelJobsForTask.mockResolvedValue(0);
     mockGetAvailableModels.mockResolvedValue([]);
+    mockRegistryGetModel.mockImplementation((modelId) => {
+      if (modelId === 'qwen2.5-coder:7b') {
+        return {
+          id: 'qwen2.5-coder:7b',
+          providerId: 'ollama',
+          displayName: 'Qwen 2.5 Coder 7B',
+          benchmarkSummary: { benchmarkCount: 5, successRate: 0.8, qualityScore: 0.85, avgResponseTime: 2000, scores: { code: 0.9 } },
+        };
+      }
+      if (modelId === 'llama3:8b') {
+        return {
+          id: 'llama3:8b',
+          providerId: 'ollama',
+          displayName: 'Llama 3 8B',
+          benchmarkSummary: { benchmarkCount: 2, successRate: 0.6, qualityScore: 0.7, avgResponseTime: 3000, scores: { code: 0.75 } },
+        };
+      }
+      if (modelId === 'phi3:3.8b') {
+        return {
+          id: 'phi3:3.8b',
+          providerId: 'ollama',
+          displayName: 'Phi 3 3.8B',
+          benchmarkSummary: { benchmarkCount: 0, successRate: 0, qualityScore: 0, avgResponseTime: 0 },
+        };
+      }
+      return undefined;
+    });
+    mockOpenRouterModelTracking.models = {};
+    mockOpenRouterModelTracking.freeModels = [];
+    mockOpenRouterModelTracking.freeModelHealth = {};
     mockRegistry.list.mockReturnValue([mockOpenRouterProvider]);
     mockRegistry.has.mockImplementation((providerId: string) => providerId === 'openrouter' || providerId === 'ollama' || providerId === 'lm-studio');
     mockRegistry.isAvailable.mockImplementation((providerId: string) => providerId !== 'ollama' && providerId !== 'lm-studio');
@@ -728,7 +774,7 @@ describe('api-integration routing', () => {
       priority: 'cost',
     });
 
-    expect(result.providerId).toBe('paid');
+    expect(result.providerId).toBe('openrouter');
     expect(result.costClass).toBe('paid');
     expect(result.model).toBe('openai/gpt-4o-mini');
   });
@@ -819,6 +865,72 @@ describe('api-integration routing', () => {
       expect(result.ranked_trio?.good.model_id).toBe('qwen2.5-coder:7b');
       expect(result.ranked_trio?.better.model_id).toBe('llama3:8b');
       expect(result.ranked_trio?.best.model_id).toBe('phi3:3.8b');
+    });
+
+    it('ranks free-tier trio candidates from ModelRegistry with diversity and rate-limit factors', async () => {
+      const { decisionEngine } = await import('../../../../dist/modules/decision-engine/index.js');
+      (decisionEngine.preemptiveRouting as jest.Mock).mockResolvedValueOnce({
+        provider: 'paid',
+        model: 'alpha/good-free:free',
+        explanation: 'Free-tier route decision.',
+      });
+
+      mockGetAvailableModels.mockResolvedValue([
+        { id: 'alpha/good-free:free', name: 'Alpha Good', provider: 'openrouter', contextWindow: 8000, costPerToken: { prompt: 0, completion: 0 } },
+        { id: 'alpha/high-score-free:free', name: 'Alpha High Score', provider: 'openrouter', contextWindow: 8000, costPerToken: { prompt: 0, completion: 0 } },
+        { id: 'beta/diverse-free:free', name: 'Beta Diverse', provider: 'openrouter', contextWindow: 8000, costPerToken: { prompt: 0, completion: 0 } },
+        { id: 'gamma/rate-limited-free:free', name: 'Gamma Rate Limited', provider: 'openrouter', contextWindow: 8000, costPerToken: { prompt: 0, completion: 0 } },
+      ]);
+      mockGetFreeModels.mockResolvedValue([
+        { id: 'alpha/good-free:free' },
+        { id: 'alpha/high-score-free:free' },
+        { id: 'beta/diverse-free:free' },
+        { id: 'gamma/rate-limited-free:free' },
+      ]);
+      mockRegistryGetModel.mockImplementation((modelId) => {
+        const scores: Record<string, number> = {
+          'alpha/good-free:free': 0.78,
+          'alpha/high-score-free:free': 0.95,
+          'beta/diverse-free:free': 0.92,
+          'gamma/rate-limited-free:free': 0.99,
+        };
+        return {
+          id: modelId,
+          providerId: 'openrouter',
+          benchmarkSummary: {
+            benchmarkCount: 5,
+            successRate: 1,
+            qualityScore: scores[modelId] ?? 0,
+            avgResponseTime: 1000,
+            scores: { code: scores[modelId] ?? 0 },
+          },
+        };
+      });
+      mockOpenRouterModelTracking.models = {
+        'alpha/good-free:free': { provider: 'alpha' },
+        'alpha/high-score-free:free': { provider: 'alpha' },
+        'beta/diverse-free:free': { provider: 'beta' },
+        'gamma/rate-limited-free:free': { provider: 'gamma' },
+      };
+      mockOpenRouterModelTracking.freeModelHealth = {
+        'gamma/rate-limited-free:free': {
+          consecutiveFailures: 1,
+          lastErrorType: 'rate_limit',
+          lastFailureAt: new Date().toISOString(),
+        },
+      };
+
+      const result = await preemptiveRouteTask({
+        task: 'Write a TypeScript parser.',
+        contextLength: 100,
+        complexity: 0.5,
+        priority: 'quality',
+      });
+
+      expect(result.costClass).toBe('free');
+      expect(result.ranked_trio?.good.model_id).toBe('alpha/good-free:free');
+      expect(result.ranked_trio?.better.model_id).toBe('beta/diverse-free:free');
+      expect(result.ranked_trio?.best.model_id).toBe('alpha/high-score-free:free');
     });
   });
 });
