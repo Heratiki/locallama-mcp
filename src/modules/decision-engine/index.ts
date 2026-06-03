@@ -317,12 +317,12 @@ export const decisionEngine = {
         explanation += 'Priority factor: Speed is prioritized, strongly favoring paid API. ';
         break;
       case 'cost':
-        localScore += 0.8 * factors.priority.weight;
+        localScore += 1.0 * factors.priority.weight;
         explanation += 'Priority factor: Cost is prioritized, strongly favoring local model. ';
-        
+
         if (hasFreeModels) {
-          freeScore += 0.9 * factors.priority.weight;
-          explanation += 'Free models also have zero cost and may be faster than local models. ';
+          freeScore += 0.8 * factors.priority.weight;
+          explanation += 'Free models also have zero cost and are used when local is unavailable. ';
         }
         break;
       case 'quality':
@@ -536,13 +536,12 @@ export const decisionEngine = {
         explanation += 'Priority factor: Speed is prioritized. ';
         break;
       case 'cost':
+        localScore += 0.6 * factors.priority.weight;
         if (hasFreeModels) {
-          freeScore += 0.5 * factors.priority.weight;
-        } else {
-          localScore += 0.4 * factors.priority.weight;
+          freeScore += 0.4 * factors.priority.weight;
         }
         factors.priority.wasFactor = true;
-        explanation += 'Priority factor: Cost is prioritized. ';
+        explanation += 'Priority factor: Cost is prioritized, preferring local then free. ';
         break;
       case 'quality':
         paidScore += 0.3 * factors.priority.weight;
