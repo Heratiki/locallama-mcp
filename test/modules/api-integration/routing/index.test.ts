@@ -943,5 +943,154 @@ describe('api-integration routing', () => {
       expect(result.ranked_trio?.better.model_id).toBe('beta/diverse-free:free');
       expect(result.ranked_trio?.best.model_id).toBe('alpha/high-score-free:free');
     });
+
+    it('ranks free-tier candidates penalizing rate-limited models below lower-scored healthy models', async () => {
+      const { decisionEngine } = await import('../../../../dist/modules/decision-engine/index.js');
+      (decisionEngine.preemptiveRouting as jest.Mock).mockResolvedValueOnce({
+        provider: 'paid',
+        model: 'alpha/good-free:free',
+        explanation: 'Free-tier route decision.',
+      });
+
+      mockGetAvailableModels.mockResolvedValue([
+        { id: 'alpha/good-free:free', name: 'Alpha Good', provider: 'openrouter', contextWindow: 8000, costPerToken: { prompt: 0, completion: 0 } },
+        { id: 'alpha/high-score-free:free', name: 'Alpha High Score', provider: 'openrouter', contextWindow: 8000, costPerToken: { prompt: 0, completion: 0 } },
+        { id: 'beta/diverse-free:free', name: 'Beta Diverse', provider: 'openrouter', contextWindow: 8000, costPerToken: { prompt: 0, completion: 0 } },
+      ]);
+      mockGetFreeModels.mockResolvedValue([
+        { id: 'alpha/good-free:free' },
+        { id: 'alpha/high-score-free:free' },
+        { id: 'beta/diverse-free:free' },
+      ]);
+      mockRegistryGetModel.mockImplementation((modelId) => {
+        // High score model has 0.99 but will be rate limited
+        const scores: Record<string, number> = {
+          'alpha/good-free:free': 0.70,
+          'alpha/high-score-free:free': 0.99,
+          'beta/diverse-free:free': 0.75,
+        };
+        return {
+          id: modelId,
+          providerId: 'openrouter',
+          benchmarkSummary: {
+            benchmarkCount: 5,
+            successRate: 1,
+            qualityScore: scores[modelId] ?? 0,
+            avgResponseTime: 1000,
+            scores: { code: scores[modelId] ?? 0 },
+          },
+        };
+      });
+      mockOpenRouterModelTracking.models = {
+        'alpha/good-free:free': { provider: 'alpha' },
+        'alpha/high-score-free:free': { provider: 'alpha' },
+        'beta/diverse-free:free': { provider: 'beta' },
+      };
+      
+      // Apply rate limit penalty to the high-score model
+      mockOpenRouterModelTracking.freeModelHealth = {
+        'alpha/high-score-free:free': {
+          consecutiveFailures: 3,
+          lastErrorType: 'rate_limit',
+          lastFailureAt: new Date().toISOString(),
+        },
+      };
+
+      const result = await preemptiveRouteTask({
+        task: 'Write a parser.',
+        contextLength: 100,
+        complexity: 0.5,
+        priority: 'quality',
+      });
+
+      // alpha/high-score-free:free should be penalized by ~0.45, pushing it to the bottom
+      expect(result.ranked_trio?.good.model_id).toBe('alpha/good-free:free');
+      expect(result.ranked_trio?.better.model_id).toBe('beta/diverse-free:free');
+      expect(result.ranked_trio?.best.model_id).toBe('alpha/high-score-free:free');
+    });
+
+    it('ranks candidates and handles tie-breaking behavior when multiple candidates have the same score', async () => {
+      const { decisionEngine } = await import('../../../../dist/modules/decision-engine/index.js');
+      (decisionEngine.preemptiveRouting as jest.Mock).mockResolvedValueOnce({
+        provider: 'local',
+        model: 'model-a',
+        explanation: 'Local decision.',
+      });
+
+      mockGetAvailableModels.mockResolvedValue([
+        { id: 'model-a', name: 'Model A', provider: 'ollama', contextWindow: 8000 },
+        { id: 'model-b', name: 'Model B', provider: 'ollama', contextWindow: 8000 },
+        { id: 'model-c', name: 'Model C', provider: 'ollama', contextWindow: 8000 },
+      ]);
+      mockRegistry.list.mockReturnValue([
+        { id: 'ollama', supportsModel: jest.fn().mockResolvedValue(true), isLocal: true, costClass: 'local' }
+      ]);
+      mockRegistryGetModel.mockImplementation((modelId) => {
+        return {
+          id: modelId,
+          providerId: 'ollama',
+          benchmarkSummary: {
+            benchmarkCount: 5,
+            successRate: 0.8,
+            qualityScore: 0.8,
+            avgResponseTime: 1000,
+            scores: { code: 0.8 },
+          },
+        };
+      });
+
+      const result = await preemptiveRouteTask({
+        task: 'Write python.',
+        contextLength: 100,
+        complexity: 0.5,
+      });
+
+      expect(result.ranked_trio).toBeDefined();
+      expect(result.ranked_trio?.good.model_id).toBe('model-a');
+      expect(result.ranked_trio?.better.model_id).toBe('model-b');
+      expect(result.ranked_trio?.best.model_id).toBe('model-c');
+    });
+
+    it('returns recommendations for all unbenchmarked models in the trio', async () => {
+      mockRouteTaskDecision.mockResolvedValueOnce({
+        provider: 'local',
+        model: 'model-x',
+        explanation: 'Local route decision.',
+      });
+      mockGetAvailableModels.mockResolvedValue([
+        { id: 'model-x', name: 'Model X', provider: 'ollama', contextWindow: 8000 },
+        { id: 'model-y', name: 'Model Y', provider: 'ollama', contextWindow: 8000 },
+        { id: 'model-z', name: 'Model Z', provider: 'ollama', contextWindow: 8000 },
+      ]);
+      mockRegistry.list.mockReturnValue([
+        { id: 'ollama', supportsModel: jest.fn().mockResolvedValue(true), isLocal: true, costClass: 'local' }
+      ]);
+      // All have 0 benchmark runs
+      mockRegistryGetModel.mockImplementation((modelId) => {
+        return {
+          id: modelId,
+          providerId: 'ollama',
+          benchmarkSummary: {
+            benchmarkCount: 0,
+            successRate: 0,
+            qualityScore: 0,
+            avgResponseTime: 0,
+          },
+        };
+      });
+
+      const result = await routeTask({
+        task: 'Write standard code.',
+        contextLength: 100,
+        complexity: 0.5,
+      });
+
+      expect(result.benchmarking_recommended).toBeDefined();
+      expect(result.benchmarking_recommended?.length).toBe(3);
+      const recommendedModels = result.benchmarking_recommended?.map(r => r.model_id);
+      expect(recommendedModels).toContain('model-x');
+      expect(recommendedModels).toContain('model-y');
+      expect(recommendedModels).toContain('model-z');
+    });
   });
 });
