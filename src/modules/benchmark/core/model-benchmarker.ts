@@ -6,6 +6,9 @@
  * benchmarkDb so they survive restarts and flow into the capability-scoring
  * pipeline introduced in Section 5.
  */
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getProviderRegistry } from '../../core/provider/index.js';
 import type { LLMProvider } from '../../core/provider/types.js';
 import { getModelRegistry } from '../../core/model/index.js';
@@ -111,6 +114,68 @@ const CATEGORY_TASKS: Record<TaskCategory, CategoryTask[]> = {
     },
   ],
 };
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const FIXTURES_JSON_PATH = path.resolve(__dirname, '../../../../config/validate-fixtures.json');
+
+export interface ValidationFixture {
+  task: string;
+  known_good_output: string;
+  known_bad_output: string;
+  language: string;
+}
+
+export async function loadValidateTasks(languageFilter?: string): Promise<CategoryTask[]> {
+  try {
+    const data = await fs.readFile(FIXTURES_JSON_PATH, 'utf-8');
+    let fixtures = JSON.parse(data) as ValidationFixture[];
+    
+    if (languageFilter) {
+      fixtures = fixtures.filter(f => f.language.toLowerCase() === languageFilter.toLowerCase());
+    }
+
+    const tasks: CategoryTask[] = [];
+    for (const f of fixtures) {
+      // 1. Task expecting YES (good output)
+      tasks.push({
+        task: [
+          'You are a strict code validator. Determine whether the Answer correctly solves the Task.',
+          'Output ONLY "YES" or "NO" on the first line — no other text before it.',
+          'YES = Answer fully satisfies the Task. NO = Answer is wrong, incomplete, or has a logic error.',
+          '',
+          `Task: ${f.task}`,
+          `Answer: ${f.known_good_output}`
+        ].join('\n'),
+        contextLength: Math.round(160 + f.task.length / 4 + f.known_good_output.length / 4),
+        expectedOutputLength: 4,
+        complexity: 0.3,
+        expectedVerdict: 'YES'
+      });
+
+      // 2. Task expecting NO (bad output)
+      tasks.push({
+        task: [
+          'You are a strict code validator. Determine whether the Answer correctly solves the Task.',
+          'Output ONLY "YES" or "NO" on the first line — no other text before it.',
+          'YES = Answer fully satisfies the Task. NO = Answer is wrong, incomplete, or has a logic error.',
+          '',
+          `Task: ${f.task}`,
+          `Answer: ${f.known_bad_output}`
+        ].join('\n'),
+        contextLength: Math.round(160 + f.task.length / 4 + f.known_bad_output.length / 4),
+        expectedOutputLength: 4,
+        complexity: 0.3,
+        expectedVerdict: 'NO'
+      });
+    }
+
+    return tasks;
+  } catch (err: any) {
+    logger.error(`Failed to load validation fixtures: ${err.message}`);
+    return [];
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -316,7 +381,7 @@ async function _benchmarkModelInner(
   let failureCount = 0;
 
   for (const category of taskCategories) {
-    const tasks = CATEGORY_TASKS[category];
+    const tasks = category === 'validate' ? await loadValidateTasks() : CATEGORY_TASKS[category];
     if (!tasks || tasks.length === 0) {
       logger.warn(`benchmark_model: no tasks defined for category '${category}', skipping`);
       continue;
