@@ -17,6 +17,7 @@ export interface ModelCapabilities {
   /** Empirical scores 0..1, populated by benchmark pipeline. undefined = not measured yet. */
   scores?: {
     code?: number;
+    chat?: number;
     reasoning?: number;
     speed?: number;
     validate?: number;
@@ -30,6 +31,7 @@ export interface BenchmarkSummary {
   taskCategories: string[];
   scores: {
     code?: number;
+    chat?: number;
     reasoning?: number;
     speed?: number;
     validate?: number;

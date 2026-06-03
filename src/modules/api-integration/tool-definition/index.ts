@@ -641,6 +641,43 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
           properties: {},
           required: []
         }
+      },
+      {
+        name: 'rate_model',
+        description: 'Provide explicit human or orchestrator feedback on generator or validator model performance for a completed task/job. Updates capability scores and enqueues fixture candidates for negative outcomes.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            model_id: {
+              type: 'string',
+              description: 'Model being rated (e.g. gemma3:latest)'
+            },
+            job_id: {
+              type: 'string',
+              description: 'Job ID this feedback relates to (for audit trail and task context retrieval)'
+            },
+            role: {
+              type: 'string',
+              enum: ['generator', 'validator'],
+              description: 'What the model was doing'
+            },
+            outcome: {
+              type: 'string',
+              enum: ['positive', 'negative', 'partial'],
+              description: 'Overall quality signal'
+            },
+            validator_verdict: {
+              type: 'string',
+              enum: ['accurate', 'too_strict', 'too_lenient'],
+              description: 'Validator-specific verdict detail. Only expected/allowed when role is "validator".'
+            },
+            comment: {
+              type: 'string',
+              description: 'Optional free-text context / feedback reason'
+            }
+          },
+          required: ['model_id', 'job_id', 'role', 'outcome']
+        }
       }
     );
 
