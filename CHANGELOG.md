@@ -1,3 +1,10 @@
+## [1.31.1](https://github.com/Heratiki/locallama-mcp/compare/v1.31.0...v1.31.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* **routing:** local-first cost routing, llama.cpp port scan, provider field normalization ([#132](https://github.com/Heratiki/locallama-mcp/issues/132)) ([762fda1](https://github.com/Heratiki/locallama-mcp/commit/762fda1ad5edbf5c2e094f4237829ce3a7bd3836))
+
 # [1.31.0](https://github.com/Heratiki/locallama-mcp/compare/v1.30.0...v1.31.0) (2026-06-03)
 
 
