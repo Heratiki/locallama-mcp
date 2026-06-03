@@ -38,7 +38,10 @@ import { readGgufMetadata, GgufMetadata } from './gguf.js';
 
 function isDegenerate(text: string): boolean {
   if (!text || /^\s*$/.test(text)) return true; // empty or whitespace
-  if (text.toLowerCase().includes('thinking')) return true;
+  // Strip <think>...</think> blocks (Qwen3 and other reasoning models)
+  const stripped = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const check = stripped || text; // fall back to full text if stripping leaves nothing
+  if (check.toLowerCase().includes('thinking')) return true;
 
   const uniqueChars = new Set(text);
   if (uniqueChars.size <= 2) {
@@ -160,6 +163,32 @@ export const llamaCppModule = {
         }
       } catch {
         logger.debug(`Existing llama.cpp endpoint ${config.llamaCppEndpoint} unreachable`);
+      }
+    }
+
+    // 2b. Port scan — find a running llama-server near the configured port
+    if (config.llamaCppPortScanEnabled !== false) {
+      const hintUrl = config.llamaCppEndpoint;
+      const hintPort = hintUrl
+        ? (() => { try { return parseInt(new URL(hintUrl).port, 10) || 8080; } catch { return config.llamaCppPort ?? 8190; } })()
+        : (config.llamaCppPort ?? 8190);
+      const SCAN_RANGE = 20;
+      for (let p = hintPort; p <= hintPort + SCAN_RANGE; p++) {
+        try {
+          const res = await axios.get(`http://localhost:${p}/health`, { timeout: 500 });
+          if (res.status === 200) {
+            const candidate = `http://localhost:${p}`;
+            (config as any).llamaCppEndpoint = candidate;
+            await this.refreshModels();
+            if (this.cachedModels.length > 0) {
+              logger.info(`llama.cpp: auto-detected running server at ${candidate}`);
+              await this._runHealthProbe();
+              return;
+            }
+          }
+        } catch {
+          // port not live — continue
+        }
       }
     }
 

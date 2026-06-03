@@ -10,6 +10,7 @@ const configMock = {
   llamaCppServerBin: '',
   llamaCppModelPath: '/models/m.gguf',
   llamaCppHealthProbeEnabled: false,
+  llamaCppPortScanEnabled: false,
 };
 
 jest.unstable_mockModule('../../../dist/config/index.js', () => ({

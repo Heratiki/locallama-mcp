@@ -1052,11 +1052,10 @@ export class Router implements IRouter {
 
       if (forcedModelId && forcedProviderId) {
         const modelRegistry = getModelRegistry();
-        const forcedModel = modelRegistry.getModel(forcedModelId) || {
-          id: forcedModelId,
-          providerId: forcedProviderId,
-          contextWindow: 8192,
-        };
+        const _registryModel = modelRegistry.getModel(forcedModelId);
+        const forcedModel = _registryModel
+          ? { ..._registryModel, provider: _registryModel.providerId }
+          : { id: forcedModelId, provider: forcedProviderId, contextWindow: 8192 };
         for (const subtask of decomposedTask.subtasks) {
           modelAssignments.set(subtask.id, forcedModel as any);
         }
