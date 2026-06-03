@@ -1,3 +1,10 @@
+# [1.31.0](https://github.com/Heratiki/locallama-mcp/compare/v1.30.0...v1.31.0) (2026-06-03)
+
+
+### Features
+
+* **benchmark:** add validation fixtures and loader ([6ed2224](https://github.com/Heratiki/locallama-mcp/commit/6ed2224e6c259560aff7f1d0d94ba23b88f057c8)), closes [#117](https://github.com/Heratiki/locallama-mcp/issues/117)
+
 # [1.30.0](https://github.com/Heratiki/locallama-mcp/compare/v1.29.0...v1.30.0) (2026-06-03)
 
 
