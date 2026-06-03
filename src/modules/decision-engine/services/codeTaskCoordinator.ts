@@ -426,7 +426,7 @@ Rules:
           },
           { workload: 'task', modelId: bareId },
         );
-        resultText = execResult.content;
+        resultText = execResult.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
         logger.info(`Successfully executed subtask ${subtask.id} with ${provider.displayName} model: ${bareId}`);
         logger.debug(`Result for subtask ${subtask.id}:\n${resultText.substring(0, 500)}${resultText.length > 500 ? '...' : ''}`);
       } else {
@@ -452,7 +452,7 @@ Rules:
               },
               { workload: 'task' },
             );
-            resultText = execResult.content;
+            resultText = execResult.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
             found = true;
             break;
           }
@@ -751,7 +751,7 @@ Integration requirements:
             provider,
             async () => await provider.executeTask(bareId, integrationPrompt, { timeoutMs: config.ollamaTimeout }),
           );
-          resultText = execResult.content;
+          resultText = execResult.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
         } else {
           logger.warn(`Integration step: no registered provider for model ${model.id} (provider: ${model.provider}); skipping.`);
         }

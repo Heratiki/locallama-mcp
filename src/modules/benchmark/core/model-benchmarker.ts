@@ -267,7 +267,8 @@ async function resolveExecutableModelId(
 }
 
 function scoreValidationVerdict(output: string, expectedVerdict: 'YES' | 'NO'): number {
-  const firstLine = output.trim().split(/\r?\n/, 1)[0]?.trim().toUpperCase() ?? '';
+  const stripped = output.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const firstLine = stripped.split(/\r?\n/, 1)[0]?.trim().toUpperCase() ?? '';
   const verdict = firstLine.startsWith('YES') ? 'YES' : firstLine.startsWith('NO') ? 'NO' : undefined;
   return verdict === expectedVerdict ? 1 : 0;
 }
@@ -406,9 +407,10 @@ async function _benchmarkModelInner(
           { workload: 'benchmark', priority: 'background', modelId: executableModelId },
         );
         const elapsed = Date.now() - startMs;
+        const strippedContent = execResult.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
         const quality = benchTask.expectedVerdict
-          ? scoreValidationVerdict(execResult.content, benchTask.expectedVerdict)
-          : evaluateQuality(benchTask.task, execResult.content);
+          ? scoreValidationVerdict(strippedContent, benchTask.expectedVerdict)
+          : evaluateQuality(benchTask.task, strippedContent);
 
         totalSuccess++;
         totalQuality += quality;

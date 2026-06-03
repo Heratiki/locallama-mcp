@@ -155,10 +155,11 @@ export async function runModelBenchmark(
             `Benchmark run timed out after ${effectiveTimeout}ms for model ${model.id}`
           );
           success = true;
-          qualityScore = evaluateQuality(task, execResult.content);
+          const strippedContent = execResult.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+          qualityScore = evaluateQuality(task, strippedContent);
           promptTokens = execResult.promptTokens ?? contextLength;
           completionTokens = execResult.completionTokens ?? expectedOutputLength;
-          runOutput = execResult.content;
+          runOutput = strippedContent;
           output = runOutput;
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
