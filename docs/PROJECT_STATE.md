@@ -41,6 +41,8 @@ and this file for the current snapshot.
 - Issue #51 is implemented as of 2026-05-20: MCP `benchmark_free_models` now uses the modular benchmark engine, writes free-model results through `benchmarks.db`, and returns structured provider/rate-limit errors instead of delegating to the legacy decision-engine benchmark service.
 - Issue #115 validation loop and retry ladder implemented as of 2026-06-02: synchronous validation is wired into background task execution. Supports `validate: false` bypass, free-tier budget awareness, and deterministic retry ladder escalation (`good` -> `better` -> `best`) without re-routing. Returns structured validation outcome metadata. All 482 tests pass.
 - Issue #119 routing/validation/feedback loop test coverage added as of 2026-06-03: added comprehensive test coverage in existing files verifying free-tier rate-limit penalties and tie-breakers in ranked trio routing (test/modules/api-integration/routing/index.test.ts), external validation and generator exceptions in validation loops (test/modules/api-integration/routing/validation-loop.test.ts), and SQLite update misses + fixture candidate queue formatting details in rateModel (test/modules/api-integration/rateModel.test.ts). All 508 tests pass.
+- Issue #118 fixture promotion policy defined as of 2026-06-03: defined reviewer roles, acceptance rubric, audit requirements, rejection paths, and promotion workflow in [fixture-promotion-policy.md](file:///home/heratiki/Source/locallama-mcp/docs/fixture-promotion-policy.md), linked from PRD document.
+
 
 ## What to keep out of docs
 

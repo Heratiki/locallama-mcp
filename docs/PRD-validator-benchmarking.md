@@ -196,7 +196,7 @@ New tool with the following parameters:
 
 **Seed set**: 10–15 hand-crafted fixture triples `{ task, known_good_output, known_bad_output }` shipped with the codebase in a versioned JSON file. The Python `__main__` case from the real-world test failure is fixture #1.
 
-**Organic growth**: every `rate_model` call with `outcome: 'negative'` generates a fixture candidate: `{ task, output, label: 'bad' }` stored in a separate candidates file. A future `promote_fixture` tool (or manual PR) moves candidates to the authoritative set after human review.
+**Organic growth**: every `rate_model` call with `outcome: 'negative'` generates a fixture candidate: `{ task, output, label: 'bad' }` stored in a separate candidates file. A future `promote_fixture` tool (or manual PR) moves candidates to the authoritative set after human review. The details of the review rubric, roles, audit trails, and promotion workflow are governed by the [fixture-promotion-policy.md](file:///home/heratiki/Source/locallama-mcp/docs/fixture-promotion-policy.md).
 
 **Structure**: fixtures are language-tagged so the benchmark runner can filter by language when selecting fixture pairs for a given task.
 
