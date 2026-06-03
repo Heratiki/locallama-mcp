@@ -514,6 +514,43 @@ export class LocalLamaMcpServer {
                   const { benchmarkModel } = await import('./modules/benchmark/core/model-benchmarker.js');
                   return await benchmarkModel({ modelId, providerId: requestedProviderId, taskCategories: taskCategories as import('./modules/benchmark/core/model-benchmarker.js').TaskCategory[] | undefined });
                 }
+                case 'rate_model': {
+                  const modelId = args?.model_id;
+                  const jobId = args?.job_id;
+                  const role = args?.role;
+                  const outcome = args?.outcome;
+                  const validatorVerdict = args?.validator_verdict;
+                  const comment = args?.comment;
+
+                  if (typeof modelId !== 'string' || !modelId) {
+                    throw new Error('Invalid model_id for rate_model');
+                  }
+                  if (typeof jobId !== 'string' || !jobId) {
+                    throw new Error('Invalid job_id for rate_model');
+                  }
+                  if (typeof role !== 'string' || !role) {
+                    throw new Error('Invalid role for rate_model');
+                  }
+                  if (typeof outcome !== 'string' || !outcome) {
+                    throw new Error('Invalid outcome for rate_model');
+                  }
+
+                  const { rateModel } = await import('./modules/decision-engine/services/modelRating.js');
+                  const ratingResult = await rateModel({
+                    modelId,
+                    jobId,
+                    role: role as any,
+                    outcome: outcome as any,
+                    validatorVerdict: validatorVerdict as any,
+                    comment: comment as any,
+                  });
+
+                  if (!ratingResult.success) {
+                    throw new Error(ratingResult.message);
+                  }
+
+                  return ratingResult;
+                }
                 case 'retriv_init': {
                   const directories = args?.directories;
                   if (!Array.isArray(directories) || directories.length === 0) {

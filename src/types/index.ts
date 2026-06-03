@@ -276,6 +276,7 @@ export interface ModelPerformanceData {
   isFree: boolean; // Whether this is a free model
   scores?: {
     code?: number;
+    chat?: number;
     reasoning?: number;
     speed?: number;
     validate?: number;
