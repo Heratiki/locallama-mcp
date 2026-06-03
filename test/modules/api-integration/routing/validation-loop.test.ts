@@ -397,4 +397,145 @@ describe('Synchronous Validation + Retry Loop (TDD)', () => {
       expect.any(Object)
     );
   });
+
+  it('escalates retry ladder when self-validation passes but external validation fails', async () => {
+    mockGetJobsByTaskId.mockResolvedValue([
+      { id: 'task-5', status: 'queued' }
+    ]);
+    mockGetJob.mockReturnValue({
+      id: 'task-5',
+      task: 'Test task',
+      status: 'Queued',
+      ranked_trio: {
+        good: { model_id: 'good-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false },
+        better: { model_id: 'better-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false },
+        best: { model_id: 'best-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false }
+      }
+    });
+
+    // Mock validate implementation:
+    // good-model passes self-validation but fails external validation
+    // better-model passes self-validation and passes external validation
+    mockValidate.mockImplementation(async (task, output, provider, modelId) => {
+      if (modelId === 'good-model') {
+        return { passed: true, confidence: 1.0, reason: 'Good model code looks okay', parsed_cleanly: true, skipped: false };
+      }
+      if (modelId === 'best-validator') {
+        // Mock external validator's response. First call is for good-model, we fail it.
+        // Second call is for better-model, we pass it.
+        if (mockValidate.mock.calls.filter(c => c[3] === 'best-validator').length === 1) {
+          return { passed: false, confidence: 1.0, reason: 'Validator rejects good model output', parsed_cleanly: true, skipped: false };
+        }
+        return { passed: true, confidence: 1.0, reason: 'Validator accepts better model output', parsed_cleanly: true, skipped: false };
+      }
+      if (modelId === 'better-model') {
+        return { passed: true, confidence: 1.0, reason: 'Better model code looks okay', parsed_cleanly: true, skipped: false };
+      }
+      return { passed: true, confidence: 1.0, reason: 'Pass', parsed_cleanly: true, skipped: false };
+    });
+
+    await (router as any).runQueuedRouteTask('task-5', 'ollama', {
+      task: 'Test task',
+      contextLength: 100,
+      validate: true
+    });
+
+    // Should complete the job with better model
+    expect(mockCompleteJob).toHaveBeenCalledWith('task-5', ['final code'], expect.objectContaining({
+      validate: true,
+      passed: true,
+      attempts: expect.arrayContaining([
+        expect.objectContaining({ model_id: 'good-model', passed: false }),
+        expect.objectContaining({ model_id: 'better-model', passed: true }),
+      ])
+    }));
+  });
+
+  it('passes task validation if self-validation passes and no validator model is found', async () => {
+    mockGetJobsByTaskId.mockResolvedValue([
+      { id: 'task-6', status: 'queued' }
+    ]);
+    mockGetJob.mockReturnValue({
+      id: 'task-6',
+      task: 'Test task',
+      status: 'Queued',
+      ranked_trio: {
+        good: { model_id: 'good-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false },
+        better: { model_id: 'better-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false },
+        best: { model_id: 'best-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false }
+      }
+    });
+
+    // Mock best validator to be null
+    mockGetBestValidatorModel.mockResolvedValueOnce(null);
+
+    mockValidate.mockResolvedValue({ passed: true, confidence: 1.0, reason: 'Passes self-validation', parsed_cleanly: true, skipped: false });
+
+    await (router as any).runQueuedRouteTask('task-6', 'ollama', {
+      task: 'Test task',
+      contextLength: 100,
+      validate: true
+    });
+
+    // Since self-validation passes and external validation has no model (which skips it without failing), overall task passes
+    expect(mockCompleteJob).toHaveBeenCalledWith('task-6', ['final code'], expect.objectContaining({
+      validate: true,
+      passed: true,
+      attempts: expect.arrayContaining([
+        expect.objectContaining({
+          model_id: 'good-model',
+          passed: true,
+          self_validation: expect.objectContaining({ passed: true }),
+          external_validation: expect.objectContaining({ skipped: true, reason: expect.stringContaining('No qualified validator') }),
+        })
+      ])
+    }));
+  });
+
+  it('passes task validation when self-validation throws an error but external validation passes', async () => {
+    mockGetJobsByTaskId.mockResolvedValue([
+      { id: 'task-7', status: 'queued' }
+    ]);
+    mockGetJob.mockReturnValue({
+      id: 'task-7',
+      task: 'Test task',
+      status: 'Queued',
+      ranked_trio: {
+        good: { model_id: 'good-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false },
+        better: { model_id: 'better-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false },
+        best: { model_id: 'best-model', provider_id: 'ollama', benchmark_runs: 1, validation_score_seeded: false }
+      }
+    });
+
+    // good-model validate throws an error (so selfValPassed is null, which is not false).
+    // validator passes.
+    mockValidate.mockImplementation(async (task, output, provider, modelId) => {
+      if (modelId === 'good-model') {
+        throw new Error('Self validation network timeout');
+      }
+      if (modelId === 'best-validator') {
+        return { passed: true, confidence: 1.0, reason: 'External validator verified code', parsed_cleanly: true, skipped: false };
+      }
+      return { passed: true, confidence: 1.0, reason: 'Pass', parsed_cleanly: true, skipped: false };
+    });
+
+    await (router as any).runQueuedRouteTask('task-7', 'ollama', {
+      task: 'Test task',
+      contextLength: 100,
+      validate: true
+    });
+
+    expect(mockCompleteJob).toHaveBeenCalledWith('task-7', ['final code'], expect.objectContaining({
+      validate: true,
+      passed: true,
+      attempts: expect.arrayContaining([
+        expect.objectContaining({
+          model_id: 'good-model',
+          passed: true,
+          self_validation: expect.objectContaining({ skipped: true, reason: expect.stringContaining('network timeout') }),
+          external_validation: expect.objectContaining({ passed: true }),
+        })
+      ])
+    }));
+  });
 });

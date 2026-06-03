@@ -210,6 +210,228 @@ describe('rateModel service', () => {
       expect(valCallSummary.scores.validate).toBeCloseTo(0.72, 5);
       expect(valCallSummary.benchmarkCount).toBe(5);
     });
+
+    it('updates generator model scores on negative outcome', async () => {
+      const mockModel = {
+        id: 'gen-model',
+        capabilities: { scores: { code: 0.5 } },
+        benchmarkSummary: {
+          lastRunAt: 1000,
+          taskCategories: ['code'],
+          scores: { code: 0.5 },
+          qualityScore: 0.5,
+          benchmarkCount: 2,
+        },
+      };
+      mockGetModel.mockReturnValue(mockModel);
+      mockGetDatabase.mockReturnValue({
+        models: {
+          'gen-model': {
+            id: 'gen-model',
+            scores: { code: 0.5 },
+            qualityScore: 0.5,
+            benchmarkCount: 2,
+          },
+        },
+      });
+
+      const result = await rateModel({
+        modelId: 'gen-model',
+        jobId: 'job-123',
+        role: 'generator',
+        outcome: 'negative',
+      });
+
+      expect(mockUpdateBenchmarkSummary).toHaveBeenCalled();
+      const summary = mockUpdateBenchmarkSummary.mock.calls[0][1];
+      expect(summary.scores.code).toBeCloseTo(0.45, 5); // 0.5 * 0.9 + 0.0 * 0.1
+      expect(summary.qualityScore).toBeCloseTo(0.45, 5);
+
+      expect(mockUpdateModelData).toHaveBeenCalled();
+      const dbData = mockUpdateModelData.mock.calls[0][1];
+      expect(dbData.scores.code).toBeCloseTo(0.45, 5);
+      expect(dbData.qualityScore).toBeCloseTo(0.45, 5);
+    });
+
+    it('updates generator model scores on partial outcome', async () => {
+      const mockModel = {
+        id: 'gen-model',
+        capabilities: { scores: { code: 0.5 } },
+        benchmarkSummary: {
+          lastRunAt: 1000,
+          taskCategories: ['code'],
+          scores: { code: 0.5 },
+          qualityScore: 0.5,
+          benchmarkCount: 2,
+        },
+      };
+      mockGetModel.mockReturnValue(mockModel);
+      mockGetDatabase.mockReturnValue({
+        models: {
+          'gen-model': {
+            id: 'gen-model',
+            scores: { code: 0.5 },
+            qualityScore: 0.5,
+            benchmarkCount: 2,
+          },
+        },
+      });
+
+      const result = await rateModel({
+        modelId: 'gen-model',
+        jobId: 'job-123',
+        role: 'generator',
+        outcome: 'partial',
+      });
+
+      expect(mockUpdateBenchmarkSummary).toHaveBeenCalled();
+      const summary = mockUpdateBenchmarkSummary.mock.calls[0][1];
+      expect(summary.scores.code).toBeCloseTo(0.50, 5); // 0.5 * 0.9 + 0.5 * 0.1
+      expect(summary.qualityScore).toBeCloseTo(0.50, 5);
+
+      expect(mockUpdateModelData).toHaveBeenCalled();
+      const dbData = mockUpdateModelData.mock.calls[0][1];
+      expect(dbData.scores.code).toBeCloseTo(0.50, 5);
+      expect(dbData.qualityScore).toBeCloseTo(0.50, 5);
+    });
+
+    it('gracefully handles SQLite database miss for generator updates', async () => {
+      const mockModel = {
+        id: 'gen-model',
+        capabilities: { scores: { code: 0.5 } },
+        benchmarkSummary: {
+          lastRunAt: 1000,
+          taskCategories: ['code'],
+          scores: { code: 0.5 },
+          qualityScore: 0.5,
+          benchmarkCount: 2,
+        },
+      };
+      mockGetModel.mockReturnValue(mockModel);
+      mockGetDatabase.mockReturnValue({ models: {} });
+
+      const result = await rateModel({
+        modelId: 'gen-model',
+        jobId: 'job-123',
+        role: 'generator',
+        outcome: 'positive',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockUpdateBenchmarkSummary).toHaveBeenCalled();
+      expect(mockUpdateModelData).not.toHaveBeenCalled();
+    });
+
+    it('updates validator model scores on positive outcome', async () => {
+      const mockModel = {
+        id: 'val-model',
+        capabilities: { scores: { validate: 0.8 } },
+        benchmarkSummary: {
+          lastRunAt: 1000,
+          taskCategories: ['validate'],
+          scores: { validate: 0.8 },
+          benchmarkCount: 4,
+        },
+      };
+      mockGetModel.mockReturnValue(mockModel);
+      mockGetDatabase.mockReturnValue({
+        models: {
+          'val-model': {
+            id: 'val-model',
+            scores: { validate: 0.8 },
+            benchmarkCount: 4,
+          },
+        },
+      });
+
+      const result = await rateModel({
+        modelId: 'val-model',
+        jobId: 'job-123',
+        role: 'validator',
+        outcome: 'positive',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockUpdateBenchmarkSummary).toHaveBeenCalled();
+      const summary = mockUpdateBenchmarkSummary.mock.calls[0][1];
+      expect(summary.scores.validate).toBeCloseTo(0.82, 5); // 0.8 * 0.9 + 1.0 * 0.1
+      expect(summary.benchmarkCount).toBe(5);
+
+      expect(mockUpdateModelData).toHaveBeenCalled();
+      const dbData = mockUpdateModelData.mock.calls[0][1];
+      expect(dbData.scores.validate).toBeCloseTo(0.82, 5);
+      expect(dbData.benchmarkCount).toBe(5);
+    });
+
+    it('updates validator model scores on partial outcome', async () => {
+      const mockModel = {
+        id: 'val-model',
+        capabilities: { scores: { validate: 0.8 } },
+        benchmarkSummary: {
+          lastRunAt: 1000,
+          taskCategories: ['validate'],
+          scores: { validate: 0.8 },
+          benchmarkCount: 4,
+        },
+      };
+      mockGetModel.mockReturnValue(mockModel);
+      mockGetDatabase.mockReturnValue({
+        models: {
+          'val-model': {
+            id: 'val-model',
+            scores: { validate: 0.8 },
+            benchmarkCount: 4,
+          },
+        },
+      });
+
+      const result = await rateModel({
+        modelId: 'val-model',
+        jobId: 'job-123',
+        role: 'validator',
+        outcome: 'partial',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockUpdateBenchmarkSummary).toHaveBeenCalled();
+      const summary = mockUpdateBenchmarkSummary.mock.calls[0][1];
+      expect(summary.scores.validate).toBeCloseTo(0.77, 5); // 0.8 * 0.9 + 0.5 * 0.1
+      expect(summary.benchmarkCount).toBe(5);
+
+      expect(mockUpdateModelData).toHaveBeenCalled();
+      const dbData = mockUpdateModelData.mock.calls[0][1];
+      expect(dbData.scores.validate).toBeCloseTo(0.77, 5);
+      expect(dbData.benchmarkCount).toBe(5);
+    });
+
+    it('gracefully handles SQLite database miss for validator updates', async () => {
+      const mockModel = {
+        id: 'val-model',
+        contextWindow: 8000,
+        benchmarkSummary: {
+          lastRunAt: 1000,
+          taskCategories: ['validate'],
+          scores: { validate: 0.8 },
+          successRate: 0.9,
+          qualityScore: 0.85,
+          avgResponseTime: 1200,
+          benchmarkCount: 4,
+        },
+      };
+      mockGetModel.mockReturnValue(mockModel);
+      mockGetDatabase.mockReturnValue({ models: {} });
+
+      const result = await rateModel({
+        modelId: 'val-model',
+        jobId: 'job-123',
+        role: 'validator',
+        outcome: 'positive',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockUpdateBenchmarkSummary).toHaveBeenCalled();
+      expect(mockUpdateModelData).not.toHaveBeenCalled();
+    });
   });
 
   describe('Fixture Candidate Queueing', () => {
@@ -264,6 +486,78 @@ describe('rateModel service', () => {
         role: 'generator',
         comment: 'Too slow and buggy',
       }));
+    });
+
+    it('handles job result when it is not a JSON array (e.g. plain object or string)', async () => {
+      mockGetModel.mockReturnValue({ id: 'gen-model', capabilities: { scores: {} } });
+      mockGetJob.mockResolvedValue({
+        id: 'job-123',
+        task_text: 'write quicksort',
+        result: JSON.stringify({ code: 'function quicksort() {}' }),
+      });
+      mockReadFile.mockResolvedValue(JSON.stringify([]));
+
+      const result = await rateModel({
+        modelId: 'gen-model',
+        jobId: 'job-123',
+        role: 'generator',
+        outcome: 'negative',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockWriteFile).toHaveBeenCalled();
+      const [, writtenContent] = mockWriteFile.mock.calls[0];
+      const parsed = JSON.parse(writtenContent);
+      expect(parsed[0].output).toBe('[object Object]');
+    });
+
+    it('respects process.env.DB_DIR when writing candidate and handles file errors', async () => {
+      const originalDbDir = process.env.DB_DIR;
+      process.env.DB_DIR = 'custom-db-dir';
+      
+      mockGetModel.mockReturnValue({ id: 'gen-model', capabilities: { scores: {} } });
+      mockGetJob.mockResolvedValue({
+        id: 'job-123',
+        task_text: 'write test',
+        result: 'plain output',
+      });
+      mockReadFile.mockResolvedValue(JSON.stringify([]));
+      
+      try {
+        const result = await rateModel({
+          modelId: 'gen-model',
+          jobId: 'job-123',
+          role: 'generator',
+          outcome: 'negative',
+        });
+        
+        expect(result.success).toBe(true);
+        const [writtenPath] = mockWriteFile.mock.calls[0];
+        expect(writtenPath).toContain('custom-db-dir');
+      } finally {
+        process.env.DB_DIR = originalDbDir;
+      }
+    });
+
+    it('fails gracefully when writing fixture candidate fails', async () => {
+      mockGetModel.mockReturnValue({ id: 'gen-model', capabilities: { scores: {} } });
+      mockGetJob.mockResolvedValue({
+        id: 'job-123',
+        task_text: 'write test',
+        result: 'some output',
+      });
+      mockReadFile.mockResolvedValue(JSON.stringify([]));
+      mockWriteFile.mockRejectedValueOnce(new Error('Disk Full'));
+
+      const result = await rateModel({
+        modelId: 'gen-model',
+        jobId: 'job-123',
+        role: 'generator',
+        outcome: 'negative',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Disk Full');
     });
   });
 });
