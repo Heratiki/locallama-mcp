@@ -1263,8 +1263,9 @@ export const benchmarkService = {
     
     let cleanedResponse = response;
     
-    // Remove thinking sections (used by deepseek-r1 and similar models)
-    cleanedResponse = cleanedResponse.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+    // Remove thinking sections (DeepSeek-R1, Qwen3, and similar reasoning models)
+    cleanedResponse = cleanedResponse.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    cleanedResponse = cleanedResponse.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
     
     // Remove internal dialogue indicators 
     cleanedResponse = cleanedResponse.replace(/\[internal dialogue\][\s\S]*?\[\/internal dialogue\]/gi, '');

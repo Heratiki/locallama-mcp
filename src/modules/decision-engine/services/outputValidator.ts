@@ -93,8 +93,9 @@ export class OutputValidator {
         maxTokens: 500
       });
 
-      const trimmed = execResult.content.trim();
-      
+      const raw = execResult.content.trim();
+      const trimmed = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
       if (!trimmed) {
         return {
           passed: null,
