@@ -1,0 +1,62 @@
+[
+  {
+    "task": "Write a Python script to strip punctuation from a string and print it inside a main guard.",
+    "known_good_output": "import string\n\ndef strip_punctuation(s: str) -> str:\n    return s.translate(str.maketrans('', '', string.punctuation))\n\nif __name__ == '__main__':\n    print(strip_punctuation('Hello, World!'))",
+    "known_bad_output": "import string\n\ndef strip_punctuation(s: str) -> str:\n    return s\n\nif _main == '__main__':\n    print(strip_punctuation('Hello, World!'))",
+    "language": "python"
+  },
+  {
+    "task": "Implement a basic debounce function that wraps a callback.",
+    "known_good_output": "function debounce(func, wait) {\n  let timeout;\n  return function(...args) {\n    clearTimeout(timeout);\n    timeout = setTimeout(() => func.apply(this, args), wait);\n  };\n}",
+    "known_bad_output": "function debounce(func, wait) {\n  return function(...args) {\n    setTimeout(() => func(...args), wait);\n  };\n}",
+    "language": "javascript"
+  },
+  {
+    "task": "Write a type-safe TypeScript function to pick keys from an object.",
+    "known_good_output": "function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {\n  const result = {} as Pick<T, K>;\n  for (const key of keys) {\n    if (key in obj) {\n      result[key] = obj[key];\n    }\n  }\n  return result;\n}",
+    "known_bad_output": "function pick(obj: any, keys: string[]) {\n  const result: any = {};\n  keys.forEach(k => { result[k] = obj[k]; });\n  return result;\n}",
+    "language": "typescript"
+  },
+  {
+    "task": "Write a Go function to read a file and return its lines.",
+    "known_good_output": "package main\nimport (\n    \"bufio\"\n    \"os\"\n)\nfunc readLines(path string) ([]string, error) {\n    file, err := os.Open(path)\n    if err != nil {\n        return nil, err\n    }\n    defer file.Close()\n    var lines []string\n    scanner := bufio.NewScanner(file)\n    for scanner.Scan() {\n        lines = append(lines, scanner.Text())\n    }\n    return lines, scanner.Err()\n}",
+    "known_bad_output": "package main\nimport \"os\"\nfunc readLines(path string) ([]string, error) {\n    data, _ := os.ReadFile(path)\n    return []string{string(data)}, nil\n}",
+    "language": "go"
+  },
+  {
+    "task": "Write a Rust function to find the maximum value in an integer slice, returning Option.",
+    "known_good_output": "fn find_max(slice: &[i32]) -> Option<i32> {\n    if slice.is_empty() {\n        return None;\n    }\n    let mut max = slice[0];\n    for &val in slice.iter().skip(1) {\n        if val > max {\n            max = val;\n        }\n    }\n    Some(max)\n}",
+    "known_bad_output": "fn find_max(slice: &[i32]) -> Option<i32> {\n    let mut max = 0;\n    for &val in slice {\n        if val > max {\n            max = val;\n        }\n    }\n    Some(max)\n}",
+    "language": "rust"
+  },
+  {
+    "task": "Write a SQL query to find the department name and average salary of employees in that department, for departments with average salary > 50000.",
+    "known_good_output": "SELECT d.name, AVG(e.salary) AS avg_salary\nFROM departments d\nJOIN employees e ON d.id = e.department_id\nGROUP BY d.name\nHAVING AVG(e.salary) > 50000;",
+    "known_bad_output": "SELECT d.name, AVG(e.salary) AS avg_salary\nFROM departments d\nJOIN employees e ON d.id = e.department_id\nWHERE e.salary > 50000\nGROUP BY d.name;",
+    "language": "sql"
+  },
+  {
+    "task": "Write a bash shell script to check if a directory exists, and if not, create it.",
+    "known_good_output": "#!/bin/bash\nDIR=\"/path/to/dir\"\nif [ ! -d \"$DIR\" ]; then\n    mkdir -p \"$DIR\"\nfi",
+    "known_bad_output": "#!/bin/bash\nDIR=\"/path/to/dir\"\nif [ -f $DIR ]; then\n    mkdir $DIR\nfi",
+    "language": "bash"
+  },
+  {
+    "task": "Create a semantic HTML markup structure for an article with a header, content section, and footer.",
+    "known_good_output": "<article>\n  <header>\n    <h1>Article Title</h1>\n    <p>Published on <time datetime=\"2026-06-03\">June 3, 2026</time></p>\n  </header>\n  <section>\n    <p>This is the main body content of the article.</p>\n  </section>\n  <footer>\n    <p>Author: Jane Doe</p>\n  </footer>\n</article>",
+    "known_bad_output": "<div class=\"article\">\n  <div class=\"title\">Article Title</div>\n  <div class=\"date\">June 3, 2026</div>\n  <div class=\"body\">This is the main body content of the article.</div>\n  <div class=\"author\">Author: Jane Doe</div>\n</div>",
+    "language": "html"
+  },
+  {
+    "task": "Create a responsive 3-column CSS Grid layout that collapses to 1 column on screens smaller than 600px.",
+    "known_good_output": ".grid-container {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 20px;\n}\n@media (max-width: 600px) {\n  .grid-container {\n    grid-template-columns: 1fr;\n  }\n}",
+    "known_bad_output": ".grid-container {\n  display: grid;\n  grid-columns: 3;\n}",
+    "language": "css"
+  },
+  {
+    "task": "Write a C++ function to check if a number is prime.",
+    "known_good_output": "bool isPrime(int n) {\n    if (n <= 1) return false;\n    if (n <= 3) return true;\n    if (n % 2 == 0 || n % 3 == 0) return false;\n    for (int i = 5; i * i <= n; i += 6) {\n        if (n % i == 0 || n % (i + 2) == 0)\n            return false;\n    }\n    return true;\n}",
+    "known_bad_output": "bool isPrime(int n) {\n    for (int i = 2; i < n; i++) {\n        if (n % i == 0) return false;\n    }\n    return true;\n}",
+    "language": "cpp"
+  }
+]
