@@ -1,3 +1,10 @@
+## [1.31.2](https://github.com/Heratiki/locallama-mcp/compare/v1.31.1...v1.31.2) (2026-06-03)
+
+
+### Bug Fixes
+
+* **output:** strip <think> blocks from all model output paths ([#133](https://github.com/Heratiki/locallama-mcp/issues/133)) ([b1912b4](https://github.com/Heratiki/locallama-mcp/commit/b1912b42aef30091b631c270f53c1dc8cd9c0c47))
+
 ## [1.31.1](https://github.com/Heratiki/locallama-mcp/compare/v1.31.0...v1.31.1) (2026-06-03)
 
 
