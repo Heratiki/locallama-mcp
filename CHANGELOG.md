@@ -1,3 +1,10 @@
+## [1.31.3](https://github.com/Heratiki/locallama-mcp/compare/v1.31.2...v1.31.3) (2026-06-04)
+
+
+### Bug Fixes
+
+* **deps:** bump hono to 4.12.23 and npm override to 11.16.0 to resolve 4 Dependabot advisories ([#134](https://github.com/Heratiki/locallama-mcp/issues/134)) ([6c8d0b9](https://github.com/Heratiki/locallama-mcp/commit/6c8d0b9e0e3547f0924a912d4fc2a5f834454bb3))
+
 ## [1.31.2](https://github.com/Heratiki/locallama-mcp/compare/v1.31.1...v1.31.2) (2026-06-03)
 
 
