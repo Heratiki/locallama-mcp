@@ -1,0 +1,29 @@
+{
+  "parser": "@typescript-eslint/parser",
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module",
+    "project": "./tsconfig.json"  // Add this to enable type-aware linting
+  },
+  "env": {
+    "node": true,
+    "es6": true,
+    "jest": true
+  },
+  "rules": {
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    // Additional recommended rules you might want to add:
+    "no-console": "warn",  // Warns about console.log usage
+    "prefer-const": "warn", // Suggests using const when variables aren't reassigned
+    "eqeqeq": ["warn", "always"], // Requires === and !== instead of == and !=
+    "@typescript-eslint/no-floating-promises": "warn", // Requires Promise handling
+    "@typescript-eslint/await-thenable": "warn", // Ensures await is only used with Promises
+    "@typescript-eslint/no-misused-promises": "warn" // Prevents common Promise misuse
+  }
+}

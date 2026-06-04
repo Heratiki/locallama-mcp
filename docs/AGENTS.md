@@ -11,6 +11,7 @@ Use targeted GitHub Issues for active work requirements, `docs/PROJECT_STATE.md`
 ## Reading Order
 
 Before planning or executing work, agents MUST read documents in the following order:
+0. `wiki/README.md` - The agent-facing system map. Start here to understand how the codebase fits together before diving into the reference docs below.
 1. `docs/AGENTS.md` (this file) - The shared operating guide.
 2. `docs/PROJECT_STATE.md` - The current status snapshot.
 3. The targeted GitHub Issue - The authoritative source for active work and requirements.
