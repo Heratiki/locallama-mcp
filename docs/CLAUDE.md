@@ -4,6 +4,7 @@ Claude Code should use `docs/AGENTS.md` as the primary project guide.
 
 Before starting non-trivial work, read:
 
+- `wiki/README.md` (start here — the agent-facing system map)
 - `docs/AGENTS.md`
 - `docs/ROADMAP.md`
 - `docs/PROJECT_STATE.md`
