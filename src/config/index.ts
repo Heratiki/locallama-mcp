@@ -105,6 +105,9 @@ export interface Config {
   // Paths
   rootDir: string;
 
+  // Job tracker WebSocket port — single dedicated port for monitoring UI
+  jobTrackerWsPort: number;
+
   // Startup benchmark targets — defaults to [] (disabled).
   // Set STARTUP_BENCHMARK_TARGETS=local,free to opt in to startup sweeps.
   startupBenchmarkTargets: string[];
@@ -326,6 +329,7 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     benchmarkFreshnessHours: Math.max(1, parseNumber(env.BENCHMARK_FRESHNESS_HOURS, 24, 1)),
 
     // Hardware profile
+    jobTrackerWsPort: parseNumber(env.JOB_TRACKER_WS_PORT, 8765, 1024, 65535),
     profile: (env.LOCALLAMA_PROFILE === 'lightweight' ? 'lightweight' : 'default') as 'default' | 'lightweight',
 
     // Paths

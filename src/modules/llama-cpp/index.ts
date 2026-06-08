@@ -36,6 +36,48 @@ import { discoverLlamaBinaries } from './discovery.js';
 import { LlamaServerManager } from './manager.js';
 import { readGgufMetadata, GgufMetadata } from './gguf.js';
 
+/** Find all running llama-server processes and their ports/model paths via OS process list. */
+async function detectRunningLlamaProcesses(): Promise<Array<{ port: number; modelPath: string | null }>> {
+  try {
+    const { execSync } = await import('child_process');
+    const raw = execSync('pgrep -fa llama-server 2>/dev/null || true', {
+      encoding: 'utf-8',
+      timeout: 2000,
+    });
+    const results: Array<{ port: number; modelPath: string | null }> = [];
+    for (const line of raw.split('\n')) {
+      if (!line.trim() || !line.includes('llama-server')) continue;
+      const portMatch = line.match(/--port[= ](\d+)/);
+      const modelMatch = line.match(/(?:--model|-m)[= ](\S+)/);
+      if (portMatch) {
+        results.push({
+          port: parseInt(portMatch[1], 10),
+          modelPath: modelMatch ? modelMatch[1] : null,
+        });
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/** Poll a llama-server health endpoint until it returns 200 or the deadline passes. */
+async function waitForServerReady(port: number, waitMs: number): Promise<boolean> {
+  const url = `http://localhost:${port}/health`;
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const res = await axios.get(url, { timeout: 1000 });
+      if (res.status === 200) return true;
+    } catch {
+      // still not up
+    }
+  }
+  return false;
+}
+
 function isDegenerate(text: string): boolean {
   if (!text || /^\s*$/.test(text)) return true; // empty or whitespace
   // Strip <think>...</think> blocks (Qwen3 and other reasoning models)
@@ -166,13 +208,69 @@ export const llamaCppModule = {
       }
     }
 
-    // 2b. Port scan — find a running llama-server near the configured port
+    // 2a. Process detection — find any running llama-server on the system via OS process list.
+    //     This is the primary guard against duplicate spawns: if a server is already running
+    //     (regardless of port), use it instead of starting another.
+    {
+      const processes = await detectRunningLlamaProcesses();
+      if (processes.length > 0) {
+        logger.debug(`llama.cpp: found ${processes.length} running llama-server process(es)`);
+        // Prefer a server already running the configured model; fall back to any ready server.
+        const configModel = config.llamaCppModelPath;
+        const sorted = configModel
+          ? [
+              ...processes.filter((p) => p.modelPath === configModel),
+              ...processes.filter((p) => p.modelPath !== configModel),
+            ]
+          : processes;
+
+        let foundLoadingPort: number | null = null;
+        for (const proc of sorted) {
+          try {
+            const res = await axios.get(`http://localhost:${proc.port}/health`, { timeout: 1000 });
+            if (res.status === 200) {
+              const candidate = `http://localhost:${proc.port}`;
+              (config as any).llamaCppEndpoint = candidate;
+              await this.refreshModels();
+              if (this.cachedModels.length > 0) {
+                logger.info(`llama.cpp: reusing existing server on port ${proc.port}${proc.modelPath ? ` (${proc.modelPath})` : ''}`);
+                await this._runHealthProbe();
+                return;
+              }
+            } else if (res.status === 503 && foundLoadingPort === null) {
+              foundLoadingPort = proc.port;
+            }
+          } catch {
+            // process not responding on this port yet
+          }
+        }
+
+        if (foundLoadingPort !== null) {
+          const waitMs = config.llamaCppStartupTimeoutMs ?? 120_000;
+          logger.info(`llama.cpp: existing server on port ${foundLoadingPort} is loading — waiting up to ${waitMs}ms instead of spawning duplicate`);
+          if (await waitForServerReady(foundLoadingPort, waitMs)) {
+            const candidate = `http://localhost:${foundLoadingPort}`;
+            (config as any).llamaCppEndpoint = candidate;
+            await this.refreshModels();
+            if (this.cachedModels.length > 0) {
+              logger.info(`llama.cpp: existing server on port ${foundLoadingPort} is now ready`);
+              await this._runHealthProbe();
+              return;
+            }
+          }
+          logger.warn(`llama.cpp: timed out waiting for existing server on port ${foundLoadingPort}`);
+        }
+      }
+    }
+
+    // 2b. Port scan — fallback for systems where pgrep is unavailable (non-Linux/macOS).
     if (config.llamaCppPortScanEnabled !== false) {
       const hintUrl = config.llamaCppEndpoint;
       const hintPort = hintUrl
         ? (() => { try { return parseInt(new URL(hintUrl).port, 10) || 8080; } catch { return config.llamaCppPort ?? 8190; } })()
         : (config.llamaCppPort ?? 8190);
       const SCAN_RANGE = 20;
+      let loadingPort: number | null = null;
       for (let p = hintPort; p <= hintPort + SCAN_RANGE; p++) {
         try {
           const res = await axios.get(`http://localhost:${p}/health`, { timeout: 500 });
@@ -181,14 +279,32 @@ export const llamaCppModule = {
             (config as any).llamaCppEndpoint = candidate;
             await this.refreshModels();
             if (this.cachedModels.length > 0) {
-              logger.info(`llama.cpp: auto-detected running server at ${candidate}`);
+              logger.info(`llama.cpp: port scan found server at ${candidate}`);
               await this._runHealthProbe();
               return;
             }
+          } else if (res.status === 503 && loadingPort === null) {
+            loadingPort = p;
           }
         } catch {
           // port not live — continue
         }
+      }
+
+      if (loadingPort !== null) {
+        const waitMs = config.llamaCppStartupTimeoutMs ?? 120_000;
+        logger.info(`llama.cpp: port scan found loading server at ${loadingPort} — waiting up to ${waitMs}ms`);
+        if (await waitForServerReady(loadingPort, waitMs)) {
+          const candidate = `http://localhost:${loadingPort}`;
+          (config as any).llamaCppEndpoint = candidate;
+          await this.refreshModels();
+          if (this.cachedModels.length > 0) {
+            logger.info(`llama.cpp: loading server on port ${loadingPort} is now ready`);
+            await this._runHealthProbe();
+            return;
+          }
+        }
+        logger.warn(`llama.cpp: timed out waiting for loading server on port ${loadingPort}; falling through to spawn`);
       }
     }
 

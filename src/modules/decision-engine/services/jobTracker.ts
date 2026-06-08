@@ -1,4 +1,5 @@
 import { logger } from '../../../utils/logger.js';
+import { config } from '../../../config/index.js';
 import { WebSocketServer } from 'ws';
 // Import this type but don't import the function directly to avoid circular dependency
 import type { BroadcastJobsFunction } from '../../websocket-server/ws-server-types.js';
@@ -67,8 +68,6 @@ export class JobTracker extends EventEmitter {
   private initialized = false;
   private wss: WebSocketServer | null = null;
   private websocketPort: number | null = null;
-  private readonly BASE_PORT = 8080;
-  private readonly MAX_PORT = 8180;
   // Store broadcast function dynamically to avoid circular dependency
   private broadcastFunction: BroadcastJobsFunction | null = null;
 
@@ -135,12 +134,13 @@ export class JobTracker extends EventEmitter {
   }
 
   private async findAvailablePort(): Promise<number> {
-    for (let port = this.BASE_PORT; port <= this.MAX_PORT; port++) {
+    const base = config.jobTrackerWsPort;
+    for (let port = base; port <= base + 10; port++) {
       if (await this.isPortAvailable(port)) {
         return port;
       }
     }
-    throw new Error(`No available ports found in range ${this.BASE_PORT}-${this.MAX_PORT}`);
+    throw new Error(`No available ports found near ${base} (tried ${base}-${base + 10})`);
   }
 
   public async initializeTracker(): Promise<void> {
