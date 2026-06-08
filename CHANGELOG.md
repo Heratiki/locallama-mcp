@@ -1,3 +1,10 @@
+## [1.31.4](https://github.com/Heratiki/locallama-mcp/compare/v1.31.3...v1.31.4) (2026-06-08)
+
+
+### Bug Fixes
+
+* **llama-cpp:** detect running servers via pgrep to prevent duplicate spawns ([d61e1bf](https://github.com/Heratiki/locallama-mcp/commit/d61e1bf7c85920b74ccece109d86fb076174d4d4))
+
 ## [1.31.3](https://github.com/Heratiki/locallama-mcp/compare/v1.31.2...v1.31.3) (2026-06-04)
 
 
