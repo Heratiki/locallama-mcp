@@ -17,7 +17,8 @@ handoff (`docs/HANDOFF.md`). The method: `~/.claude/multi-lane-orchestration.md`
 ### Agents
 
 The general agents live in `~/.claude/agents/`; a file of the same name in
-this repo's `.claude/agents/` wins.
+this repo's `.claude/agents/` wins. This repo has its own `lane-dev.md` and `ticket-writer.md`
+(GitHub issues only).
 
 | Agent | Model | Does | Never does |
 |---|---|---|---|

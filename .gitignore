@@ -1,5 +1,6 @@
 # Claude Code local project config (machine-specific paths, session state)
-.claude/
+.claude/*
+!.claude/agents/
 
 # AI agent local state/config (machine-specific; usually not useful in Git)
 .codex/
