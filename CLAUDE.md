@@ -21,9 +21,9 @@ this repo's `.claude/agents/` wins.
 
 | Agent | Model | Does | Never does |
 |---|---|---|---|
-| `lane-dev` | Sonnet (Opus on the call for a ticket with design inside) | Builds one ticket in its own worktree; runs the static gates; sets its ticket to `landed` | Runs the test harness; pushes; merges |
-| `ticket-writer` | Sonnet, low | Writes `docs/tickets/T-NNN-*.md`, its test stub, ADR text when asked | Invents a ruling; edits code |
-| `lane-verifier` | Sonnet, low | Checks one lane branch against main and its ticket; PASS or FAIL | Edits, merges or commits |
+| `lane-dev` | Sonnet (Opus on the call for an issue with design inside) | Builds one GitHub issue in its own worktree; runs the static gates; commits with `Refs #<N>` | Runs the test harness; pushes; merges |
+| `ticket-writer` | Sonnet, low | Writes a GitHub issue body (acceptance criteria, owned paths, rulings), ADR text when asked; never a `docs/tickets/` file | Invents a ruling; edits code |
+| `lane-verifier` | Sonnet, low | Checks one lane branch against main and its GitHub issue; PASS or FAIL | Edits, merges or commits |
 | `suite-verifier` | Sonnet, low | The only agent that runs the test harness; faithful counts and causes | Fixes a failure; re-runs to make it pass |
 
 Every Agent call names `model`. A new or changed agent file loads only after
@@ -45,14 +45,18 @@ file's text in the brief.
 - **Design questions go to the maintainer** (AskUserQuestion, 1-2 per round,
   recommended option first), never to a lane. With the maintainer away,
   decisions go in `docs/agents/decisions-YYYY-MM-DD.md` with a revert note.
-- **Tickets:** `docs/agents/ticket-format.md`; the linter is `ticket_lint`
-  below. Queue: `docs/agents/work-ledger.md`. Models:
+- **Work items are GitHub issues** (`docs/agents/issue-tracker.md`), not
+  `docs/tickets/` files. One lane branch (`lane/issue-<N>`) and one PR per
+  issue; the PR body says `Closes #<N>`. Every brief carries the issue number
+  and the text of `gh issue view <N> --comments`. The global agents name
+  `docs/tickets/`; in this repo, read "ticket" as "GitHub issue".
+  Queue: `docs/agents/work-ledger.md`. Models:
   `docs/agents/model-register.md`. External lanes: docs/agents/external-lanes.md.
 
 ### The rhythm of a wave
 
-1. Tickets with recorded rulings; the ticket linter passes.
-2. One `lane-dev` per ticket, in parallel, in the background.
+1. GitHub issues with recorded rulings, acceptance criteria and owned paths.
+2. One `lane-dev` per issue, in parallel, in the background.
 3. As each returns: `lane-verifier` on its branch (and an adversarial review
    by a different strong model on a risky merge), `git merge --no-ff`, the
    `gates` at HEAD, then `suite-verifier` with a FULL run. Main is frozen
@@ -72,8 +76,8 @@ worktree path.
 ```yaml
 gates:                       # static gates, run by every lane, by lane-verifier and on main after a merge
   - npx tsc --noEmit
-  - node scripts/check-tickets.mjs
-ticket_lint: node scripts/check-tickets.mjs
+ticket_lint: none
+tracker: github                      # work items are GitHub issues (gh); no docs/tickets/
 test_paths: test/**/*.test.ts           # globs of test files (lane-verifier's test-only-fix check)
 test_full: npm run build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs             # the full suite; only suite-verifier or the orchestrator runs it
 test_scoped: npm run build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs {tests}         # e.g. "npm test -- {tests}"; none if the runner has no scoped mode

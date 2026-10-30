@@ -64,14 +64,14 @@ the `lanes` tool.
 
 | Work | Route |
 |---|---|
-| Ticket with written acceptance, bounded files | Claude `lane-dev`, Sonnet |
-| Ticket with design decisions inside | Claude `lane-dev`, Opus |
+| Issue with written acceptance, bounded files | Claude `lane-dev`, Sonnet |
+| Issue with design decisions inside | Claude `lane-dev`, Opus |
 | Hard or order-sensitive diagnosis; second implementation; long refactor | codex workhorse, high |
 | Adversarial review of a risky lane before merge | codex (a different model from the builder) |
 | Simple research, audits, drafts, bounded reading | agy Gemini Flash FIRST |
-| Bounded build or fix with a written ticket, when the Claude or codex pool is high | opencode, `opencode-go/` or `zai-coding-plan/` model |
+| Bounded build or fix with a written issue, when the Claude or codex pool is high | opencode, `opencode-go/` or `zai-coding-plan/` model |
 | Harder research after a measured Flash failure | agy Pro-class |
-| Tickets and ADR prose | Claude `ticket-writer` |
+| Issue bodies and ADR prose | Claude `ticket-writer` |
 | Test runs | Claude `suite-verifier` |
 | Verdicts: design rulings, play/visual pass-fail | the maintainer |
 

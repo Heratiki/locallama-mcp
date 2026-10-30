@@ -31,7 +31,6 @@
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config=jest.config.mjs --watch",
     "lint": "eslint src/**/*.ts test/**/*.ts",
     "lint:fix": "eslint src/**/*.ts test/**/*.ts --fix",
-    "check:tickets": "node scripts/check-tickets.mjs",
     "organize-benchmarks": "node organize-benchmark-results.js",
     "benchmark": "npm run build && node run-benchmarks.js",
     "benchmark:comprehensive": "npm run build && node run-benchmarks.js comprehensive",

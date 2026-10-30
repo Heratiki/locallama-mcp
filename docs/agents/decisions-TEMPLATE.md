@@ -7,7 +7,7 @@ here is pushed until the maintainer has reviewed it.
 
 The maintainer said: "<their words, quoted>"
 
-| # | Time (Z) | Ticket | Decision | Why | Revert |
+| # | Time (Z) | Issue | Decision | Why | Revert |
 |---|---|---|---|---|---|
 | 1 | | | | | |
 

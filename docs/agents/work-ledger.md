@@ -15,7 +15,7 @@ fails, and when the maintainer rules. Procedure:
 
 ## Next waves
 
-| Ticket | Route | State | Next |
+| Issue | Route | State | Next |
 |---|---|---|---|
 | | | | |
 

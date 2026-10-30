@@ -9,7 +9,7 @@ with the `lanes` tool, `prompt: "@<abs>/.scratch/lanes/<id>/BRIEF.md"`.
 
 ---
 
-# Lane <id>: <ticket title>
+# Lane <id>: #<N> <issue title>
 
 You are a lane in /home/heratiki/Source/locallama-mcp (LocaLLama MCP: a TypeScript MCP server that routes coding tasks between local LLMs and paid APIs). Work only in
 `<absolute worktree path>` on branch `lane/<id>`. Do not stop to ask; if a
@@ -17,7 +17,8 @@ ruling is missing, write the question in REPORT.md and stop that part.
 
 ## Read first
 
-- `<abs>/docs/tickets/<T-NNN-*.md>` — your contract.
+- GitHub issue #<N> — your contract. Its text (`gh issue view <N> --comments`)
+  is pasted below under "Issue".
 - `<abs>/CLAUDE.md` — conventions and the "do not change" rules.
 - `<abs>/.scratch/lanes/<id>/GATES.md` — your gates.
 
@@ -52,13 +53,13 @@ Fixed gates for every code lane:
       EVIDENCE: pending
 
     - [ ] G2: Static gates pass.
-      CHECK: npx tsc --noEmit && node scripts/check-tickets.mjs && echo STATIC-OK
+      CHECK: npx tsc --noEmit && echo STATIC-OK
       EXPECT: STATIC-OK
       EVIDENCE: pending
 
-    - [ ] G3: The ticket Status is landed.
-      CHECK: grep -m1 '^Status:' <ticket path>
-      EXPECT: Status: landed (lane/<id>, <date>)
+    - [ ] G3: Every lane commit refers to the issue.
+      CHECK: git log main..HEAD --format=%B | grep -c 'Refs #<N>'
+      EXPECT: a count equal to the number of lane commits
       EVIDENCE: pending
 
 Lane gates (one per acceptance criterion and ruling):
