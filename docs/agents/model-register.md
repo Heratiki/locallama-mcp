@@ -48,3 +48,21 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | Gemini Flash (high) | Research, audits, drafts (Flash first for simple work) | ? | | Ends turns early; expect a nudge. |
 
 ### Evidence
+
+| Ended | Lane | Kind | Model | Effort | Task | Pool | Outcome | Wall (min) | 5h (pp) | Week (pp) | Marks |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-30T01:08Z | agent-ad327ab5 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 25.3 | 1.7 | 0 | split, lane=orchestration-drift, gates=13 |
+| 2026-10-30T01:19Z | agent-a4eca8ca | claude | claude-sonnet-5-5 | low | verify | claude | completed | 9.8 | 0 | 0 | split, lane=orchestration-drift |
+| 2026-10-30T03:18Z | agent-a2701bf6 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 144.1 | 3.1 | 0.3 | split, lane=pools-always, gates=28 |
+| 2026-10-30T01:32Z | agent-a7cdf575 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 9.2 | 0.3 | 0 | split, lane=pools-always |
+| 2026-10-30T03:23Z | agent-af065056 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 123.8 | 3.2 | 0.7 | split, lane=orchestration-drift |
+| 2026-10-30T02:12Z | agent-ab80997b | claude | claude-sonnet-5-5 | low | verify | claude | completed | 17.8 | 0 | 0 | split, reset, lane=pools-always |
+| 2026-10-30T02:38Z | agent-a01b0fe6 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 39.2 | 1 | 0 | split, reset, lane=orchestration-drift |
+| 2026-10-30T02:53Z | agent-a3e19427 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 22.3 | 0.6 | 0.3 | split, lane=pools-always |
+| 2026-10-30T03:59Z | agent-a79e1dda | claude | claude-sonnet-5-5 | low | verify | claude | completed | 35.1 | 0 | 0 | split |
+| 2026-10-30T04:02Z | agent-a02edfd7 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 41.9 | 0.8 | 0 | split, lane=pools-always, gates=8 |
+| 2026-10-30T04:07Z | agent-a4799ed8 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 4.9 | 0 | 0 | split, lane=pools-always |
+| 2026-10-30T04:57Z | agent-a27cd1ab | claude | claude-sonnet-5-5 | medium | build | claude | completed | 32.3 | 1 | 0 | split, reset, lane=flaky-tests, gates=11 |
+| 2026-10-30T04:52Z | opencode-pid2158538 | opencode | ? | ? | ? | opencode | exited | 0.1 | 0 | 0 | shared |
+| 2026-10-30T04:58Z | agent-ab8a5d2b | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=flaky-tests |
+<!-- generated from model-register.runs.json; edit with register.py, not by hand -->

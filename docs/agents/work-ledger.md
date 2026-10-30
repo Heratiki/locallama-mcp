@@ -8,6 +8,7 @@ fails, and when the maintainer rules. Procedure:
 
 1. `~/.claude/lane-usage.sh`; log the line (memory `lane-usage-tally`,
    "Pool readings"). Baseline 2026-10-29: `claude5hUsed=2% claudeWkUsed=65% gemini5h=100% geminiWk=86% codex5hUsed=0.0% codexWkUsed=12.0% zaiWkUsed=31.0% go5hUsed=0.0% goWkUsed=11.0% goMoUsed=5.0%`.
+   Close 2026-10-30T05:26Z: `claude5hUsed=18% claudeWkUsed=69% gemini5h=99% geminiWk=86% codex5hUsed=16.0% codexWkUsed=16.0% zai5hUsed=42.0% zaiWkUsed=39.0% go5hUsed=0.0% goWkUsed=11.0% goMoUsed=5.0%`.
 2. Check the model lists (`codex debug models`, `agy models`, the Claude
    models in the session) against the register.
 3. If this repo uses external lanes: the `lanes` tool `list` (and the tmux
@@ -35,3 +36,12 @@ One line each: what to check, where, and which ticket it closes.
 
 Newest first: `## Wave N — <date>, <pushed at sha | NOT pushed>` and one line
 per ticket.
+
+## Wave 0 — 2026-10-29/30, setup only, pushed at 9f2ce2d
+
+- Bootstrap (95e809a), settings.local untracked (d63ef27), GitHub issues
+  as work items (d87e099), repo `lane-dev`/`ticket-writer` (9f2ce2d).
+- The lanes of this session built lane-panel work (repo `~/Source/lane-panel`,
+  all merged and pushed there); their register lines are in
+  `model-register.md`. No locallama-mcp code changed.
+
