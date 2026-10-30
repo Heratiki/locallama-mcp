@@ -132,3 +132,7 @@ locallama.log.3.gz
 locallama.log.4.gz
 .claude/settings.local.json
 .claude/settings.local.json
+.unlazy/
+.unlazy-hook-state.json
+.claude/worktrees/
+.scratch/
