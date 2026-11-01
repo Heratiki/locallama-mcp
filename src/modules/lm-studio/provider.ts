@@ -45,6 +45,7 @@ class LMStudioProvider implements LLMProvider {
   async isAvailable(): Promise<boolean> {
     if (!config.lmStudioEndpoint) return false;
     try {
+      if (await lmStudioModule.isConnectionRefused()) return false;
       const models = await lmStudioModule.getAvailableModels();
       return models.length > 0;
     } catch {
@@ -53,6 +54,8 @@ class LMStudioProvider implements LLMProvider {
   }
 
   async listModels(): Promise<ProviderModel[]> {
+    // Nothing listening: the stored models are not live, so list none (#156).
+    if (await lmStudioModule.isConnectionRefused()) return [];
     const models = await lmStudioModule.getAvailableModels();
     return models.map((m) => ({
       id: m.id,

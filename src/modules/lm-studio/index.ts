@@ -588,6 +588,26 @@ export const lmStudioModule = {
   },
 
   /**
+   * Live probe: true only when the LM Studio port refuses the connection
+   * (nothing listening). A timeout, HTTP error or any other failure returns
+   * false so those cases keep the cached-model behaviour (#156).
+   */
+  async isConnectionRefused(): Promise<boolean> {
+    if (!config.lmStudioEndpoint) return false;
+    const baseUrl = config.lmStudioEndpoint.endsWith('/v1')
+      ? config.lmStudioEndpoint
+      : `${config.lmStudioEndpoint}/v1`;
+    try {
+      await axios.get(`${baseUrl}/models`, { timeout: 2000, headers: { Accept: 'application/json' } });
+      return false;
+    } catch (error) {
+      const refused = axios.isAxiosError(error) && error.code === 'ECONNREFUSED';
+      if (refused) logger.warn('LM Studio connection refused; treating it as not running');
+      return refused;
+    }
+  },
+
+  /**
    * Get all available models from LM Studio
    */
   async getAvailableModels(): Promise<Model[]> {
