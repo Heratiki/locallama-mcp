@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import { CodeSearchEngine, CodeSearchEngineOptions, CodeSearchResult } from './codeSearch.js';
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
 import { loadUserPreferences } from '../user-preferences/index.js';
 import * as path from 'path';
-import { IndexingResult } from './bm25.js';
+import { BM25Searcher, IndexingResult } from './bm25.js';
 
 /**
  * Singleton wrapper for CodeSearchEngine to ensure consistent access across the application
@@ -355,4 +356,70 @@ export async function indexDocuments(documents: { content: string, path: string,
     logger.error('Error indexing documents:', error);
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Research-notes BM25 index (#155)
+// ---------------------------------------------------------------------------
+
+/**
+ * One helped research note as a searchable document. `path` is the conceptual
+ * document path (research-note:<id>) required by maintainer ruling 5; the
+ * index keys results by id.
+ */
+export interface ResearchNotesIndexItem {
+  /** research_notes.id */
+  id: number;
+  /** Written repo_path of the note; used for repo-scope reuse filtering. */
+  repoPath: string;
+  /** Note source: 'repo' is repo-scoped, everything else is shared scope. */
+  source: string;
+  /** research-note:<id> */
+  path: string;
+  /** signature + query + info — what BM25 ranks. */
+  content: string;
+}
+
+/**
+ * Deliberately separate from the repo code index above so repo code search is
+ * never polluted: it only ever holds helped research notes, and it is rebuilt
+ * from the research_notes table at first use (#155 criterion 12f).
+ */
+export class ResearchNotesIndex {
+  private searcher = new BM25Searcher();
+  private items: ResearchNotesIndexItem[] = [];
+  private fingerprint = '';
+
+  /** Rebuild when the helped-note set changed (first use, new helped note, eviction). */
+  public async sync(items: ResearchNotesIndexItem[]): Promise<void> {
+    const fingerprint = JSON.stringify(items.map(item => [item.id, item.repoPath, item.source, item.path,
+      createHash('sha256').update(item.content).digest('hex')]));
+    if (fingerprint === this.fingerprint) return;
+    this.items = items;
+    this.fingerprint = fingerprint;
+    if (items.length === 0) return;
+    await this.searcher.indexDocuments(items.map(item => item.content));
+  }
+
+  /** Top matching helped notes; zero-score hits are excluded by the engine. */
+  public async search(query: string, topK = 5): Promise<ResearchNotesIndexItem[]> {
+    if (this.items.length === 0) return [];
+    const results = await this.searcher.search(query, topK);
+    return results.map(result => this.items[result.index]).filter(item => item !== undefined);
+  }
+
+  /** Forget everything (test seam and empty-table reset). */
+  public reset(): void {
+    this.items = [];
+    this.fingerprint = '';
+    this.searcher = new BM25Searcher();
+  }
+}
+
+let researchNotesIndex: ResearchNotesIndex | undefined;
+
+/** Process-wide notes index, rebuilt from the research_notes table at first use. */
+export function getResearchNotesIndex(): ResearchNotesIndex {
+  researchNotesIndex ??= new ResearchNotesIndex();
+  return researchNotesIndex;
 }

@@ -74,8 +74,13 @@ This PRD does not fix findings F2, F3, F5, F6 in the `route_task` path.
 9. Pass: LocalLama makes the diff (§5.2) and the Job completes.
 10. Fail: the ladder (§5.5) picks the model for the next attempt; go to
     step 5.
-11. Budget ends, ladder ends, or cancel: the Job ends with a diagnosis.
-12. The worker removes the worktree after the last process has exited (§5.10).
+11. **Stuck research (#155):** between attempts, when the same failing check
+    or apply error repeats, the harness may run a bounded research step
+    (local BM25, dependency docs, `pydoc`/`go doc`/`man`, and a user-provided
+    SearXNG) and add a "Research notes" section to the next prompt. Off by
+    default; see `wiki/12-patch-tasks.md`.
+12. Budget ends, ladder ends, or cancel: the Job ends with a diagnosis.
+13. The worker removes the worktree after the last process has exited (§5.10).
     `PATCH_KEEP_WORKSPACE_ON_FAIL=true` keeps it for debug.
 
 ## 5. Components
@@ -123,6 +128,7 @@ for a Job with `kind = 'patch'` (today it calls `String(parsed)`, which gives
   "cost_usd": 0,
   "elapsed_ms": 812000,
   "diagnosis": null
+  // "research": [ { "schema": "patch_research_v1", ... } ]  // #155: present when research ran
 }
 ```
 
@@ -271,6 +277,10 @@ All in `jobs.db`, additive (separate `CREATE TABLE IF NOT EXISTS` and
   `cost_class`, `prompt_tokens`, `completion_tokens`, `cost_usd`,
   `edit_blocks`, `outcome`, `apply_error`, `checks_json`, `duration_ms`,
   `started_at`, `ended_at`.
+- `research_notes` (#155): `id`, `job_id`, `attempt_n`, `created_at`,
+  `repo_path`, `reason`, `query`, `source`, `info`, `helped`. One row per
+  query/source that returned information; `helped` is 1 when the consuming
+  attempt passed, 0 when the task ended without that, NULL while pending.
 
 The worker writes `attempts_used` and the cursor before each model call, so
 an attempt in flight at a crash counts as used.

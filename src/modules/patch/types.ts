@@ -92,7 +92,45 @@ export interface PatchDiagnosis {
     provider_id: string;
     outcome: AttemptOutcome;
     duration_ms: number;
+    /** Research record when this attempt used harness research (#155). */
+    research?: ResearchRecord;
   }[];
+}
+
+/** Research sources (#155 ruling 1 and 3): local first, SearXNG only when configured. */
+export type ResearchSourceKind = 'searxng' | 'repo' | 'deps' | 'pydoc' | 'go doc' | 'man';
+
+export type ResearchSourceStatus = 'ran' | 'skipped' | 'timed_out' | 'error';
+
+/** One source execution within a stuck-event research run. */
+export interface ResearchSourceRun {
+  source: ResearchSourceKind;
+  query: string;
+  status: ResearchSourceStatus;
+  /** Skip reason ('tool_missing', 'no node_modules', …) or error detail. */
+  detail?: string;
+  /** Bounded, redacted text that entered the research block. */
+  info?: string;
+}
+
+/**
+ * Harness research record (#155), stored in the using attempt's meta JSON and
+ * the task result. All fields are redacted before they are stored or sent.
+ */
+export interface ResearchRecord {
+  schema: 'patch_research_v1';
+  /** Stuck rule that fired plus the normalized, redacted error signature. */
+  reason: string;
+  /** Queries as sent (redacted, capped, deterministic). */
+  queries: string[];
+  /** Every source that ran, was skipped or timed out. */
+  sources: ResearchSourceRun[];
+  /** The bounded text block added to the next attempt's prompt. */
+  block: string;
+  /** Helped note reused through the BM25 notes index, when one matched. */
+  reusedNoteId?: number;
+  /** New note IDs whose complete info survived assembly and prompt fitting. */
+  usedNoteIds?: number[];
 }
 
 /** Exact Job result JSON envelope from PRD 01 §5.1. */
@@ -125,4 +163,6 @@ export interface PatchResultV1 {
   cost_usd: number;
   elapsed_ms: number;
   diagnosis: PatchDiagnosis | null;
+  /** Research records used by attempts, in order (#155). Absent when research never ran. */
+  research?: ResearchRecord[];
 }
