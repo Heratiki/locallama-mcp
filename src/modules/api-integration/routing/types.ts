@@ -3,6 +3,7 @@ import { CostEstimationResult } from '../cost-estimation/types.js';
 import { RetrivSearchResult } from '../retriv-integration/types.js';
 import { DecomposedCodeTask } from '../../decision-engine/types/codeTask.js';
 import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus } from '../../job-store/types.js';
+import type { PatchResultV1 } from '../../patch/types.js';
 
 export interface RouteTaskParams {
   task: string;
@@ -92,7 +93,8 @@ export interface TaskStatusJobSummary {
   status: PersistedJobStatus;
   provider?: string;
   model?: string;
-  result?: string;
+  /** Route Jobs: the result text. Patch Jobs (kind = 'patch'): the parsed patch_result_v1 object. */
+  result?: string | PatchResultV1;
   error?: string;
   progress_pct: number;
 }
