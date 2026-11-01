@@ -125,9 +125,50 @@ describe('codeTaskCoordinator probe fallback for models whose provider is the mo
     _setProviderRegistryForTests(undefined);
   });
 
-  it('finds the provider through the qualified id probe when supportsModel only recognizes prefixed ids', async () => {
+  it('ignores an earlier prefix-accepting provider and picks the later provider that actually owns the model', async () => {
+    // Review of 273c0e3: probing the provider-qualified id
+    // (`${p.id}:${bareId}`) matches the FIRST registered provider for ANY
+    // model, because providers like ollama accept every id carrying their
+    // own prefix (src/modules/ollama/provider.ts:60-63). The probe must not
+    // route on that signal: the provider that lists the model must win.
+    const prefixAcceptingFirst = makeOllamaLikeProvider({
+      // Mirrors the real OllamaProvider with a cold cache: bare ids are
+      // rejected, but EVERY `ollama:`-prefixed id is accepted.
+      supportsModel: jest.fn().mockImplementation((modelId: string) => modelId.startsWith('ollama:')),
+      // This provider does NOT list the target model.
+      listModels: jest.fn().mockResolvedValue([
+        { id: 'mistral:7b', displayName: 'Mistral 7B' },
+      ]),
+      // If wrongly chosen, this must not produce a passing result.
+      executeTask: jest.fn(),
+    });
+    const owningLaterProvider = makeOllamaLikeProvider({
+      id: 'lm-studio',
+      displayName: 'LM Studio',
+      // Cold cache: rejects the bare id; lists the model authoritatively.
+      supportsModel: jest.fn().mockReturnValue(false),
+      listModels: jest.fn().mockResolvedValue([
+        { id: 'llama3.2:3b', displayName: 'Llama 3.2 3B' },
+      ]),
+    });
+    installRegistry([prefixAcceptingFirst, owningLaterProvider]);
+
+    const result = await codeTaskCoordinator.executeSubtask(subtask, modelWithProviderAsModelId);
+
+    expect(result).not.toMatch(/^Error:/);
+    expect(prefixAcceptingFirst.executeTask).not.toHaveBeenCalled();
+    expect(owningLaterProvider.listModels).toHaveBeenCalled();
+    expect(owningLaterProvider.executeTask).toHaveBeenCalledWith(
+      'llama3.2:3b',
+      expect.stringContaining('slugify'),
+      expect.objectContaining({ timeoutMs: 5000 }),
+    );
+  });
+
+  it('finds the provider via its model list when supportsModel only recognizes prefixed ids', async () => {
     // Mirrors the real OllamaProvider with a cold model cache:
-    // bare ids are rejected, `ollama:`-prefixed ids are accepted.
+    // bare ids are rejected, `ollama:`-prefixed ids are accepted. The bare-id
+    // probe must miss and the authoritative listModels() match must find it.
     const provider = makeOllamaLikeProvider({
       supportsModel: jest.fn().mockImplementation((modelId: string) => modelId.startsWith('ollama:')),
     });
@@ -136,6 +177,7 @@ describe('codeTaskCoordinator probe fallback for models whose provider is the mo
     const result = await codeTaskCoordinator.executeSubtask(subtask, modelWithProviderAsModelId);
 
     expect(result).not.toMatch(/^Error:/);
+    expect(provider.listModels).toHaveBeenCalled();
     expect(provider.executeTask).toHaveBeenCalledWith(
       'llama3.2:3b',
       expect.stringContaining('slugify'),

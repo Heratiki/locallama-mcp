@@ -454,12 +454,13 @@ Rules:
 
         let found = false;
         for (const p of registry.list()) {
-          // supportsModel() answers from the provider's warm id cache and some
-          // providers only recognize their own qualified form (`ollama:<id>`),
-          // so probe both the bare and the provider-qualified id (issue #150).
-          const supports =
-            (await p.supportsModel(bareId)) || (await p.supportsModel(`${p.id}:${bareId}`));
-          if (!supports) continue;
+          // Cheap warm-cache probe on the bare id only. Do NOT probe the
+          // provider-qualified form (`${p.id}:${bareId}`) here: providers
+          // such as ollama accept ANY id carrying their own prefix
+          // (ollama/provider.ts:60-63), so a qualified probe returns true
+          // for the FIRST registered provider regardless of who owns the
+          // model (issue #150 fix round).
+          if (!(await p.supportsModel(bareId))) continue;
 
           logger.info(`Falling back to provider '${p.id}' for model ${bareId}`);
           resultText = await executeViaProvider(p);
@@ -468,10 +469,11 @@ Rules:
         }
 
         if (!found) {
-          // Cache-based probes all missed. Refresh each provider's model list
-          // and match the bare id directly: after a cold start (or when the
-          // model was pulled after startup) supportsModel() returns false for
-          // a bare id even though the provider lists the model (issue #150).
+          // Cache-based probes all missed (cold cache, or the model was
+          // pulled after startup). Refresh each provider's model list and
+          // match the bare id against the ids the provider actually reports
+          // — the authoritative signal, unlike prefix-based supportsModel
+          // answers (issue #150).
           for (const p of registry.list()) {
             let listedModelIds: string[];
             try {

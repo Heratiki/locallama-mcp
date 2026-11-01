@@ -20,6 +20,20 @@ function toBenchmarkSummary(data: ModelPerformanceData): BenchmarkSummary {
   };
 }
 
+/**
+ * Resolve the provider of a model imported from benchmark results.
+ * The provider must come from the provider that reported the model (the
+ * ModelRegistry, seeded from provider `listModels()` before this service
+ * initializes) — never from the model id itself: splitting an ollama-style
+ * id on '-' returns the whole id (`llama3.2:3b`), producing records whose
+ * provider is the model id, which no provider registry can execute
+ * (issue #150). Falls back to 'unknown' when no provider reported the model.
+ */
+function providerForImportedModel(modelId: string): string {
+  const providerId = getModelRegistry().getModel(modelId)?.providerId;
+  return providerId && providerId !== modelId ? providerId : 'unknown';
+}
+
 interface ModelsDatabase {
   models: Record<string, ModelPerformanceData>;
   lastUpdate: number;
@@ -153,7 +167,7 @@ class ModelsDbService {
               this.database.models[modelId] = {
                 id: modelId,
                 name: modelId,
-                provider: modelId.split('-')[0] || 'unknown',
+                provider: providerForImportedModel(modelId),
                 lastSeen: new Date().toISOString(),
                 contextWindow: 4096, // Default
                 successRate: modelStats.successRate ?? 0,
