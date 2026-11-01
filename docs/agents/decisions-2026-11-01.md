@@ -54,6 +54,7 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 06:01 | #151 merged | `61010ed`; lane-verifier PASS; suite green. Text-match failure detection kept as a ledger follow-up (patch_task does not use this path) | Bounded review rounds (memory) | `git revert -m1 61010ed` |
 | 06:01 | #147 | lane-dev Opus (public MCP tool + src/index.ts: the riskiest integration) | CLAUDE.md: Opus for an issue with design inside; Claude week 3% | stop agent |
 | 06:05 | #148 part A merged | `69502ed`; lane-verifier PASS; dry run: 10 requests, both baselines pass, 10 hidden tests fail before a patch; no process or temp folder left | Gates, review | `git revert -m1 69502ed` |
+| 06:05 | Beyond PRD 01 | G1 (measure the savings) issue via ticket-writer, to build after #147; PRD 02 draft for G7/G8 via agy Sonnet (docs only, rulings left to the maintainer). F5/F6 not worked (not approved) | Roadmap order puts G1 first; G7/G8 need maintainer rulings | Close the issue / delete the draft |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
@@ -98,6 +99,10 @@ server (pid 3872940, started 04:21Z, older than `dist/` of 04:26Z). Log:
 Maintainer note (2026-11-01): they use llama.cpp through llama-router, not Ollama.
 
 ## Waits for the maintainer
+
+- **PRD 02 draft** (`docs/prd/02-free-pool-and-old-hardware.md`, G7 + G8): §12 lists 10 rulings, each with a recommended option (first free providers; Gemini data-use opt-in; patient wait; 8 GB default model Granite 4.2 3B; npm `locallama setup`; first-run report; llama.cpp first; model download consent; free-provider descriptor file; ladder spread across providers). Nothing in G7/G8 is built until you rule. Then an adversarial review and issues.
+
+- F5 (ladder ranks tinyllama 1.1B as `best`) and F6 (`get_system_state` shows OpenRouter as `paid` under free-only): found in the live run, not approved for fixing. File and fix them?
 
 - `~/.claude/skills/watch/watch.sh`: the `file` kind printed `WATCH OK` for lane issue-151, whose `exit.json` held `"code": 1, "failed": true` (Z.ai 429). A pattern cannot fix it (the kind does not read content). Suggest a lane-exit kind that reads `exit.json` and gives `WATCH FAIL` on a non-zero code. Outside the repo, so not changed. The steward reads `exit.json` after every lane end.
 
