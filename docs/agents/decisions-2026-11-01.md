@@ -64,6 +64,11 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 06:24 | #153 merged | `5a5d981`; lane-verifier PASS (no seeded/rate_model score reaches the ladder); full suite 92/92, 736/736 | Gates, review, suite | `git revert -m1 5a5d981` |
 | 06:25 | Live verification after #153 | `ts-slug`, 3 attempts max: PASSED in 1 attempt on `llama-cpp:gemma-4-12B-it-qat-UD-Q4_K_XL`, 418 local tokens, 39 s, $0; diff applied, checks re-run, hidden test passed. First working patch at $0 | Product verification | — |
 | 06:25 | Full seed protocol | 10 requests × 3 reps × 2 conditions (1 and 12 attempts), local only (GPU, not the floor), background, 3 h cap | PRD 01 §9.1 criterion 16 | — |
+| 06:55 | Merge freeze | No merge to main while the seed run runs: a merge rebuilds `dist/` (git hook), and each seed condition starts a server from `dist/` | Keep one build per measurement | — |
+| 06:55 | #152 | lane-verifier PASS; steward added `task_type` to the patch_task input schema (one line) and the schema test's expected list (`bc68bbe`, `1dada55`; 24 tests pass). Merge waits for the seed run | Discoverability for weak clients | — |
+| 06:59 | Seed run 1 result | 12 attempts: 29/30 passed (0.97), 59 s and 547 local tokens per pass, $0, almost all on attempt 1 with `llama-cpp:gemma-4-12B`. 1 attempt: 0/30, all on `ollama:mistral:7b`. NOT a valid comparison: in condition 1 the llama.cpp probe timed out at start (cold router load > 10 s), so the ladder had no llama.cpp models. Re-run after #154 | Logs read before naming a cause | — |
+| 06:59 | F9 → #154 | llama.cpp router probe marks the provider unhealthy on a cold start and loads an unused model; filed #154; OC-Go kimi-k2.7-code lane | Fix new problems first | Close #154 |
+| 06:59 | Pools | agy-Claude 5h/week at the limit (hook); Z.ai 5h at limit until 09:51Z; builds on OC-Go and codex | Pool limits | — |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
@@ -104,6 +109,7 @@ server (pid 3872940, started 04:21Z, older than `dist/` of 04:26Z). Log:
 | F5 | 2 | Ladder puts `tinyllama` (1.1B) as `best`, above `mistral:7b-instruct` | `route_task` response `ranked_trio` |
 | F7 | env? | Free OpenRouter models fail with 404 `No allowed providers are available for the selected model` (new key works; no 401) | log 04:57:52, 04:57:54. Likely the account's privacy setting for free endpoints; not confirmed |
 | F8 | 1 | Patch ladder picks tinyllama (no code benchmark) first; llama.cpp scores missed (`.gguf` id) — issue #153 | first live seed run, benchmarks.db rows |
+| F9 | 1 | llama.cpp router marked unhealthy on cold start (10 s probe) → patch ladder drops all llama.cpp models — #154 | seed run condition 1 vs 2 probe lines |
 | F6 | 2 | `get_system_state` shows OpenRouter as `paid` while `OPENROUTER_FREE_ONLY` defaults true | `get_system_state` response |
 
 Maintainer note (2026-11-01): they use llama.cpp through llama-router, not Ollama.
