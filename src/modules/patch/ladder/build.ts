@@ -1,5 +1,6 @@
 import type { LLMProvider, ProviderModel } from '../../core/provider/types.js';
 import type { LadderEntry } from '../types.js';
+import { benchmarkCodeScore, normalizeModelId, parseParamsB, type ModelMetaLike } from './model-match.js';
 
 /** What the ladder needs from ProviderRegistry. */
 export interface LadderProviders {
@@ -8,7 +9,9 @@ export interface LadderProviders {
 
 /** What the ladder needs from ModelRegistry. */
 export interface LadderModelScores {
-  getModel(modelId: string): { capabilities?: { scores?: { code?: number } } } | undefined;
+  getModel(modelId: string): ModelMetaLike | undefined;
+  /** When present, scores are also matched across provider prefix and `.gguf` (#153). */
+  listAll?(): ModelMetaLike[];
 }
 
 export interface BuildLadderOptions {
@@ -24,7 +27,10 @@ export interface BuildLadderOptions {
 
 interface Candidate {
   entry: LadderEntry;
+  /** Benchmark-derived code score; -Infinity when none. */
   score: number;
+  /** Parameter size in billions; 0 when unknown. Ranks models with no score. */
+  size: number;
   order: number;
 }
 
@@ -58,7 +64,7 @@ async function listSafe(provider: LLMProvider): Promise<ProviderModel[]> {
 function rank(list: Candidate[], keep: number): LadderEntry[] {
   const seen = new Set<string>();
   const out: LadderEntry[] = [];
-  const sorted = [...list].sort((a, b) => b.score - a.score || a.order - b.order);
+  const sorted = [...list].sort((a, b) => b.score - a.score || b.size - a.size || a.order - b.order);
   for (const c of sorted) {
     if (out.length >= keep) break;
     if (seen.has(c.entry.model_id)) continue;
@@ -70,7 +76,10 @@ function rank(list: Candidate[], keep: number): LadderEntry[] {
 
 /**
  * Build the patch ladder: local, then free, then (opt-in) paid.
- * Ranked by the ModelRegistry `code` score; no score ranks last.
+ * Ranked by the benchmark-derived `code` score (seeded or feedback scores do
+ * not count). Models with no score rank after the scored ones, by parameter
+ * size (bigger first), then provider order. Ids match stored scores across a
+ * provider prefix and `.gguf` suffix.
  * An empty result means ladder_exhausted at submit.
  */
 export async function buildLadder(opts: BuildLadderOptions): Promise<LadderEntry[]> {
@@ -78,32 +87,44 @@ export async function buildLadder(opts: BuildLadderOptions): Promise<LadderEntry
   const free: Candidate[] = [];
   const paid: Candidate[] = [];
   let order = 0;
+  // Normalized id -> best benchmark code score, from every registry entry.
+  const byNorm = new Map<string, number>();
+  for (const meta of opts.models.listAll?.() ?? []) {
+    const s = benchmarkCodeScore(meta);
+    if (s === undefined || !meta.id) continue;
+    const key = normalizeModelId(meta.id);
+    byNorm.set(key, Math.max(byNorm.get(key) ?? -Infinity, s));
+  }
   const scoreOf = (id: string): number => {
-    const s = opts.models.getModel(id)?.capabilities?.scores?.code;
-    return typeof s === 'number' && Number.isFinite(s) ? s : -Infinity;
+    const direct = benchmarkCodeScore(opts.models.getModel(id));
+    const viaNorm = byNorm.get(normalizeModelId(id));
+    return Math.max(direct ?? -Infinity, viaNorm ?? -Infinity);
   };
+  const sizeOf = (id: string): number =>
+    opts.models.getModel(id)?.parameters ?? parseParamsB(id) ?? 0;
 
   for (const provider of opts.providers.list()) {
     const isLocal = provider.isLocal || provider.costClass === 'local';
     const models = await listSafe(provider);
     for (const m of models) {
       const score = scoreOf(m.id);
+      const size = sizeOf(m.id);
       order += 1;
       if (isLocal) {
-        local.push({ entry: { model_id: m.id, provider_id: provider.id, cost_class: 'local' }, score, order });
+        local.push({ entry: { model_id: m.id, provider_id: provider.id, cost_class: 'local' }, score, size, order });
         continue;
       }
       const price = priceOf(provider, m);
       if (!price) continue;
       if (price.prompt === 0 && price.completion === 0) {
-        free.push({ entry: { model_id: m.id, provider_id: provider.id, cost_class: 'free' }, score, order });
+        free.push({ entry: { model_id: m.id, provider_id: provider.id, cost_class: 'free' }, score, size, order });
       } else {
         paid.push({
           entry: {
             model_id: m.id, provider_id: provider.id, cost_class: 'paid',
             prompt_price: price.prompt, completion_price: price.completion,
           },
-          score, order,
+          score, size, order,
         });
       }
     }

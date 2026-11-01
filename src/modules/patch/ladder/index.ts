@@ -7,3 +7,4 @@ export {
 export type { StopInput, StopReason } from './policy.js';
 export { PaidLedger, promptTokensOf } from './paid.js';
 export type { PaidState, PaidUsage, Reservation } from './paid.js';
+export { normalizeModelId, parseParamsB, benchmarkCodeScore } from './model-match.js';
