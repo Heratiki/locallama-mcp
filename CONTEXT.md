@@ -110,6 +110,40 @@ _Avoid_: Synchronous probe on request path, latency-coupled reminder injection
 The secondary real-time channel (ws://localhost:808x) that broadcasts Job progress updates. It is a server-local monitoring endpoint: remote clients may need forwarding before the URL is reachable. Complements, but does not replace, the primary MCP tool response path.
 _Avoid_: WebSocket server (ambiguous — the side channel is a specific role, not just a server)
 
+### Patch tasks
+
+**Patch Task**:
+A Task submitted through the `patch_task` MCP tool. It has a goal, a target git repo and one or more Checks. LocalLama grinds on it until a Check passes or the budget ends. The result is a diff or a Diagnosis. It never writes the user's working tree.
+_Avoid_: Route task (that is `route_task`, a different tool), patch job
+
+**Snapshot**:
+A git commit that holds the target repo as it is at submit time, including tracked changes and hinted untracked files. It is the base of every Attempt. Taking it does not change the user's tree, index, stash list or branches.
+_Avoid_: Backup, checkout, copy
+
+**Scratch Workspace**:
+A temporary `git worktree` made from the Snapshot, outside the target repo. Edit Blocks apply and Checks run here. The worker removes it after the last process exits.
+_Avoid_: Sandbox, temp dir, working copy
+
+**Edit Block**:
+A search/replace block that a model writes: a path, the exact old text and the new text. LocalLama applies the blocks and makes the real diff. Whole-file output is only the fallback for a new file or a small file.
+_Avoid_: Patch (the diff is made by LocalLama, not by the model), unified diff from the model
+
+**Check**:
+A command that LocalLama runs in the Scratch Workspace to judge an Attempt. It comes from the request or from `.locallama/checks.json`. Exit code 0 means pass. A Patch Task with no Check is refused.
+_Avoid_: Test (a Check can be a type check or a lint)
+
+**Attempt**:
+One model call with its Apply and Check run. It asks for a complete set of Edit Blocks against the Snapshot. After attempt 1 the prompt carries the last errors and the last Edit Blocks.
+_Avoid_: Retry, iteration
+
+**Patch Ladder**:
+The ordered list of models for a Patch Task: local models first, then free, then paid (only when allowed). Each model gets a set number of Attempts before the next one. The ladder is fixed at submit.
+_Avoid_: Fallback chain, ranked trio (that is the `route_task` path)
+
+**Diagnosis**:
+The result of a Patch Task that does not pass: the last errors, the best Attempt's result and the reason it stopped (budget, ladder end, deadline, paid cap or cancel).
+_Avoid_: Error report, failure message
+
 ## Example dialogue
 
 > **Dev:** I want to send a big refactor to a local model and keep working while it runs.
