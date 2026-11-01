@@ -3,14 +3,14 @@ import * as jobStore from '../../job-store/index.js';
 import { config } from '../../../config/index.js';
 import { getProviderRegistry, type ProviderRegistry } from '../../core/provider/registry.js';
 import { withSpan } from '../../telemetry/index.js';
-import { runChecks, loadChecksConfig } from '../checks/index.js';
+import { runChecks, loadChecksConfig, planLint } from '../checks/index.js';
 import { parseEditBlocks, applyEditBlocks } from '../edit-blocks/index.js';
 import { buildPrompt } from '../prompt/index.js';
 import { errorSignature, sameSignature, nextCursor, stopReason, pickValidator, hasBudgetNow } from '../ladder/index.js';
 import { detectStuck, runResearch } from '../research/index.js';
 import { truncateTail } from '../checks/output.js';
 import type {
-  AttemptOutcome, CheckResult, CheckSpec, ChecksConfig, EditBlock, LadderEntry, PatchDiagnosis, ResearchRecord, Workspace, WorkspaceBackend,
+  AttemptOutcome, CheckResult, CheckSpec, ChecksConfig, EditBlock, LadderEntry, LintSkipped, PatchDiagnosis, ResearchRecord, Workspace, WorkspaceBackend,
 } from '../types.js';
 import type { PatchAttemptRow } from '../../job-store/index.js';
 import {
@@ -121,7 +121,7 @@ export class PatchWorker {
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     let keepWorkspace = false;
     let errorTailTokens = 800;
-    const result: WorkerResult = {
+    const result: WorkerResult & { lint_skipped?: LintSkipped[] } = {
       schema: 'patch_result_v1', status: 'failed', reason: 'internal_error', diff: '', base: state.base_commit,
       files_changed: [], checks: [], attempts: state.attempts_used, models: [], tokens: { local: 0, free: 0, paid: 0 },
       cost_usd: state.paid_spent_usd, elapsed_ms: 0, diagnosis: null, validation: [],
@@ -146,6 +146,7 @@ export class PatchWorker {
       const ladder = JSON.parse(state.ladder_json) as LadderEntry[];
       const persistedChecks = JSON.parse(state.checks_json) as CheckSpec[] | ChecksConfig;
       const specs = Array.isArray(persistedChecks) ? persistedChecks : persistedChecks.checks;
+      const lint = Array.isArray(persistedChecks) ? undefined : persistedChecks.lint;
       const cap = request.paid_cap_usd ?? settings.patchPaidCapUsd;
       if (!Number.isFinite(cap) || cap < 0) throw new Error('Invalid paid cap');
       const allowed = (entry: LadderEntry): boolean => entry.cost_class !== 'paid' ||
@@ -332,7 +333,10 @@ export class PatchWorker {
               files = applied.files;
               // The runner stops at first failure. Invoke once per check so the
               // worker can wrap each command in its own telemetry span.
-              for (const spec of specs) {
+              // Opt-in auto lint is appended after the last explicit check passes.
+              const queue = [...specs];
+              for (let i = 0; i < queue.length; i++) {
+                const spec = queue[i];
                 await checkpoint();
                 const checked = await withSpan('patch.check', { 'job.id': jobId, 'check.name': spec.name }, () => runChecks([spec], {
                   worktree: ws!.path, changedFiles: files, envAllow, timeoutMs: settings.patchCheckTimeoutMs,
@@ -341,12 +345,17 @@ export class PatchWorker {
                 attemptChecks.push(...checked);
                 await checkpoint();
                 if (checked.length !== 1 || checked[0].exit_code !== 0 || checked[0].timed_out) break;
+                if (lint && i === specs.length - 1) {
+                  const plan = await planLint({ worktree: ws!.path, files, lint });
+                  result.lint_skipped = plan.skipped;
+                  queue.push(...plan.specs);
+                }
               }
               diff = await withSpan('patch.diff', { 'job.id': jobId }, () => this.options.backend.diff(ws!));
               await checkpoint();
               const passed = attemptChecks.filter(c => c.exit_code === 0 && !c.timed_out).length;
               if (passed > bestPassed) { bestPassed = passed; bestDiff = diff; }
-              if (passed !== specs.length) {
+              if (passed !== queue.length) {
                 outcome = attemptChecks.some(c => c.timed_out) ? 'timed_out' : 'check_failed';
                 error = attemptChecks.filter(c => c.exit_code !== 0 || c.timed_out).map(c => `${c.name}\n${c.tail}`).join('\n');
                 return;
@@ -503,7 +512,9 @@ export class PatchWorker {
       result.models = [...models.values()];
       if (researchUsed.length > 0) result.research = researchUsed;
       result.diagnosis = result.status === 'passed' ? null : {
-        last_errors: truncateTail(lastError, errorTailTokens), best_diff: bestDiff, attempts: summaries,
+        last_errors: truncateTail(lastError, errorTailTokens) + (result.lint_skipped?.length
+          ? `\nlint skipped: ${result.lint_skipped.map(s => `${s.tool} (${s.reason})`).join('; ')}` : ''),
+        best_diff: bestDiff, attempts: summaries,
       };
       // #155 criterion 12b: the task ended — any still-pending note never
       // helped its attempt and resolves to 0.
