@@ -55,6 +55,15 @@ The lane is done when its exit code is 0 and `result.md` is not empty. In a
 worktree, use the CLI: `lane.py start <worktree> opencode <id> "<label>"
 --model <provider/model> -- @<abs>/BRIEF.md`.
 
+## codex build lanes in a worktree (learned 2026-11-01)
+
+A worktree's git metadata lives in the main tree's `.git/worktrees/`, outside
+the worktree. Under `--sandbox workspace-write`, codex cannot write it, so it
+cannot commit (lane issue-138). Either the orchestrator commits the lane's
+owned paths for it (`git add <owned paths>`, a message that ends with
+`Refs #<N>`), or start a build lane with `--sandbox danger-full-access` when
+the brief allows commits. Review lanes stay `read-only`.
+
 ## tmux windows
 
 Not used in this repo (`tmux_session: none`). All external lanes run through
