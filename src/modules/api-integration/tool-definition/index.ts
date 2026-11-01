@@ -34,6 +34,7 @@ function patchTaskTool(): ITool {
         goal: { type: 'string', description: 'What to change, in plain words.' },
         repo_path: { type: 'string', description: 'Absolute path of the git repo root (inside PATCH_REPO_ROOTS).' },
         file_hints: { type: 'array', items: { type: 'string' }, description: 'Paths relative to repo_path to put in context.' },
+        task_type: { type: 'string', description: 'Optional label for savings stats (get_savings group_by task_type). Default: unspecified.' },
         checks: {
           type: 'array',
           description: 'Commands that must pass; win over .locallama/checks.json. argv arrays, no shell.',
