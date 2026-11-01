@@ -82,6 +82,26 @@ export interface Config {
   openRouterRateLimitPerMinute: number;
   providerHealthProbeIntervalMs: number;
 
+  // Patch tasks: startup-only settings; paid use additionally requires request opt-in.
+  patchTasksEnabled: boolean;
+  patchRepoRoots: string[];
+  patchKeepWorkspaceOnFail: boolean;
+  scratchDir: string;
+  patchLocalModels: number;
+  patchFreeModels: number;
+  patchPaidModels: number;
+  patchAttemptsPerModel: number;
+  patchMaxAttempts: number;
+  patchTaskTimeoutMs: number;
+  patchMaxOutputTokens: number;
+  patchContextTokens: number;
+  patchMaxConcurrent: number;
+  patchInferenceTimeoutMs: number;
+  patchCheckTimeoutMs: number;
+  patchErrorTailTokens: number;
+  patchWholeFileMaxLines: number;
+  patchPaidCapUsd: number;
+
   // Benchmark configuration
   benchmark: BenchmarkConfig;
 
@@ -174,6 +194,24 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'maxCacheSize',
   'logFile',
   'rootDir',
+  'patchTasksEnabled',
+  'patchRepoRoots',
+  'patchKeepWorkspaceOnFail',
+  'scratchDir',
+  'patchLocalModels',
+  'patchFreeModels',
+  'patchPaidModels',
+  'patchAttemptsPerModel',
+  'patchMaxAttempts',
+  'patchTaskTimeoutMs',
+  'patchMaxOutputTokens',
+  'patchContextTokens',
+  'patchMaxConcurrent',
+  'patchInferenceTimeoutMs',
+  'patchCheckTimeoutMs',
+  'patchErrorTailTokens',
+  'patchWholeFileMaxLines',
+  'patchPaidCapUsd',
 ] as const;
 
 export interface ReloadConfigResult {
@@ -289,6 +327,26 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     openRouterFreeOnly: parseBool(env.OPENROUTER_FREE_ONLY, true),
     openRouterRateLimitPerMinute: parseNumber(env.OPENROUTER_RATE_LIMIT_PER_MINUTE, 10, 0, 600),
     providerHealthProbeIntervalMs: parseNumber(env.PROVIDER_HEALTH_PROBE_INTERVAL_MS, 60_000, 1_000),
+
+    // Patch tasks (PRD 01): no tool or worker is enabled by these declarations alone.
+    patchTasksEnabled: parseBool(env.PATCH_TASKS_ENABLED, false),
+    patchRepoRoots: (env.PATCH_REPO_ROOTS || '').split(path.delimiter).map(p => p.trim()).filter(Boolean),
+    patchKeepWorkspaceOnFail: parseBool(env.PATCH_KEEP_WORKSPACE_ON_FAIL, false),
+    scratchDir: resolvePath(env.SCRATCH_DIR, 'scratch'),
+    patchLocalModels: parseNumber(env.PATCH_LOCAL_MODELS, 2),
+    patchFreeModels: parseNumber(env.PATCH_FREE_MODELS, 2),
+    patchPaidModels: parseNumber(env.PATCH_PAID_MODELS, 1),
+    patchAttemptsPerModel: parseNumber(env.PATCH_ATTEMPTS_PER_MODEL, 3),
+    patchMaxAttempts: parseNumber(env.PATCH_MAX_ATTEMPTS, 12),
+    patchTaskTimeoutMs: parseNumber(env.PATCH_TASK_TIMEOUT_MS, 7200000),
+    patchMaxOutputTokens: parseNumber(env.PATCH_MAX_OUTPUT_TOKENS, 2000),
+    patchContextTokens: parseNumber(env.PATCH_CONTEXT_TOKENS, 6000),
+    patchMaxConcurrent: parseNumber(env.PATCH_MAX_CONCURRENT, 1),
+    patchInferenceTimeoutMs: parseNumber(env.PATCH_INFERENCE_TIMEOUT_MS, 900000),
+    patchCheckTimeoutMs: parseNumber(env.PATCH_CHECK_TIMEOUT_MS, 600000),
+    patchErrorTailTokens: parseNumber(env.PATCH_ERROR_TAIL_TOKENS, 800),
+    patchWholeFileMaxLines: parseNumber(env.PATCH_WHOLE_FILE_MAX_LINES, 150),
+    patchPaidCapUsd: parseNumber(env.PATCH_PAID_CAP_USD, 0.25),
 
     // Benchmark configuration
     benchmark: {
