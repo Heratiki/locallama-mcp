@@ -28,8 +28,8 @@ fails, and when the maintainer rules. Procedure:
 | #139 PRD01-2 | ticket-writer (Sonnet) | merged 4d4e45c (not pushed) | wave 1 done; full suite green at 4d4e45c |
 | #140 PRD01-3 | lane-dev Sonnet | merged 69742dc (not pushed) | suite green at 69742dc |
 | #141 PRD01-4 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
-| #142 PRD01-5 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
-| #143 PRD01-6 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; first of wave 2 |
+| #142 PRD01-5 | codex high | merged cd4eb7a (not pushed) | suite green; follow-ups: snapshot `git diff --cached --name-only` reads the real index (read-only); a git-ignored hint aborts the snapshot |
+| #143 PRD01-6 | lane-dev Sonnet | merged ecacbe7 (not pushed) | suite green at cd4eb7a |
 | #144 PRD01-7 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
 | #145 PRD01-8 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; last of wave 2 |
 | #146 PRD01-9 | opencode, zai-coding-plan/ (wave 3) | filed | after #140-#145 |

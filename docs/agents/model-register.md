@@ -79,4 +79,8 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T05:16Z | issue-149 | opencode | opencode-go/kimi-k2.7-code | ? | build | opencode | done | 13 | 0 | 0 | no-reading, UNPROVEN, gates=4 |
 | 2026-11-01T05:18Z | agent-a683aa46 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0.1 | 0 | split, lane=issue-149 |
 | 2026-11-01T05:18Z | agent-a938274f | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0.1 | 0 | split, lane=agent-aa96ce6eb8d790815 |
+| 2026-11-01T05:21Z | issue-142 | codex | ? | high | build | codex | done | 10.2 | 7 | 1 | gates=5 |
+| 2026-11-01T05:21Z | agent-a4d92704 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 2 | 0 | 0 | split, lane=issue-143 |
+| 2026-11-01T05:23Z | agent-ae655497 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0.2 | split, lane=agent-a4d92704f48a16ef4 |
+| 2026-11-01T05:23Z | agent-aae44a5c | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1.2 | 0 | 0.4 | split, lane=issue-142 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->

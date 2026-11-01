@@ -35,6 +35,7 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 05:18 | #149, #140 done | Both ALL MET after the fix; lane-verifier on each. #140 built in its own lane-dev worktree (lesson in external-lanes.md) | — | — |
 | 05:18 | #150 | Z.ai glm-5.3 lane started (worktree reset to main 95eeb82 first) | Fix found problems before new work | `lanes stop issue-150` |
 | 05:19 | #149, #140 merged | `f88df78`, `69742dc`; both lane-verifier PASS; full suite green at 69742dc. OC-Go kimi-k2.7-code did #149 cleanly (sample) | Gates, review, suite | `git revert -m1` each |
+| 05:23 | #143, #142 merged | `ecacbe7`, `cd4eb7a`; lane-verifier PASS (adversarial on #142); full suite green at cd4eb7a. #141 (codex) and #144 (lane-dev) started | Gates, review, suite | `git revert -m1` each |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
