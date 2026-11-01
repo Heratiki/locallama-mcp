@@ -7,7 +7,8 @@ import type { LadderEntry, PatchState } from '../types.js';
 import { InferenceTimeout, WorkerStop, type CallUsage, type WorkerSettings } from './contracts.js';
 
 export interface ModelCallOptions {
-  registry: Pick<ProviderRegistry, 'get' | 'executeWithConcurrencyLimit'>;
+  registry: Pick<ProviderRegistry, 'get' | 'executeWithConcurrencyLimit'>
+    & Partial<Pick<ProviderRegistry, 'recordProviderSuccess' | 'recordProviderFailure'>>;
   state: PatchState;
   settings: WorkerSettings;
   capUsd: number;
@@ -121,10 +122,14 @@ export class PatchModelCalls {
       // raceAbort discards its eventual output without releasing that slot early.
       result = await raceAbort(scheduled, controller.signal);
       this.checkStop();
+      registry.recordProviderSuccess?.(entry.provider_id);
       return result;
     } catch (error) {
       this.checkStop();
       if (deadlineExpired) throw new WorkerStop('budget_time');
+      // Feed the circuit breaker (#157): provider errors and inference timeouts
+      // count; a cancel, a task deadline, or an error before the call does not.
+      if (invoked) registry.recordProviderFailure?.(entry.provider_id);
       if (inferenceExpired || (error instanceof Error && /timed?\s*out|timeout/i.test(error.message))) throw new InferenceTimeout();
       throw error;
     } finally {
