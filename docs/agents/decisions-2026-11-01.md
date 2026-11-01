@@ -29,6 +29,8 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
+| 05:40 | #139, #142 | #139 docs to ticket-writer (Sonnet) in its worktree; #142 to codex high, danger-full-access | Routing table (ADR prose); codex idle, opencode busy | stop lanes |
 | 05:25 | R1 run 2 | Accepted `docs/research/free-model-landscape-2026-11-01.md` (agy Sonnet): live-page rows, 70 `unconfirmed` cells, Method list; spot check of Groq model ids matches the live page. Key facts: GitHub Models retired; G7 first = OpenRouter :free, Groq, Gemini free, Cloudflare Workers AI; G8 local = Granite 4.2 3B, LFM3-1.7B, Gemma 4 E2B | Fixes PRD 01 open question 1 inputs | `git revert` |
 | 05:20 | #137 merged | `f292453`; lane-verifier PASS; full suite 67/67 suites, 510/510 tests. Not pushed | Gates, review, suite green | `git revert -m1 f292453` |
 | 05:18 | #138 | Codex lane (medium) for the contracts, because the opencode runner holds one lane (#149) | Throughput; codex week 20% | `lanes stop issue-138` |

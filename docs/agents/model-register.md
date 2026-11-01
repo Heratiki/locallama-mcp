@@ -72,4 +72,5 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T05:04Z | agent-a8e25680 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0 | 0 | split, lane=issue-137 |
 | 2026-11-01T05:06Z | issue-138 | codex | ? | medium | build | codex | done | 2.3 | 3 | 1 | gates=5 |
 | 2026-11-01T05:08Z | r1-research-v2 | agy | claude-sonnet-5-5-medium | medium | research | agyClaude | done | 6.2 | 55 | 28 |  |
+| 2026-11-01T05:10Z | agent-a4191f21 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0 | 0 | split, lane=issue-138 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->
