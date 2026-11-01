@@ -31,6 +31,8 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
+| 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
 | 05:40 | #139, #142 | #139 docs to ticket-writer (Sonnet) in its worktree; #142 to codex high, danger-full-access | Routing table (ADR prose); codex idle, opencode busy | stop lanes |
 | 05:25 | R1 run 2 | Accepted `docs/research/free-model-landscape-2026-11-01.md` (agy Sonnet): live-page rows, 70 `unconfirmed` cells, Method list; spot check of Groq model ids matches the live page. Key facts: GitHub Models retired; G7 first = OpenRouter :free, Groq, Gemini free, Cloudflare Workers AI; G8 local = Granite 4.2 3B, LFM3-1.7B, Gemma 4 E2B | Fixes PRD 01 open question 1 inputs | `git revert` |
