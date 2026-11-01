@@ -59,6 +59,8 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 06:14 | Commit trailers | Briefs now ask for `Refs #N` in the body before the trailer lines, so git reads the attribution trailers | Lane #147 question | — |
 | 06:14 | PRD 02 review | codex: 9 blockers, 3 follow-ups (`docs/prd/02-review-2026-11-01.md`); agy Sonnet revises the draft; rulings stay open | Make the draft ready for the maintainer | — |
 | 06:17 | #147 merged | `0a210c2`; adversarial lane-verifier PASS (59 tests; disabled path unchanged at start-up; root checks; atomic claim); full suite green. Wave 4 done. #152 started on OC-Go qwen3.8-max | Gates, review, suite | `git revert -m1 0a210c2` |
+| 06:20 | First live patch_task run | `run.mjs --only ts-slug`, local only, 3 attempts: the pipeline ran end to end (snapshot, BM25, attempts with tsc errors fed back, model switch with unload, clean shutdown; no leftover server). Result: failed, `budget_attempts`, on tinyllama ×2 + mistral:7b ×1 | Product verification (steward step 6) | — |
+| 06:20 | F8 → #153 | Ladder ranks tinyllama (no code benchmark) first; llama.cpp scores missed by `.gguf` id mismatch. Filed #153; lane-dev Sonnet on it now. Seed runs wait for #153 | Maintainer: fix new problems before new work | Close #153 |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
@@ -98,6 +100,7 @@ server (pid 3872940, started 04:21Z, older than `dist/` of 04:26Z). Log:
 | F4 | env | OpenRouter key refused | log 04:50:39 `401 … "User not found."`; maintainer gets a new key |
 | F5 | 2 | Ladder puts `tinyllama` (1.1B) as `best`, above `mistral:7b-instruct` | `route_task` response `ranked_trio` |
 | F7 | env? | Free OpenRouter models fail with 404 `No allowed providers are available for the selected model` (new key works; no 401) | log 04:57:52, 04:57:54. Likely the account's privacy setting for free endpoints; not confirmed |
+| F8 | 1 | Patch ladder picks tinyllama (no code benchmark) first; llama.cpp scores missed (`.gguf` id) — issue #153 | first live seed run, benchmarks.db rows |
 | F6 | 2 | `get_system_state` shows OpenRouter as `paid` while `OPENROUTER_FREE_ONLY` defaults true | `get_system_state` response |
 
 Maintainer note (2026-11-01): they use llama.cpp through llama-router, not Ollama.
