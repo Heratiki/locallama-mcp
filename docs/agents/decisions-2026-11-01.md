@@ -36,6 +36,13 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 05:18 | #150 | Z.ai glm-5.3 lane started (worktree reset to main 95eeb82 first) | Fix found problems before new work | `lanes stop issue-150` |
 | 05:19 | #149, #140 merged | `f88df78`, `69742dc`; both lane-verifier PASS; full suite green at 69742dc. OC-Go kimi-k2.7-code did #149 cleanly (sample) | Gates, review, suite | `git revert -m1` each |
 | 05:23 | #143, #142 merged | `ecacbe7`, `cd4eb7a`; lane-verifier PASS (adversarial on #142); full suite green at cd4eb7a. #141 (codex) and #144 (lane-dev) started | Gates, review, suite | `git revert -m1` each |
+| 05:27 | #144 review FAIL | Two blockers (paid cost clamped to reservation; 4 chars/token instead of `countTokens`). One fix round to the same lane-dev | Spec §5.11, §5.8; the steward flagged both before review | — |
+| 05:27 | #145 | lane-dev Sonnet started (second Claude builder for a short time, while #144 is in a fix round) | Throughput; Claude week low | stop agent |
+| 05:36 | #141 merged | `5bf4277`; lane-verifier PASS (process-group kill, env, no orphans) | Gates, review | `git revert -m1 5bf4277` |
+| 05:36 | #144 merged | `a50b675` after one fix round (true paid cost; `countTokens`); re-verify PASS | Gates, review | `git revert -m1 a50b675` |
+| 05:36 | Stuck test process | Killed jest pid 84405 + 15 workers (stalled #144 gate run, 4.5 min, tiktoken on a 200k-char run) by PID | Maintainer rule: watch for stuck test processes | — |
+| 05:36 | #145 review FAIL | Open socket in the HTTP test (jest does not exit); caller abort reported as timeout. Fix round to the same lane-dev. G4 now greps `^Tests:` (was `tail -6`) | Review | — |
+| 05:36 | #150 review FAIL | Qualified-id probe picks the wrong provider; producer `modelsDb.ts:156` still writes provider = model id. Scope widened to modelsDb.ts (comment on #150); fix round on Z.ai (lane issue-150b) | Fix the source, not only the symptom | — |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
