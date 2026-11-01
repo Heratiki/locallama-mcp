@@ -23,7 +23,7 @@ fails, and when the maintainer rules. Procedure:
 | #150 F2 provider = model id | opencode, zai-coding-plan/ | filed | before #147; not with #151 |
 | #151 F3 false pass | opencode, zai-coding-plan/ | filed | after #150, before #147 |
 | R1 research (no issue yet) | research lane, `mattpocock-skills:research` | queued | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
-| #137 | lane-dev | open, not started | OpenRouter `draft_model` fix |
+| #137 | opencode zai-coding-plan/glm-5.3 | merged f292453 (not pushed) | full suite 67/67, 510/510 at f292453 |
 | #138 PRD01-1 | opencode, zai-coding-plan/ (wave 1) | filed | contracts; first, alone |
 | #139 PRD01-2 | opencode, zai-coding-plan/ (wave 1) | filed | docs; parallel with #138 |
 | #140 PRD01-3 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; wave-2 order 6,3,4,5,7,8 |

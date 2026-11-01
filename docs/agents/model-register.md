@@ -68,4 +68,6 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T04:53Z | prd01-review | codex | ? | high | review | codex | done | 2.1 | 3 | 1 | partial |
 | 2026-11-01T04:59Z | agent-a52da3f5 | claude | claude-sonnet-5-5 | low | write | claude | completed | 3 | 0.2 | 0 | split |
 | 2026-11-01T05:01Z | r1-research | agy | gemini-3.8-flash-high | high | research | agy | done | 9.7 | 4 | 1 |  |
+| 2026-11-01T05:02Z | issue-137 | opencode | zai-coding-plan/glm-5.3 | ? | build | opencode | done | 11.5 | 0 | 0 | no-reading, UNPROVEN, gates=8 |
+| 2026-11-01T05:04Z | agent-a8e25680 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0 | 0 | split, lane=issue-137 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->

@@ -29,6 +29,11 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:20 | #137 merged | `f292453`; lane-verifier PASS; full suite 67/67 suites, 510/510 tests. Not pushed | Gates, review, suite green | `git revert -m1 f292453` |
+| 05:18 | #138 | Codex lane (medium) for the contracts, because the opencode runner holds one lane (#149) | Throughput; codex week 20% | `lanes stop issue-138` |
+| 05:12 | Maintainer away | Maintainer went to bed (~05:10Z). Note from them: "You aren't forced into a mold on what this MCP has been in the past." Steward decides routine items alone; consequential ones go to "Waits for the maintainer" | Maintainer message | — |
+| 05:12 | #137 | Lane on Z.ai glm-5.3 met 8/8 gates; benchmarkService limits drafts to lm-studio/ollama as the issue said (llama-cpp not included; old path, accepted). Z.ai week 51%→54% | Gates re-run by the steward | — |
+| 05:12 | #149 | Lane on OpenCode Go `kimi-k2.7-code` (sample of OC-Go, as the maintainer asked) | Routing preference | `lanes stop issue-149` |
 | 05:05 | Order of work | Fix found problems before new work: #137, then #149-#151, then PRD 01 waves | Maintainer direction 05:00Z; steward tier rule | — |
 | 05:05 | R1 research | Flash run failed a spot check (2024 numbers, illustrative values); file marked DRAFT; run 2 on agy claude-sonnet-5-5-medium with live-page rules. Argon not used (reserved) | Routing: Pro-class after a measured Flash failure | Use run 1 draft |
 | 05:15 | route_task defects | Maintainer chose "file and fix": #149 (F1), #150 (F2), #151 (F3). F1 cause confirmed: `cost-monitor/api.ts getAvailableModels` never asks llama-cpp | Two live runs reproduce F2/F3 | Close the issues |
