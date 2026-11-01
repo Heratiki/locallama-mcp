@@ -41,6 +41,7 @@ import {
 } from '../../job-store/index.js';
 import { refreshAlertState } from '../../job-store/alert.js';
 import type { JobStatus as PersistedJobStatus, TaskStatus as PersistedTaskStatus } from '../../job-store/types.js';
+import type { PatchResultV1 } from '../../patch/types.js';
 import { COMPLEXITY_THRESHOLDS } from '../../decision-engine/types/index.js';
 
 const CODE_TASK_PATTERN = /\b(code|function|class|implement|debug|test|refactor|fix|bug|method|module|api|script|parse|algorithm|compile)\b/i;
@@ -1438,11 +1439,13 @@ export class Router implements IRouter {
       progress_pct: progressPct,
       poll_again_after_ms: this.calculatePollAgainAfterMs(jobs),
       jobs: jobs.map((job) => {
-        let result: string | undefined;
+        let result: string | PatchResultV1 | undefined;
         if (job.result) {
           try {
             const parsed = JSON.parse(job.result) as unknown;
-            result = Array.isArray(parsed) ? parsed.join('\n') : String(parsed);
+            // Patch Jobs return their patch_result_v1 envelope as an object (PRD 01 §5.1).
+            if (job.kind === 'patch') result = parsed as PatchResultV1;
+            else result = Array.isArray(parsed) ? parsed.join('\n') : String(parsed);
           } catch {
             result = job.result;
           }
@@ -1477,6 +1480,7 @@ export class Router implements IRouter {
       const cancelledCount = await cancelJobsForTask(taskId);
       await this.updateTaskFromJobs(taskId);
       await refreshAlertState();
+      await this.abortPatchWorkers(taskId);
       const updatedTask = await getTask(taskId);
 
       return {
@@ -1496,6 +1500,24 @@ export class Router implements IRouter {
         status: 'error',
         message: `Error cancelling task: ${error instanceof Error ? error.message : String(error)}`,
       };
+    }
+  }
+
+  /**
+   * PRD 01 §5.10: after the rows are cancelled, abort each running patch Job's
+   * controller. A queued patch Job needs nothing more: the claim requires
+   * status = 'queued'. The dispatcher is loaded only for tasks with patch Jobs.
+   */
+  private async abortPatchWorkers(taskId: string): Promise<void> {
+    try {
+      const patchJobs = ((await getJobsByTaskId(taskId)) ?? [])
+        .filter(job => job.kind === 'patch' && job.status === 'cancelled');
+      if (patchJobs.length === 0) return;
+      const { getPatchDispatcher } = await import('../../patch/dispatcher/index.js');
+      const dispatcher = getPatchDispatcher();
+      for (const job of patchJobs) dispatcher.cancel(job.id);
+    } catch (error) {
+      logger.warn(`Patch worker abort failed for task ${taskId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

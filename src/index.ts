@@ -437,6 +437,11 @@ export class LocalLamaMcpServer {
                   }
                   return await routingModule.cancelTask(taskId);
                 }
+                case 'patch_task': {
+                  // submitPatchTask refuses with patch_tasks_disabled while PATCH_TASKS_ENABLED is off.
+                  const { submitPatchTask } = await import('./modules/patch/dispatcher/index.js');
+                  return await submitPatchTask(args);
+                }
                 case 'get_system_state': {
                   const { getSystemState } = await import('./modules/api-integration/system-state/index.js');
                   return await getSystemState();
@@ -611,6 +616,9 @@ export class LocalLamaMcpServer {
             return toolResponse(resultWithReminder);
           } catch (error) {
             logger.error(`Error executing tool ${name}:`, error);
+            if (error instanceof Error && error.name === 'PatchRefusal' && 'code' in error) {
+              return toolResponse({ error: (error as Error & { code: string }).code, message: error.message }, true);
+            }
             if (error instanceof ContextWindowError) {
               return toolResponse(attachServerReminder({
                 error: 'context_overflow',
@@ -766,6 +774,20 @@ export class LocalLamaMcpServer {
         }
       } catch (error) {
         logger.warn('Job recovery failed (non-fatal):', error instanceof Error ? error.message : String(error));
+      }
+
+      // Patch Jobs (PRD 01 §5.7): requeue interrupted Jobs and remove orphan
+      // scratch worktrees and base refs, then start the dispatcher. Only when
+      // PATCH_TASKS_ENABLED is on; route Jobs are not touched.
+      try {
+        const { config: patchCfg } = await import('./config/index.js');
+        if (patchCfg.patchTasksEnabled) {
+          const { getPatchDispatcher } = await import('./modules/patch/dispatcher/index.js');
+          const summary = await getPatchDispatcher().start();
+          logger.info(`Patch dispatcher started (${summary.requeued} requeued, ${summary.repos} repo(s) cleaned)`);
+        }
+      } catch (error) {
+        logger.warn('Patch recovery failed (non-fatal):', error instanceof Error ? error.message : String(error));
       }
 
       // Set up resource and tool handlers

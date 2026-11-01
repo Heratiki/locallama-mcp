@@ -16,6 +16,48 @@ export function isOpenRouterConfigured(): boolean {
   return !!config.openRouterApiKey;
 }
 
+/** The `patch_task` tool (PRD 01 §5.1, §6, §7). */
+function patchTaskTool(): ITool {
+  return {
+    name: 'patch_task',
+    description:
+      'Submit a verified patch task; returns task_id at once. LocalLama snapshots repo_path, then tries local, then free ' +
+      'models (paid only with allow_paid) until every check passes. It never edits repo_path. Poll get_task_status ' +
+      '(result is a patch_result_v1 object); stop with cancel_task. On status "passed", apply result.diff with ' +
+      '`git apply` in repo_path, or ask the user first. Checks run as the user in a scratch worktree with no shell and ' +
+      'a timeout: this is not a sandbox. One local model in RAM depends on the runtime (llama-router --models-max 1, ' +
+      'or Ollama unloading idle models). repo_path must be a git repo inside PATCH_REPO_ROOTS. Refusals: ' +
+      'no_checks, ladder_exhausted, repo_not_allowed, snapshot_failed, invalid_input.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'What to change, in plain words.' },
+        repo_path: { type: 'string', description: 'Absolute path of the git repo root (inside PATCH_REPO_ROOTS).' },
+        file_hints: { type: 'array', items: { type: 'string' }, description: 'Paths relative to repo_path to put in context.' },
+        checks: {
+          type: 'array',
+          description: 'Commands that must pass; win over .locallama/checks.json. argv arrays, no shell.',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              argv: { type: 'array', items: { type: 'string' } },
+              timeout_ms: { type: 'number' },
+              append_changed_files: { type: 'boolean' },
+            },
+            required: ['name', 'argv'],
+          },
+        },
+        allow_paid: { type: 'boolean', description: 'Allow paid models. Default false.' },
+        paid_cap_usd: { type: 'number', description: `Total paid cap in USD. Default ${config.patchPaidCapUsd}.` },
+        validate: { type: 'boolean', description: 'Ask a judge model to review a passing diff. Default false.' },
+        max_minutes: { type: 'number', description: 'Time budget in minutes; overrides PATCH_TASK_TIMEOUT_MS.' },
+      },
+      required: ['goal', 'repo_path'],
+    },
+  };
+}
+
 /**
  * Implementation of the tool definition provider
  */
@@ -621,6 +663,11 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
           }
         }
       );
+    }
+
+    // PRD 01 §6: not listed unless the operator sets PATCH_TASKS_ENABLED=true.
+    if (config.patchTasksEnabled) {
+      tools.push(patchTaskTool());
     }
 
     tools.push(
