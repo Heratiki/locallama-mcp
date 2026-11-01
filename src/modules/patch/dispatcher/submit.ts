@@ -57,7 +57,7 @@ export interface SubmitDeps {
 }
 
 interface ParsedInput {
-  request: Required<PatchRequest>;
+  request: Required<PatchRequest> & { task_type?: string };
   checks?: CheckSpec[];
   maxMinutes?: number;
 }
@@ -74,6 +74,15 @@ function parseInput(raw: unknown, cfg: PatchConfig): ParsedInput {
   const hints = a.file_hints ?? [];
   if (!Array.isArray(hints) || !hints.every(h => typeof h === 'string' && h && !h.includes('\0'))) {
     fail('file_hints must be an array of relative paths');
+  }
+  // Steward ruling 4 on #152: optional free-form label stored with the task in
+  // request_json; the stats module reports 'unspecified' when it is absent.
+  let taskType: string | undefined;
+  if (a.task_type !== undefined) {
+    if (typeof a.task_type !== 'string' || !a.task_type.trim() || a.task_type.includes('\0')) {
+      fail('task_type must be a nonempty string');
+    }
+    taskType = a.task_type as string;
   }
   let checks: CheckSpec[] | undefined;
   if (a.checks !== undefined) {
@@ -99,6 +108,7 @@ function parseInput(raw: unknown, cfg: PatchConfig): ParsedInput {
     request: {
       goal: a.goal as string, repo_path: a.repo_path as string, file_hints: hints as string[],
       allow_paid: bool('allow_paid'), paid_cap_usd: cap as number, validate: bool('validate'),
+      ...(taskType !== undefined ? { task_type: taskType } : {}),
     },
     checks,
     maxMinutes,

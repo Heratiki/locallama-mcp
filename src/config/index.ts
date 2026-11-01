@@ -102,6 +102,11 @@ export interface Config {
   patchWholeFileMaxLines: number;
   patchPaidCapUsd: number;
 
+  // Savings report (G1, get_savings): estimated frontier tokens saved per
+  // small-model token on accepted patch tasks. Must be > 0; an invalid
+  // SAVINGS_TOKEN_FACTOR fails loudly when the config is read.
+  savingsTokenFactor: number;
+
   // Benchmark configuration
   benchmark: BenchmarkConfig;
 
@@ -212,6 +217,7 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'patchErrorTailTokens',
   'patchWholeFileMaxLines',
   'patchPaidCapUsd',
+  'savingsTokenFactor',
 ] as const;
 
 export interface ReloadConfigResult {
@@ -261,6 +267,20 @@ function parseNumber(value: string | undefined, defaultValue: number, min?: numb
   if (isNaN(num)) return defaultValue;
   if (min !== undefined && num < min) return min;
   if (max !== undefined && num > max) return max;
+  return num;
+}
+
+/**
+ * Helper for settings that must never silently fall back to a default:
+ * when the variable is set, it must be a finite number > 0, otherwise this
+ * throws at config read time.
+ */
+function parsePositiveNumberStrict(value: string | undefined, defaultValue: number, name: string): number {
+  if (value === undefined || value.trim() === '') return defaultValue;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) {
+    throw new Error(`Invalid ${name}: must be a finite number > 0, got "${value}"`);
+  }
   return num;
 }
 
@@ -347,6 +367,9 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     patchErrorTailTokens: parseNumber(env.PATCH_ERROR_TAIL_TOKENS, 800),
     patchWholeFileMaxLines: parseNumber(env.PATCH_WHOLE_FILE_MAX_LINES, 150),
     patchPaidCapUsd: parseNumber(env.PATCH_PAID_CAP_USD, 0.25),
+
+    // Savings report (G1): steward ruling 1 on #152 — default factor 1.0.
+    savingsTokenFactor: parsePositiveNumberStrict(env.SAVINGS_TOKEN_FACTOR, 1.0, 'SAVINGS_TOKEN_FACTOR'),
 
     // Benchmark configuration
     benchmark: {

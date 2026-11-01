@@ -34,6 +34,7 @@ function patchTaskTool(): ITool {
         goal: { type: 'string', description: 'What to change, in plain words.' },
         repo_path: { type: 'string', description: 'Absolute path of the git repo root (inside PATCH_REPO_ROOTS).' },
         file_hints: { type: 'array', items: { type: 'string' }, description: 'Paths relative to repo_path to put in context.' },
+        task_type: { type: 'string', description: 'Optional label for savings stats (get_savings group_by task_type). Default: unspecified.' },
         checks: {
           type: 'array',
           description: 'Commands that must pass; win over .locallama/checks.json. argv arrays, no shell.',
@@ -227,6 +228,30 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         inputSchema: {
           type: 'object',
           properties: {},
+          required: [],
+        },
+      },
+      {
+        name: 'get_savings',
+        description:
+          'Read-only savings report for patch_task jobs (goal G1). Per UTC day (default) or per task_type, plus totals: ' +
+          'finished tasks, accepted count (patch result status "passed"), pass_rate, cost_usd (sum of attempt costs), ' +
+          'prompt+completion tokens by cost class (local/free/paid), avg_elapsed_ms, and est_frontier_tokens_saved — ' +
+          'the accepted attempt\'s tokens times SAVINGS_TOKEN_FACTOR minus agent request and review tokens, floored at 0 ' +
+          'per task. Never writes.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            since: {
+              type: 'string',
+              description: 'Only count jobs completed at or after this time: ISO date (YYYY-MM-DD), ISO timestamp, or unix milliseconds. Default: all time.'
+            },
+            group_by: {
+              type: 'string',
+              enum: ['day', 'task_type'],
+              description: 'Grouping key. "day" (default) groups by the UTC date of completion; "task_type" by the task_type given on patch_task ("unspecified" when absent).'
+            }
+          },
           required: [],
         },
       },

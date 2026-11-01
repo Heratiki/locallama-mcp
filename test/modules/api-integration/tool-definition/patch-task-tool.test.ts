@@ -30,7 +30,7 @@ describe('patch_task tool definition', () => {
     const schema = tool!.inputSchema as { required: string[]; properties: Record<string, { type: string }> };
     expect(schema.required).toEqual(['goal', 'repo_path']);
     expect(Object.keys(schema.properties).sort()).toEqual(
-      ['allow_paid', 'checks', 'file_hints', 'goal', 'max_minutes', 'paid_cap_usd', 'repo_path', 'validate'],
+      ['allow_paid', 'checks', 'file_hints', 'goal', 'max_minutes', 'paid_cap_usd', 'repo_path', 'task_type', 'validate'],
     );
     expect(schema.properties.checks.type).toBe('array');
     expect(schema.properties.allow_paid.type).toBe('boolean');
