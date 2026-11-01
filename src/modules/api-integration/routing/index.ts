@@ -575,6 +575,20 @@ export class Router implements IRouter {
     });
   }
 
+  /**
+   * Issue #151: detect a route result whose text is itself a subtask execution
+   * error. These error strings are produced by codeTaskCoordinator when every
+   * subtask failed (see `_executeSubtaskInner` / `executeAllSubtasks`). Such a
+   * result must never be reported as a completed, validated task.
+   */
+  private isSubtaskExecutionFailure(resultCode: string): boolean {
+    return (
+      resultCode.includes('Error: Failed to execute subtask') ||
+      resultCode.includes('Error: No model assigned for subtask') ||
+      resultCode.includes('Error executing subtask:')
+    );
+  }
+
   private async runQueuedRouteTask(taskId: string, providerId: string, params: RouteTaskParams): Promise<void> {
     const tracker = await getJobTracker();
     let currentReleaseSlot: (() => void) | null = null;
@@ -607,7 +621,7 @@ export class Router implements IRouter {
       let attemptSlot: 'good' | 'better' | 'best' = 'good';
       let currentMember = rankedTrio[attemptSlot];
       let finalResult: RouteTaskResult | null = null;
-      let overallPassed = false;
+      let overallPassed: boolean | null = false;
 
       // Acquire first slot before marking job/task in_progress (preserving task concurrency ordering)
       currentReleaseSlot = await this.acquireQueuedRouteExecutionSlot(currentMember.provider_id);
@@ -634,6 +648,11 @@ export class Router implements IRouter {
           overallPassed = true;
           break;
         }
+
+        // Issue #151: a result that is itself a subtask execution failure can
+        // never be a valid attempt outcome, even if validation is skipped or
+        // (incorrectly) passes. Such an attempt must fail and move the ladder on.
+        const subtaskFailure = this.isSubtaskExecutionFailure(attemptResult.resultCode);
 
         // a. Self-validation
         let selfValResult: any = undefined;
@@ -757,7 +776,13 @@ export class Router implements IRouter {
           }
         }
 
-        const attemptPassed = (selfValPassed !== false) && (extValPassed !== false);
+        const attemptPassed: boolean | null = subtaskFailure
+          ? false
+          : selfValPassed === false || extValPassed === false
+            ? false
+            : selfValSkipped && extValSkipped
+              ? null
+              : true;
 
         validationAttempts.push({
           model_id: currentMember.model_id,
@@ -767,9 +792,9 @@ export class Router implements IRouter {
           passed: attemptPassed
         });
 
-        if (attemptPassed) {
+        if (attemptPassed !== false) {
           finalResult = attemptResult;
-          overallPassed = true;
+          overallPassed = attemptPassed;
           break;
         }
 
@@ -797,7 +822,12 @@ export class Router implements IRouter {
         passed: overallPassed
       };
 
-      if (shouldValidate && !overallPassed) {
+      if (shouldValidate && overallPassed === false) {
+        // Issue #151: when the ladder exhausts on a subtask execution failure,
+        // surface the actual error instead of a generic "validation failed".
+        if (finalResult && this.isSubtaskExecutionFailure(finalResult.resultCode)) {
+          throw new Error(finalResult.resultCode);
+        }
         throw new Error(`Validation failed on all attempts in retry ladder.`);
       }
 
