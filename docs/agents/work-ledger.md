@@ -18,7 +18,8 @@ fails, and when the maintainer rules. Procedure:
 
 | Issue | Route | State | Next |
 |---|---|---|---|
-| | | | |
+| R1 research (no issue yet) | research lane, `mattpocock-skills:research` | queued | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
+| #137 | lane-dev | open, not started | OpenRouter `draft_model` fix |
 
 Wave order: a file two tickets need is changed by the first ticket's lane,
 merged, then the second lane starts.

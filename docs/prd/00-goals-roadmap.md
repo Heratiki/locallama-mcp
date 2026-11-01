@@ -143,7 +143,7 @@ directly (measured, not estimated).
 
 Add the free online tiers that allow code use as providers, next to the
 OpenRouter free tier. Each one gets its rate limits and daily quotas from its
-own docs. The queue is patient: when every free tier is at its limit, a Job
+own docs. The research lane R1 (below) gives the list. The queue is patient: when every free tier is at its limit, a Job
 waits for the next window and does not fail, and the status shows when it
 will run.
 
@@ -172,6 +172,26 @@ builds on G2/G3. G5 and G6 can start after G2.
 
 Write `docs/prd/01-verified-patch-and-grind-loop.md` (G2 and G3, at the G8 floor) on top of
 these rulings and the grounding map. Then split it into GitHub issues.
+
+## Research lanes
+
+### R1 — What a "broke" user can get for free
+
+Find, from primary sources (provider docs, pricing and terms pages), what is
+available today at $0 for code work. Record the date of each fact, because
+free tiers change often.
+
+- Free online model APIs: provider, models, rate limits, daily quotas, context
+  size, whether a card or phone number is needed, and whether the terms allow
+  code use and automated (agent) use.
+- Free access to frontier coding tools (free plans of coding agents, IDE
+  assistants, student and open-source programs) and their limits.
+- Small open-weight code models that run on the hardware floor (Ruling 9):
+  size, quantization, RAM need and tokens per second on CPU.
+
+Output: `docs/research/free-model-landscape-YYYY-MM-DD.md`, with one table per
+part and a source link on each row. It feeds G7 (the free pool) and G8 (the
+local model profile). It changes no code. Repeat it before each G7 wave.
 
 See `docs/prd/validated-patch-dag/00-repo-grounding-and-reuse-map.md` for the
 code that G2–G4 reuse, and the seven gaps that need new code.
