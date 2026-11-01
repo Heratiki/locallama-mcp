@@ -18,8 +18,11 @@ When configuring this MCP server for Claude Code, prefer project-scoped MCP conf
 
 Configured in `.claude/settings.json` (project-scoped). Not in global `~/.claude/settings.json` or Claude Desktop config.
 
-If `locallama-dev` is missing from `/mcp`: check for stale lock file at `C:\Users\herat\locallama-dev\locallama.lock`. Delete it, then restart Claude Code. Stale locks are left by ungraceful process kills (crash, SIGKILL, `timeout` commands).
+If `locallama-dev` is missing from `/mcp`: check for a stale lock file (`locallama.lock`; on the Windows machine it is at `C:\Users\herat\locallama-dev\locallama.lock`). Delete it, then restart Claude Code. Stale locks are left by ungraceful process kills (crash, SIGKILL, `timeout` commands).
 
-## Windows Environment
+## Machine-specific shell
 
-Shell is PowerShell. Use PowerShell tool, not Bash tool, for all shell commands. Use Windows paths (`C:\...`), not Unix paths (`/c/...`).
+The repo is used on more than one machine. Check the platform first.
+
+- **Windows:** shell is PowerShell. Use the PowerShell tool, not the Bash tool, for all shell commands. Use Windows paths (`C:\...`), not Unix paths (`/c/...`).
+- **Linux:** use the Bash tool and Unix paths. The local runtime is llama.cpp through llama-router (port 8080).
