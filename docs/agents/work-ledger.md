@@ -34,7 +34,7 @@ fails, and when the maintainer rules. Procedure:
 | #144 PRD01-7 | lane-dev Sonnet (1 fix round) | merged a50b675 (not pushed) | suite green at a50b675 |
 | #145 PRD01-8 | lane-dev Sonnet (2 fix rounds) | merged edde477 (not pushed) | wave 2 done; suite green at edde477 |
 | #146 PRD01-9 | codex high | merged 4f2e54c (not pushed) | wave 3 done; suite green |
-| #147 PRD01-10 | lane-dev Opus | building | wave 4 |
+| #147 PRD01-10 | lane-dev Opus | merged 0a210c2 (not pushed) | wave 4 done; suite green; follow-ups: cleanupRepo can remove a cancelled-but-stopping worker's scratch; cancel between claim and createWorker does not abort at once (Job still ends cancelled) |
 | #148 PRD01-11 | codex medium (part A) | part A merged (not pushed); part B after #147 | part B: re-check run.mjs live env names against #147; guard patch.tokens/models |
 
 Wave order: a file two tickets need is changed by the first ticket's lane,
