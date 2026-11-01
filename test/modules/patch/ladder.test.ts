@@ -63,8 +63,30 @@ describe('buildLadder', () => {
   });
 
   it('empty ladder when nothing is available', async () => {
-    const down = { ...fake('x', 'local', [{ id: 'a' }]), isAvailable: async () => false };
-    expect(await buildLadder({ ...base, providers: { list: () => [down] }, models: scores({}) })).toEqual([]);
+    // Use a non-local provider so the existing isAvailable filter still applies.
+    const down = { ...fake('x', 'paid', [{ id: 'a', price: cheap }]), isAvailable: async () => false };
+    expect(await buildLadder({ ...base, allowPaid: true, freeOnly: false, providers: { list: () => [down] }, models: scores({}) })).toEqual([]);
+  });
+
+  it('includes local models even when provider health is unknown', async () => {
+    const llama = { ...fake('llama-cpp', 'local', [{ id: 'r-a' }]), isAvailable: async () => false };
+    const l = await buildLadder({ ...base, providers: { list: () => [llama] }, models: scores({}) });
+    expect(l.map(e => e.model_id)).toEqual(['r-a']);
+  });
+
+  it('excludes local models only when the circuit breaker is open', async () => {
+    const { getProviderRegistry } = await import('../../../dist/modules/core/provider/index.js');
+    const registry = getProviderRegistry();
+    const llama = fake('llama-cpp', 'local', [{ id: 'r-a' }]);
+    registry.register(llama as any);
+    registry.recordProviderFailure('llama-cpp');
+    registry.recordProviderFailure('llama-cpp');
+    registry.recordProviderFailure('llama-cpp');
+
+    const l = await buildLadder({ ...base, providers: { list: () => [llama] }, models: scores({}) });
+    expect(l).toEqual([]);
+
+    registry.clear();
   });
 });
 

@@ -89,9 +89,16 @@ describe('llamaCppProvider — init and isAvailable', () => {
     await expect(llamaCppProvider.init()).resolves.toBeUndefined();
   });
 
-  it('isAvailable returns false when health is unknown', async () => {
+  it('isAvailable returns false when health is unknown in non-router mode', async () => {
     llamaCppModule.capabilities.modelCount = 1; // Assume models are present
     expect(await llamaCppProvider.isAvailable()).toBe(false);
+  });
+
+  it('isAvailable returns true when health is unknown in router mode and models are present', async () => {
+    llamaCppModule.capabilities.health = 'unknown';
+    llamaCppModule.capabilities.mode = 'router';
+    llamaCppModule.capabilities.modelCount = 1;
+    expect(await llamaCppProvider.isAvailable()).toBe(true);
   });
 
   it('isAvailable returns true when health is healthy and models are present', async () => {

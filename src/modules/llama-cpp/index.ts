@@ -134,17 +134,45 @@ export const llamaCppModule = {
    * as unavailable if the endpoint is unreachable.
    */
   async _runHealthProbe(): Promise<void> {
+    this.capabilities.lastHealthCheck = new Date().toISOString();
+
     if (!config.llamaCppHealthProbeEnabled) {
       this.capabilities.health = 'healthy';
       this.capabilities.lastHealthCheckResult = 'disabled';
-      this.capabilities.lastHealthCheck = new Date().toISOString();
       return;
     }
 
     if (this.cachedModels.length === 0) {
       this.capabilities.health = 'unhealthy';
       this.capabilities.lastHealthCheckResult = 'no models found';
-      this.capabilities.lastHealthCheck = new Date().toISOString();
+      return;
+    }
+
+    // Router mode: avoid prompting a model. A cold router may still be loading
+    // the target model, so a timeout or 503 "loading" response must not mark
+    // the provider unhealthy — leave it unknown and let the first real call
+    // decide.
+    if (this.mode === 'router') {
+      const url = `${config.llamaCppEndpoint}/health`;
+      let resultText: string;
+      try {
+        const res = await axios.get(url, { timeout: config.llamaCppHealthProbeTimeoutMs });
+        if (res.status === 503) {
+          resultText = 'router: model loading (503)';
+        } else if (res.status === 200) {
+          resultText = 'router: /health ok';
+        } else {
+          resultText = `router: /health returned ${res.status}`;
+        }
+      } catch (error) {
+        resultText = 'router: /health probe unavailable';
+      }
+      this.capabilities.health = 'unknown';
+      this.capabilities.lastHealthCheckResult = resultText;
+      logger.info(
+        `llama.cpp health probe: mode=router, status=${this.capabilities.health} ` +
+        `(${this.capabilities.lastHealthCheckResult})`,
+      );
       return;
     }
 
@@ -154,8 +182,6 @@ export const llamaCppModule = {
       config.llamaCppHealthProbePrompt,
       config.llamaCppHealthProbeTimeoutMs,
     );
-
-    this.capabilities.lastHealthCheck = new Date().toISOString();
 
     if (!result.success) {
       this.capabilities.health = 'unhealthy';

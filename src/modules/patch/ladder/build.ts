@@ -1,4 +1,5 @@
 import type { LLMProvider, ProviderModel } from '../../core/provider/types.js';
+import { getProviderRegistry } from '../../core/provider/index.js';
 import type { LadderEntry } from '../types.js';
 import { benchmarkCodeScore, normalizeModelId, parseParamsB, type ModelMetaLike } from './model-match.js';
 
@@ -54,7 +55,12 @@ function priceOf(provider: LLMProvider, model: ProviderModel): { prompt: number;
 
 async function listSafe(provider: LLMProvider): Promise<ProviderModel[]> {
   try {
-    if (!(await provider.isAvailable())) return [];
+    // Only an open circuit breaker (real call failures) should keep a provider
+    // out of the ladder. For local providers, skip the provider-level
+    // isAvailable() health gate so a router still loading its models is not
+    // dropped at submit time.
+    if (!getProviderRegistry().isAvailable(provider.id)) return [];
+    if (!provider.isLocal && !(await provider.isAvailable())) return [];
     return await provider.listModels();
   } catch {
     return [];

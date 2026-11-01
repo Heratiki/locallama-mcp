@@ -46,9 +46,17 @@ class LlamaCppProvider implements LLMProvider {
 
   async isAvailable(): Promise<boolean> {
     if (!config.llamaCppEndpoint) return false;
-    // A provider with no models is not available. A provider that fails the
-    // health probe is not available.
-    return llamaCppModule.capabilities.health === 'healthy' && llamaCppModule.capabilities.modelCount > 0;
+    if (llamaCppModule.capabilities.modelCount === 0) return false;
+
+    const health = llamaCppModule.capabilities.health;
+    if (health === 'healthy') return true;
+
+    // Router mode: the no-load /health probe intentionally leaves health as
+    // 'unknown' so a cold router is not dropped from the ladder while models
+    // are still loading. Treat unknown router health as available.
+    if (health === 'unknown' && llamaCppModule.capabilities.mode === 'router') return true;
+
+    return false;
   }
 
   async listModels(): Promise<ProviderModel[]> {

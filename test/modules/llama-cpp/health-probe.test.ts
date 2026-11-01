@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import axios from 'axios';
 
 // Mock config and logger before any other imports
 const mockConfig = {
@@ -144,5 +145,61 @@ describe('llama.cpp health probe', () => {
     llamaCppModule.capabilities.health = 'healthy';
     llamaCppModule.capabilities.modelCount = 0;
     expect(await llamaCppProvider.isAvailable()).toBe(false);
+  });
+
+  describe('router mode', () => {
+    beforeEach(() => {
+      llamaCppModule.mode = 'router';
+      llamaCppModule.capabilities.mode = 'router';
+    });
+
+    it('uses GET /health and does not prompt any model', async () => {
+      llamaCppModule.cachedModels = [
+        { id: 'router-model-a', object: 'model' },
+        { id: 'router-model-b', object: 'model' },
+      ];
+      const getSpy = jest.spyOn(axios, 'get').mockResolvedValueOnce({
+        status: 200,
+        data: { status: 'ok' },
+        headers: {},
+      } as any);
+
+      await llamaCppModule._runHealthProbe();
+
+      expect(callApiSpy).not.toHaveBeenCalled();
+      expect(getSpy).toHaveBeenCalledWith(
+        'http://localhost:8080/health',
+        { timeout: mockConfig.llamaCppHealthProbeTimeoutMs },
+      );
+      expect(llamaCppModule.capabilities.health).not.toBe('unhealthy');
+    });
+
+    it('stays unknown (not unhealthy) when /health times out', async () => {
+      llamaCppModule.cachedModels = [{ id: 'router-model-a', object: 'model' }];
+      jest.spyOn(axios, 'get').mockRejectedValueOnce(
+        Object.assign(new Error('timeout'), { code: 'ECONNABORTED', isAxiosError: true }),
+      );
+
+      await llamaCppModule._runHealthProbe();
+
+      expect(callApiSpy).not.toHaveBeenCalled();
+      expect(llamaCppModule.capabilities.health).toBe('unknown');
+      expect(llamaCppModule.capabilities.lastHealthCheckResult).toContain('router');
+    });
+
+    it('stays unknown (not unhealthy) when /health reports model loading (503)', async () => {
+      llamaCppModule.cachedModels = [{ id: 'router-model-a', object: 'model' }];
+      jest.spyOn(axios, 'get').mockResolvedValueOnce({
+        status: 503,
+        data: {},
+        headers: {},
+      } as any);
+
+      await llamaCppModule._runHealthProbe();
+
+      expect(callApiSpy).not.toHaveBeenCalled();
+      expect(llamaCppModule.capabilities.health).toBe('unknown');
+      expect(llamaCppModule.capabilities.lastHealthCheckResult).toContain('503');
+    });
   });
 });
