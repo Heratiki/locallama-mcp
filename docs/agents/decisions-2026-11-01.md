@@ -27,6 +27,8 @@ From `docs/prd/00-goals-roadmap.md`:
 
 ## Decisions
 
+Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:12Z. Rows after this note use `date -u`.
+
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
