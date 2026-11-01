@@ -6,6 +6,7 @@ import {
   ProviderModel,
   TaskExecutionOptions,
   TaskExecutionResult,
+  raceAbort,
 } from '../core/provider/types.js';
 import { localProviderLifecycle } from '../core/provider/local-runtime-lifecycle.js';
 import { ollamaModule } from './index.js';
@@ -73,7 +74,7 @@ class OllamaProvider implements LLMProvider {
       ...buildCodeTaskExecutionOptions(task, 'ollama'),
       ...options,
     };
-    const content = await ollamaModule.executeTask(id, task, executionOptions);
+    const content = await raceAbort(ollamaModule.executeTask(id, task, executionOptions), options?.signal);
     this.lastExecutedModelId = id;
     return { content, model: id };
   }

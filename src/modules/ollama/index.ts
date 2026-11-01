@@ -1,3 +1,4 @@
+import { abortError, linkAbort } from '../core/provider/types.js';
 import axios, { AxiosError } from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -615,7 +616,7 @@ export const ollamaModule = {
     modelId: string,
     task: string,
     timeout: number,
-    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }
+    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }
   ): Promise<{
     success: boolean;
     text?: string;
@@ -654,6 +655,7 @@ export const ollamaModule = {
       // Create the request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
+      linkAbort(controller, options?.signal, timeoutId);
       
       // Prefer task-tuned settings, then fall back to the default model config.
       const temperature = options?.temperature ?? config.defaultModelConfig.temperature;
@@ -1021,7 +1023,7 @@ export const ollamaModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }): Promise<string> {
     logger.info(`Executing task using Ollama model ${modelId}`);
     
     try {
@@ -1040,6 +1042,7 @@ export const ollamaModule = {
       const result = await this.callOllamaApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
+        if (options?.signal?.aborted) throw abortError();
         if (result.error) {
           switch (result.error) {
             case OllamaErrorType.RATE_LIMIT:

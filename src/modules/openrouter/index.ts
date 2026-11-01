@@ -1,3 +1,4 @@
+import { abortError, linkAbort } from '../core/provider/types.js';
 import axios, { AxiosError } from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -682,7 +683,7 @@ export const openRouterModule = {
     modelId: string,
     task: string,
     timeout: number,
-    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }
+    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }
   ): Promise<{
     success: boolean;
     text?: string;
@@ -728,6 +729,7 @@ export const openRouterModule = {
       // Create the request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
+      linkAbort(controller, options?.signal, timeoutId);
       
       // Prepare the messages based on the prompting strategy
       const messages = [];
@@ -1240,7 +1242,7 @@ export const openRouterModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }): Promise<string> {
     logger.info(`Executing task using OpenRouter model ${modelId}`);
     
     try {
@@ -1268,6 +1270,7 @@ export const openRouterModule = {
       const result = await this.callOpenRouterApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
+        if (options?.signal?.aborted) throw abortError();
         if (result.error) {
           await this.recordFreeModelFailure(normalizedModelId, result.error);
         }

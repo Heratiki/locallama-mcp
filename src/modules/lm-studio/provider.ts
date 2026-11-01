@@ -6,6 +6,7 @@ import {
   ProviderModel,
   TaskExecutionOptions,
   TaskExecutionResult,
+  raceAbort,
 } from '../core/provider/types.js';
 import { localProviderLifecycle } from '../core/provider/local-runtime-lifecycle.js';
 import { lmStudioModule } from './index.js';
@@ -83,7 +84,7 @@ class LMStudioProvider implements LLMProvider {
       ...buildCodeTaskExecutionOptions(task, 'lm-studio'),
       ...options,
     };
-    const content = await lmStudioModule.executeTask(id, task, { ...executionOptions, timeoutMs: options?.timeoutMs });
+    const content = await raceAbort(lmStudioModule.executeTask(id, task, { ...executionOptions, timeoutMs: options?.timeoutMs }), options?.signal);
     this.lastExecutedModelId = id;
     return { content, model: id };
   }

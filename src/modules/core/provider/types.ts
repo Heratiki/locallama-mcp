@@ -28,6 +28,54 @@ export interface TaskExecutionOptions {
   temperature?: number;
   systemPrompt?: string;
   timeoutMs?: number;
+  /** Cancel the model call. Providers that cannot abort ignore it. */
+  signal?: AbortSignal;
+}
+
+/** AbortError for a call cancelled by the caller's signal (not a timeout). */
+export function abortError(): Error {
+  const err = new Error('The operation was aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+/**
+ * Abort `controller` when `signal` aborts (now, if it already has). Also clears
+ * the request's timeout timer once the controller aborts, so a cancelled call
+ * leaves no timer behind.
+ */
+export function linkAbort(
+  controller: AbortController,
+  signal?: AbortSignal,
+  timer?: ReturnType<typeof setTimeout>,
+): void {
+  if (timer !== undefined) {
+    controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+  }
+  if (!signal) return;
+  if (signal.aborted) { controller.abort(); return; }
+  signal.addEventListener('abort', () => controller.abort(), { once: true });
+}
+
+/**
+ * Settle with `work` unless `signal` aborts first, then reject with an
+ * AbortError. The underlying work is left to finish and its output is
+ * discarded (PRD 01 5.10). With no signal, `work` is returned unchanged.
+ */
+export function raceAbort<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) {
+    work.catch(() => undefined);
+    return Promise.reject(abortError());
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    work.then(
+      (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
+      (e) => { signal.removeEventListener('abort', onAbort); reject(e); },
+    );
+  });
 }
 
 export interface TaskExecutionResult {

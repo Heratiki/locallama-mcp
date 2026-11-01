@@ -1,3 +1,4 @@
+import { abortError, linkAbort } from '../core/provider/types.js';
 /**
  * llama.cpp (llama-server) Module
  *
@@ -428,7 +429,7 @@ export const llamaCppModule = {
   async executeTask(
     modelId: string,
     task: string,
-    options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number },
+    options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal },
   ): Promise<string> {
     if (!config.llamaCppEndpoint) {
       throw new Error('LLAMA_CPP_ENDPOINT not configured');
@@ -442,6 +443,7 @@ export const llamaCppModule = {
     const result = await this.callApi(modelId, task, timeout, options);
 
     if (!result.success || !result.text) {
+      if (options?.signal?.aborted) throw abortError();
       switch (result.error) {
         case LlamaCppErrorType.CONTEXT_LENGTH_EXCEEDED:
           throw new Error('Context length exceeded. Please reduce the size of your task.');
@@ -470,7 +472,7 @@ export const llamaCppModule = {
     modelId: string,
     task: string,
     timeout: number,
-    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number },
+    options?: { systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal },
   ): Promise<LlamaCppApiCallResult> {
     const endpoint = config.llamaCppEndpoint;
     if (!endpoint) {
@@ -501,6 +503,7 @@ export const llamaCppModule = {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+    linkAbort(controller, options?.signal, timeoutId);
 
     try {
       const response = await axios.post<LlamaCppChatResponse>(url, body, {

@@ -6,6 +6,7 @@ import {
   ProviderModel,
   TaskExecutionOptions,
   TaskExecutionResult,
+  raceAbort,
 } from '../core/provider/types.js';
 import { openRouterModule } from './index.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
@@ -137,7 +138,7 @@ class OpenRouterProvider implements LLMProvider {
       ...buildCodeTaskExecutionOptions(task, 'openrouter'),
       ...options,
     };
-    const content = await openRouterModule.executeTask(id, task, executionOptions);
+    const content = await raceAbort(openRouterModule.executeTask(id, task, executionOptions), options?.signal);
     return { content, model: id };
   }
 
