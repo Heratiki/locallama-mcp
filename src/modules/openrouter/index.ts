@@ -1,4 +1,4 @@
-import { linkAbort } from '../core/provider/types.js';
+import { abortError, linkAbort } from '../core/provider/types.js';
 import axios, { AxiosError } from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -1270,6 +1270,7 @@ export const openRouterModule = {
       const result = await this.callOpenRouterApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
+        if (options?.signal?.aborted) throw abortError();
         if (result.error) {
           await this.recordFreeModelFailure(normalizedModelId, result.error);
         }

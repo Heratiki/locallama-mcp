@@ -84,7 +84,7 @@ describe('openrouter executeTask signal', () => {
     const spy = jest.spyOn(axios, 'post').mockImplementation((_u, _b, cfg) => {
       seen = cfg?.signal as AbortSignal;
       return new Promise((_res, rej) => {
-        seen.addEventListener('abort', () => rej(new Error('aborted')));
+        seen.addEventListener('abort', () => rej(Object.assign(new Error('canceled'), { code: 'ERR_CANCELED', isAxiosError: true })));
       });
     });
     const ac = new AbortController();
@@ -94,7 +94,8 @@ describe('openrouter executeTask signal', () => {
     expect(seen?.aborted).toBe(false);
     ac.abort();
     expect(seen?.aborted).toBe(true);
-    await p;
+    const err = (await p) as Error;
     spy.mockRestore();
+    expect(err.name).toBe('AbortError'); // not InferenceTimeoutError
   });
 });
