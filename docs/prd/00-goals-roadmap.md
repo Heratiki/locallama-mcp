@@ -4,16 +4,27 @@ _Status: draft, 2026-11-01. Rulings from the maintainer are marked **Ruling**._
 
 ## North star
 
-LocalLama exists to cut the frontier tokens that a coding agent (Claude Code,
-Codex, Cline, Roo Code and others) spends on code requests.
+LocalLama lets a person code with working results at $0. It uses free online
+models and small local models that barely run on old hardware. A person who
+cannot pay for a coding subscription or API credits gets a slow but steady way
+to do what only companies and people with money could do before.
 
-A coding agent sends a code request. LocalLama diagnoses it, and small local or
-free models grind through it with a strong harness. LocalLama returns a patch
-that passes the repo's own checks. The agent spends frontier tokens only to
-write the request and to review the patch.
+A client sends a code request. LocalLama diagnoses it, and small local or free
+models grind through it with a strong harness. LocalLama returns a patch that
+passes the repo's own checks.
+
+The same harness also cuts the frontier tokens of people who do pay: a
+frontier agent (Claude Code, Codex) spends tokens only to write the request and
+to review the patch.
 
 Speed is secondary. A slow result that works is better than a fast result that
-does not.
+does not. Paid models are opt-in only.
+
+In the maintainer's words (2026-11-01): "For those people that can't afford
+coding subscriptions or API credits I'd love for them to find Free model use
+online and have local models barely running on old hardware and let Locallama
+give them a slow but steady way to achieve something that has only really been
+available to companies, or those with money."
 
 ## Rulings (2026-11-01)
 
@@ -42,6 +53,13 @@ does not.
 7. **Patch request shape:** the agent sends a goal line, the repo path,
    optional file hints and optional checks. LocalLama finds the rest of the
    context itself with BM25.
+8. **Front door:** first target the free clients that already speak MCP
+   (Cline, Roo Code, Continue, OpenCode) on a free or local model. The
+   client's model can be weak, because LocalLama does the hard work. A
+   built-in front door (CLI or dashboard page) comes later.
+9. **Hardware floor:** an old laptop with 8 GB RAM and no usable GPU. Local
+   models are 1-3B at a few tokens per second, plus free online models. Every
+   "done when" line must also pass on this machine, at $0.
 
 ## Gaps in the code today (2026-11-01)
 
@@ -51,6 +69,10 @@ does not.
   run a `codeCheck`. `OutputValidator` is a model that answers YES or NO.
 - The retry ladder (`good` → `better` → `best`) changes the model. It does not
   give the check errors back to the same small model.
+- The only free online provider is the OpenRouter free tier. Other free tiers
+  are not providers yet.
+- The hardware floor (Ruling 9) is not tested. Defaults (timeouts, context
+  sizes, the shared local slot) assume a GPU.
 
 ## Roadmap of goals
 
@@ -59,12 +81,13 @@ a live run against real providers (`docs/audits/ARCHITECTURAL_TRUTHS.md`).
 
 ### G1 — Measure the savings
 
-Record per task: tokens used by local, free and paid models; an estimate of the
-frontier tokens the agent did not spend; whether the agent accepted the result
-(`rate_model`); and the time to the result.
+Record per task: tokens used by local, free and paid models; dollars spent; an
+estimate of the frontier tokens the agent did not spend (Ruling 6); whether
+the client accepted the result (`rate_model`); and the time to the result.
 
 Done when: one MCP read (or `get_system_state` field) gives accepted tasks,
-pass rate and estimated frontier tokens saved, per day and per task type.
+pass rate, dollars spent and estimated frontier tokens saved, per day and per
+task type.
 
 ### G2 — Verified patch (patch DAG, one node)
 
@@ -107,21 +130,47 @@ and the change shows in the G1 numbers.
 ### G6 — Fit the clients
 
 Each client gets short instructions on when to offload work. The responses are
-small: a diff, a check summary and a status, with no prose. Later: the optional
-local apply-model (Ruling 2).
+small: a diff, a check summary and a status, with no prose. Free MCP clients
+come first (Ruling 8), frontier agents second. Later: the optional local
+apply-model (Ruling 2) and a built-in front door.
 
-Done when: Claude Code and Codex each offload a request, apply the returned
-diff, and the agent-side token use for that request is lower than doing it
+Done when: Cline or Roo Code on a free model sends a request, applies the
+returned diff, and the checks pass, at $0. And: Claude Code and Codex each
+offload a request, and the agent-side token use is lower than doing it
 directly (measured, not estimated).
+
+### G7 — Free pool and patient queue
+
+Add the free online tiers that allow code use as providers, next to the
+OpenRouter free tier. Each one gets its rate limits and daily quotas from its
+own docs. The queue is patient: when every free tier is at its limit, a Job
+waits for the next window and does not fail, and the status shows when it
+will run.
+
+Done when: a grind run that uses more requests than one free tier allows per
+day still finishes at $0, by moving across free tiers and waiting for quota.
+
+### G8 — Old hardware works
+
+Defaults fit the hardware floor (Ruling 9): long timeouts for slow tokens,
+small context sizes, one local model in RAM at a time, and CPU-only runtimes
+(llama.cpp, Ollama). Setup finds the hardware and picks a profile. Install is
+one command, and a first-run check says what the machine can do.
+
+Done when: on an 8 GB, CPU-only machine with no API key, a fresh install
+finishes a small seed request with a passing diff, using only local and free
+models.
 
 ## Order
 
 G1 first, so every later goal has a number. G2 and G3 together are the first
-useful product. G4 builds on G2/G3. G5 and G6 can start after G2.
+useful product. G8 runs next to G2/G3, so the first product works on the
+hardware floor from the start. G7 comes before long grind runs need it. G4
+builds on G2/G3. G5 and G6 can start after G2.
 
 ## Next planning step
 
-Write `docs/prd/01-verified-patch-and-grind-loop.md` (G2 and G3) on top of
+Write `docs/prd/01-verified-patch-and-grind-loop.md` (G2 and G3, at the G8 floor) on top of
 these rulings and the grounding map. Then split it into GitHub issues.
 
 See `docs/prd/validated-patch-dag/00-repo-grounding-and-reuse-map.md` for the
