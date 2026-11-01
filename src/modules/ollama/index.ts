@@ -1,4 +1,4 @@
-import { linkAbort } from '../core/provider/types.js';
+import { abortError, linkAbort } from '../core/provider/types.js';
 import axios, { AxiosError } from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -655,7 +655,7 @@ export const ollamaModule = {
       // Create the request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
-      linkAbort(controller, options?.signal);
+      linkAbort(controller, options?.signal, timeoutId);
       
       // Prefer task-tuned settings, then fall back to the default model config.
       const temperature = options?.temperature ?? config.defaultModelConfig.temperature;
@@ -1042,6 +1042,7 @@ export const ollamaModule = {
       const result = await this.callOllamaApi(modelId, task, timeout, executionOptions);
       
       if (!result.success || !result.text) {
+        if (options?.signal?.aborted) throw abortError();
         if (result.error) {
           switch (result.error) {
             case OllamaErrorType.RATE_LIMIT:

@@ -1,4 +1,4 @@
-import { linkAbort } from '../core/provider/types.js';
+import { abortError, linkAbort } from '../core/provider/types.js';
 import axios, { AxiosError } from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -770,7 +770,7 @@ export const lmStudioModule = {
       // Create the request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
-      linkAbort(controller, options?.signal);
+      linkAbort(controller, options?.signal, timeoutId);
 
       // Prefer task-tuned execution options, then fall back to the model defaults.
       const temperature = options?.temperature ?? config.defaultModelConfig.temperature;
@@ -1272,6 +1272,7 @@ export const lmStudioModule = {
       ); // Use this.
 
       if (!result.success || !result.text) {
+        if (options?.signal?.aborted) throw abortError();
         const diagnosticsSummary = this.summarizeErrorDiagnostics(result.diagnostics);
         const throwWithDiagnostics = (message: string): never => {
           const executionError = new Error(`${message} (${diagnosticsSummary})`) as Error & {

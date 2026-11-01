@@ -32,8 +32,26 @@ export interface TaskExecutionOptions {
   signal?: AbortSignal;
 }
 
-/** Abort `controller` when `signal` aborts (now, if it already has). */
-export function linkAbort(controller: AbortController, signal?: AbortSignal): void {
+/** AbortError for a call cancelled by the caller's signal (not a timeout). */
+export function abortError(): Error {
+  const err = new Error('The operation was aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+/**
+ * Abort `controller` when `signal` aborts (now, if it already has). Also clears
+ * the request's timeout timer once the controller aborts, so a cancelled call
+ * leaves no timer behind.
+ */
+export function linkAbort(
+  controller: AbortController,
+  signal?: AbortSignal,
+  timer?: ReturnType<typeof setTimeout>,
+): void {
+  if (timer !== undefined) {
+    controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+  }
   if (!signal) return;
   if (signal.aborted) { controller.abort(); return; }
   signal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -46,11 +64,6 @@ export function linkAbort(controller: AbortController, signal?: AbortSignal): vo
  */
 export function raceAbort<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return work;
-  const abortError = (): Error => {
-    const err = new Error('The operation was aborted');
-    err.name = 'AbortError';
-    return err;
-  };
   if (signal.aborted) {
     work.catch(() => undefined);
     return Promise.reject(abortError());

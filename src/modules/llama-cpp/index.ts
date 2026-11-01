@@ -1,4 +1,4 @@
-import { linkAbort } from '../core/provider/types.js';
+import { abortError, linkAbort } from '../core/provider/types.js';
 /**
  * llama.cpp (llama-server) Module
  *
@@ -443,6 +443,7 @@ export const llamaCppModule = {
     const result = await this.callApi(modelId, task, timeout, options);
 
     if (!result.success || !result.text) {
+      if (options?.signal?.aborted) throw abortError();
       switch (result.error) {
         case LlamaCppErrorType.CONTEXT_LENGTH_EXCEEDED:
           throw new Error('Context length exceeded. Please reduce the size of your task.');
@@ -502,7 +503,7 @@ export const llamaCppModule = {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
-    linkAbort(controller, options?.signal);
+    linkAbort(controller, options?.signal, timeoutId);
 
     try {
       const response = await axios.post<LlamaCppChatResponse>(url, body, {

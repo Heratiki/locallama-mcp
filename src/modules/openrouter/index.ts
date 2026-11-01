@@ -729,7 +729,7 @@ export const openRouterModule = {
       // Create the request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
-      linkAbort(controller, options?.signal);
+      linkAbort(controller, options?.signal, timeoutId);
       
       // Prepare the messages based on the prompting strategy
       const messages = [];

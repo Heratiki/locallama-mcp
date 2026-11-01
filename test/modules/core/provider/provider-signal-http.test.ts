@@ -46,6 +46,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   server.closeAllConnections();
+  http.globalAgent.destroy(); // axios keep-alive sockets
   await new Promise<void>((r) => server.close(() => r()));
 });
 
@@ -71,7 +72,8 @@ describe.each(cases)('%s executeTask signal', (_n, run) => {
     ac.abort();
     await waitFor(() => closed > 0);
     expect(closed).toBeGreaterThan(0);
-    await p;
+    const err = (await p) as Error;
+    expect(err.name).toBe('AbortError'); // a caller abort is not reported as a timeout
   });
 });
 
