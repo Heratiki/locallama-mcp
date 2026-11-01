@@ -29,6 +29,7 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:25 | R1 run 2 | Accepted `docs/research/free-model-landscape-2026-11-01.md` (agy Sonnet): live-page rows, 70 `unconfirmed` cells, Method list; spot check of Groq model ids matches the live page. Key facts: GitHub Models retired; G7 first = OpenRouter :free, Groq, Gemini free, Cloudflare Workers AI; G8 local = Granite 4.2 3B, LFM3-1.7B, Gemma 4 E2B | Fixes PRD 01 open question 1 inputs | `git revert` |
 | 05:20 | #137 merged | `f292453`; lane-verifier PASS; full suite 67/67 suites, 510/510 tests. Not pushed | Gates, review, suite green | `git revert -m1 f292453` |
 | 05:18 | #138 | Codex lane (medium) for the contracts, because the opencode runner holds one lane (#149) | Throughput; codex week 20% | `lanes stop issue-138` |
 | 05:12 | Maintainer away | Maintainer went to bed (~05:10Z). Note from them: "You aren't forced into a mold on what this MCP has been in the past." Steward decides routine items alone; consequential ones go to "Waits for the maintainer" | Maintainer message | — |
