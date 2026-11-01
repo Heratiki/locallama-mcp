@@ -1,3 +1,34 @@
+# [1.32.0](https://github.com/Heratiki/locallama-mcp/compare/v1.31.4...v1.32.0) (2026-11-01)
+
+
+### Bug Fixes
+
+* **#137:** stop sending draft_model to OpenRouter; gate speculative decoding to local providers ([4993fa0](https://github.com/Heratiki/locallama-mcp/commit/4993fa05cfe04c48b6c28e562a3c6b433e8a2a02)), closes [#137](https://github.com/Heratiki/locallama-mcp/issues/137) [#137](https://github.com/Heratiki/locallama-mcp/issues/137)
+* **coordinator,modelsDb:** stop provider===model-id at the source and drop the qualified-id probe ([#150](https://github.com/Heratiki/locallama-mcp/issues/150) fix round) ([b136b1f](https://github.com/Heratiki/locallama-mcp/commit/b136b1f4ba833f54febf36b5058ea86d3e81581b))
+* **cost-monitor:** include llama.cpp provider models in getAvailableModels ([a88b002](https://github.com/Heratiki/locallama-mcp/commit/a88b002aedf216d778bc0e082629d9eba5ed07bb)), closes [#149](https://github.com/Heratiki/locallama-mcp/issues/149)
+* **llama-cpp:** router health probe no longer drops provider on cold start ([0791380](https://github.com/Heratiki/locallama-mcp/commit/0791380713537a5bc604917ea8dce8ea489b7eda)), closes [#154](https://github.com/Heratiki/locallama-mcp/issues/154)
+* **openrouter:** caller abort throws AbortError, not InferenceTimeoutError ([de467d1](https://github.com/Heratiki/locallama-mcp/commit/de467d1bb544d5e86f45fa4f6b76c80c3dc39d5d)), closes [#145](https://github.com/Heratiki/locallama-mcp/issues/145)
+* **patch_task:** list optional task_type in the input schema ([bc68bbe](https://github.com/Heratiki/locallama-mcp/commit/bc68bbeffe6a2741e5fdd557ed46f6043ff1ae02)), closes [#152](https://github.com/Heratiki/locallama-mcp/issues/152)
+* **patch:** rank ladder by benchmark-only code score, normalized ids, param size ([f246e25](https://github.com/Heratiki/locallama-mcp/commit/f246e250870e5a3228d1e39e7444b6fc9d3b3332)), closes [#153](https://github.com/Heratiki/locallama-mcp/issues/153)
+* **patch:** record true paid cost, count tokens with js-tiktoken ([66249dd](https://github.com/Heratiki/locallama-mcp/commit/66249dde30086870c195e3255fa15a133f44d454)), closes [#144](https://github.com/Heratiki/locallama-mcp/issues/144)
+* **provider:** clean test exit, AbortError for caller abort, clear timer on abort ([b7ec7f9](https://github.com/Heratiki/locallama-mcp/commit/b7ec7f9682e59f76bea4acb13697a6b70e767dc3)), closes [#145](https://github.com/Heratiki/locallama-mcp/issues/145)
+* **routing:** fail on subtask execution errors; mark unverified attempts null ([1c31016](https://github.com/Heratiki/locallama-mcp/commit/1c3101671320de2a27d4831bab22864368ec5a45)), closes [#151](https://github.com/Heratiki/locallama-mcp/issues/151)
+* **routing:** local subtask assignments with provider === model id are repaired or replaced ([#150](https://github.com/Heratiki/locallama-mcp/issues/150)) ([273c0e3](https://github.com/Heratiki/locallama-mcp/commit/273c0e323aa4876c1b0b43fc227be9b114e1f0c8))
+
+
+### Features
+
+* **job-store:** patch Job persistence (kind, patch_state, patch_attempts, conditional terminal writes) ([89e437c](https://github.com/Heratiki/locallama-mcp/commit/89e437cba4a246a101eb8473c3a9caef2a3f92b4)), closes [#143](https://github.com/Heratiki/locallama-mcp/issues/143)
+* **patch:** dispatcher, recovery, patch_task tool, patch status and cancel ([d413879](https://github.com/Heratiki/locallama-mcp/commit/d413879f2d017c7b273809b0fb02a2a31d6c6ab3)), closes [#147](https://github.com/Heratiki/locallama-mcp/issues/147)
+* **patch:** edit-block parser and applier ([00d93eb](https://github.com/Heratiki/locallama-mcp/commit/00d93eb22b4dd2c9cb12e58c2bcf93a5f93fcfb4)), closes [#140](https://github.com/Heratiki/locallama-mcp/issues/140)
+* **patch:** get_savings tool — accepted tasks, pass rate, dollars, estimated frontier tokens saved ([3173ad5](https://github.com/Heratiki/locallama-mcp/commit/3173ad5f6224a46078b3960f1526fe406a94b15c)), closes [#152](https://github.com/Heratiki/locallama-mcp/issues/152) [#152](https://github.com/Heratiki/locallama-mcp/issues/152)
+* **patch:** ladder, prompt builder, context budget, paid accounting ([c892e20](https://github.com/Heratiki/locallama-mcp/commit/c892e20de2cf5db6782392e330b6a74361a9b526)), closes [#144](https://github.com/Heratiki/locallama-mcp/issues/144)
+* **patch:** load declared checks and run them with process-group cleanup ([c891ee2](https://github.com/Heratiki/locallama-mcp/commit/c891ee263745bb54b7c64a8358d5df325529b87c)), closes [#141](https://github.com/Heratiki/locallama-mcp/issues/141)
+* **patch:** PRD 01 contracts — shared types, config keys and safety flags ([173c10b](https://github.com/Heratiki/locallama-mcp/commit/173c10bc6c5bd1f59f28089e18ba5b9707026600)), closes [#138](https://github.com/Heratiki/locallama-mcp/issues/138)
+* **patch:** snapshot and isolate jobs in git worktrees ([54534ab](https://github.com/Heratiki/locallama-mcp/commit/54534ab14c171310623393a8d459c7533cc58a20)), closes [#142](https://github.com/Heratiki/locallama-mcp/issues/142)
+* **provider:** optional AbortSignal in TaskExecutionOptions; providers honour it ([fbaa145](https://github.com/Heratiki/locallama-mcp/commit/fbaa145fe31795cadc57b8e66b356e41f8bbeffe)), closes [#145](https://github.com/Heratiki/locallama-mcp/issues/145)
+* **provider:** pass options.signal into axios on executeTask paths of the four modules ([99d9044](https://github.com/Heratiki/locallama-mcp/commit/99d90449b5ec9fe68a82348851ca95ae9a1bf6e5)), closes [#145](https://github.com/Heratiki/locallama-mcp/issues/145)
+
 ## [1.31.4](https://github.com/Heratiki/locallama-mcp/compare/v1.31.3...v1.31.4) (2026-06-08)
 
 
