@@ -6,6 +6,7 @@ import { codeModelSelector } from './codeModelSelector.js';
 import { ModelNotFoundError } from '../../openrouter/index.js'; // Import ModelNotFoundError
 import { InferenceTimeoutError } from '../../utils/inferenceTimeout.js';
 import { getProviderRegistry } from '../../core/provider/registry.js';
+import type { LLMProvider } from '../../core/provider/types.js';
 import { costMonitor, CodeSearchEngine, CodeSearchResult } from '../../cost-monitor/index.js';
 import { CodeTaskAnalysisOptions, DecomposedCodeTask, CodeSubtask } from '../types/codeTask.js';
 import { Model } from '../../../types/index.js';
@@ -432,31 +433,66 @@ Rules:
       } else {
         // Provider not registered yet — best-effort fallback: try every registered provider.
         logger.warn(`Provider '${model.provider}' not found in registry for subtask ${subtask.id}; probing all providers.`);
+        const executeViaProvider = async (p: LLMProvider): Promise<string> => {
+          const execResult = await registry.executeWithConcurrencyLimit(
+            p,
+            async () => {
+              // Update job status to In Progress ONLY AFTER acquiring the slot
+              if (jobTracker) {
+                try {
+                  await jobTracker.updateJobProgress(subtask.id, 10);
+                } catch (error) {
+                  logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
+                }
+              }
+              return await p.executeTask(bareId, prompt, { timeoutMs: timeout });
+            },
+            { workload: 'task', modelId: bareId },
+          );
+          return execResult.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        };
+
         let found = false;
         for (const p of registry.list()) {
-          const supports = await p.supportsModel(bareId);
-          if (supports) {
-            logger.info(`Falling back to provider '${p.id}' for model ${bareId}`);
-            const execResult = await registry.executeWithConcurrencyLimit(
-              p,
-              async () => {
-                // Update job status to In Progress ONLY AFTER acquiring the slot
-                if (jobTracker) {
-                  try {
-                    await jobTracker.updateJobProgress(subtask.id, 10);
-                  } catch (error) {
-                    logger.warn(`Failed to update job progress for subtask ${subtask.id}:`, error);
-                  }
-                }
-                return await p.executeTask(bareId, prompt, { timeoutMs: timeout });
-              },
-              { workload: 'task' },
+          // Cheap warm-cache probe on the bare id only. Do NOT probe the
+          // provider-qualified form (`${p.id}:${bareId}`) here: providers
+          // such as ollama accept ANY id carrying their own prefix
+          // (ollama/provider.ts:60-63), so a qualified probe returns true
+          // for the FIRST registered provider regardless of who owns the
+          // model (issue #150 fix round).
+          if (!(await p.supportsModel(bareId))) continue;
+
+          logger.info(`Falling back to provider '${p.id}' for model ${bareId}`);
+          resultText = await executeViaProvider(p);
+          found = true;
+          break;
+        }
+
+        if (!found) {
+          // Cache-based probes all missed (cold cache, or the model was
+          // pulled after startup). Refresh each provider's model list and
+          // match the bare id against the ids the provider actually reports
+          // — the authoritative signal, unlike prefix-based supportsModel
+          // answers (issue #150).
+          for (const p of registry.list()) {
+            let listedModelIds: string[];
+            try {
+              listedModelIds = (await p.listModels()).map((m) => m.id);
+            } catch {
+              continue;
+            }
+            const listsModel = listedModelIds.some(
+              (id) => id === bareId || id === `${p.id}:${bareId}`,
             );
-            resultText = execResult.content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+            if (!listsModel) continue;
+
+            logger.info(`Falling back to provider '${p.id}' for model ${bareId} (matched via provider model list)`);
+            resultText = await executeViaProvider(p);
             found = true;
             break;
           }
         }
+
         if (!found) {
           throw new Error(`No registered provider supports model '${model.id}' (provider: ${model.provider})`);
         }

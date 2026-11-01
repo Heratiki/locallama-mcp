@@ -123,6 +123,18 @@ export class Router implements IRouter {
     return false;
   }
 
+  /**
+   * Issue #150: some Model records carry a garbage `provider` that is not a
+   * registry provider id (worst case: the model id itself, e.g. when a
+   * performance-db entry derived its provider by splitting the model id). An
+   * assignment with such a provider cannot be executed by any provider, so
+   * preservation must not keep or install one.
+   */
+  private providerIsRegistered(providerId: string | undefined | null): boolean {
+    if (!providerId) return false;
+    return getProviderRegistry().has(providerId);
+  }
+
   private async preserveLocalDecisionModelAssignments(
     decision: { provider: string; model: string },
     decomposedTask: { subtasks: Array<{ id: string; complexity: number }> },
@@ -136,15 +148,17 @@ export class Router implements IRouter {
 
     const availableModels = await costMonitor.getAvailableModels();
     const preferredModel = availableModels.find(
-      (model) => isProviderLocal(model.provider) && this.modelIdMatches(decision.model, model.id),
+      (model) =>
+        isProviderLocal(model.provider) &&
+        this.providerIsRegistered(model.provider) &&
+        this.modelIdMatches(decision.model, model.id),
     );
 
     if (!preferredModel) {
-      logger.warn(`[${routeTraceId}] unable to preserve local decision model for decomposed task`, {
+      logger.warn(`[${routeTraceId}] no registered local model entry for decision model; will try to repair providers in place`, {
         decisionModel: decision.model,
         assignedModelCount: modelAssignments.size,
       });
-      return;
     }
 
     const targetSubtaskIds = new Set<string>();
@@ -165,14 +179,40 @@ export class Router implements IRouter {
     const changedAssignments: Array<{ subtaskId: string; previousModel: string }> = [];
     for (const subtaskId of targetSubtaskIds) {
       const assignedModel = modelAssignments.get(subtaskId);
-      if (assignedModel && this.modelIdMatches(decision.model, assignedModel.id)) {
+      if (
+        assignedModel &&
+        this.modelIdMatches(decision.model, assignedModel.id) &&
+        this.providerIsRegistered(assignedModel.provider)
+      ) {
         continue;
       }
-      changedAssignments.push({
-        subtaskId,
-        previousModel: assignedModel?.id || 'unassigned',
-      });
-      modelAssignments.set(subtaskId, preferredModel);
+
+      if (preferredModel) {
+        changedAssignments.push({
+          subtaskId,
+          previousModel: assignedModel?.id || 'unassigned',
+        });
+        modelAssignments.set(subtaskId, preferredModel);
+        continue;
+      }
+
+      // No valid replacement entry. When the assigned model id already matches
+      // the decision but its provider is not a registered provider (issue #150:
+      // provider === model id), repair the provider by probing the registry
+      // instead of leaving an unexecutable assignment behind.
+      if (assignedModel && this.modelIdMatches(decision.model, assignedModel.id)) {
+        const resolvedProviderId = await this.resolveProviderIdForModel(
+          assignedModel.id,
+          assignedModel.provider,
+        );
+        if (resolvedProviderId !== assignedModel.provider && this.providerIsRegistered(resolvedProviderId)) {
+          changedAssignments.push({
+            subtaskId,
+            previousModel: `${assignedModel.id} (${assignedModel.provider})`,
+          });
+          modelAssignments.set(subtaskId, { ...assignedModel, provider: resolvedProviderId });
+        }
+      }
     }
 
     if (changedAssignments.length === 0) {
@@ -185,7 +225,7 @@ export class Router implements IRouter {
 
     logger.info(`[${routeTraceId}] preserved local decision model assignments`, {
       decisionModel: decision.model,
-      finalAssignedModel: preferredModel.id,
+      finalAssignedModel: preferredModel?.id,
       targetSubtaskIds: Array.from(targetSubtaskIds),
       changedAssignments,
     });
