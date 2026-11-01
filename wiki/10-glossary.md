@@ -54,6 +54,18 @@
 - **WebSocket side channel** — `ws://localhost:808x`, broadcasts Job progress; complements, does
   not replace, the MCP tool response path.
 
+## Patch tasks
+- **Patch Task** — a `patch_task` Task: grind on a goal until a Check passes; result is a diff or a Diagnosis.
+- **Snapshot** — a git commit of the target repo at submit time; the base of every Attempt.
+- **Scratch Workspace** — a temporary `git worktree` made from the Snapshot.
+- **Edit Block** — a search/replace block from the model; LocalLama makes the real diff.
+- **Check** — a command that judges an Attempt; exit 0 means pass.
+- **Attempt** — one model call plus Apply and Check.
+- **Patch Ladder** — local, then free, then paid models, fixed at submit.
+- **Diagnosis** — the result of a failed Patch Task: last errors, best Attempt, stop reason.
+
+Full definitions: [`CONTEXT.md`](../CONTEXT.md), "Patch tasks".
+
 ## See also
 - The authoritative definitions + example dialogue → [`CONTEXT.md`](../CONTEXT.md)
 - Domain layout / single-context convention → [`docs/agents/domain.md`](../docs/agents/domain.md)
