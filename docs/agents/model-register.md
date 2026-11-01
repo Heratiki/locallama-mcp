@@ -100,4 +100,6 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T05:47Z | issue-151 | opencode | zai-coding-plan/glm-5.3 | ? | build | opencode | failed | 3.4 | 0 | 0 | no-reading, gates=5 |
 | 2026-11-01T05:52Z | issue-146 | codex | ? | high | build | codex | done | 11.9 | 11 | 2 | gates=5 |
 | 2026-11-01T05:54Z | agent-a5eb5eff | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1.6 | 0 | 0 | split, lane=issue-146 |
+| 2026-11-01T05:59Z | issue-151b | opencode | opencode-go/deepseek-v4-pro | ? | build | opencode | done | 10.6 | 0 | 0 | no-reading, UNPROVEN, gates=5 |
+| 2026-11-01T06:00Z | agent-a9e164de | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=issue-151 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->

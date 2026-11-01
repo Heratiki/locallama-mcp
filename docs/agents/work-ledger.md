@@ -21,7 +21,7 @@ fails, and when the maintainer rules. Procedure:
 | PRD 01 issues (not filed yet) | opencode lane, `zai-coding-plan/` first; `opencode-go/` for some, to sample its models | queued | Steward scope (2026-11-01): all of PRD 01, waves 1-5 (#138-#148); wave 4 floor run is a simulation |
 | #149 F1 llama.cpp not routed | opencode-go/kimi-k2.7-code | merged f88df78 (not pushed) | suite green at 69742dc |
 | #150 F2 provider = model id | opencode zai-coding-plan/glm-5.3 (1 fix round) | merged a03c81c (not pushed) | producer fixed in modelsDb.ts; read-time repair kept; suite green |
-| #151 F3 false pass | opencode zai-coding-plan/glm-5.3 | building (lane issue-151) | after #150 |
+| #151 F3 false pass | opencode-go/deepseek-v4-pro (after a Z.ai 429) | merged 61010ed (not pushed) | suite green; follow-up: `isSubtaskExecutionFailure` matches error text (fragile; one failed subtask fails the attempt); wants a typed failure flag from codeTaskCoordinator; the task result text does not say "unverified" (only validation.passed: null) |
 | R1 research (no issue yet) | agy (Flash failed; Sonnet run 2 accepted) | done 2026-11-01 | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
 | #137 | opencode zai-coding-plan/glm-5.3 | merged f292453 (not pushed) | full suite 67/67, 510/510 at f292453 |
 | #138 PRD01-1 | codex (medium; steward committed) | merged 933d517 (not pushed) | full suite at 933d517 green |
@@ -33,7 +33,7 @@ fails, and when the maintainer rules. Procedure:
 | #144 PRD01-7 | lane-dev Sonnet (1 fix round) | merged a50b675 (not pushed) | suite green at a50b675 |
 | #145 PRD01-8 | lane-dev Sonnet (2 fix rounds) | merged edde477 (not pushed) | wave 2 done; suite green at edde477 |
 | #146 PRD01-9 | codex high | merged 4f2e54c (not pushed) | wave 3 done; suite green |
-| #147 PRD01-10 | opencode, zai-coding-plan/ (wave 4) | filed | after #146 |
+| #147 PRD01-10 | lane-dev Opus | building | wave 4 |
 | #148 PRD01-11 | opencode, zai-coding-plan/ (wave 5) | filed | after #147; floor run is a simulation |
 
 Wave order: a file two tickets need is changed by the first ticket's lane,
