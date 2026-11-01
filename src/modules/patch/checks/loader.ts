@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ChecksConfig, CheckSpec } from '../types.js';
-import { validateChecks, validateStrings } from './validation.js';
+import { validateChecks, validateLint, validateStrings } from './validation.js';
 
 export type ChecksResolution =
   | { ok: true; config: ChecksConfig }
@@ -25,10 +25,12 @@ export async function loadChecksConfig(snapshotPath: string): Promise<ChecksConf
     validateChecks(value.checks);
     if (value.links !== undefined) validateStrings(value.links, 'links');
     if (value.env_allow !== undefined) validateStrings(value.env_allow, 'env_allow');
+    if (value.lint !== undefined) validateLint(value.lint);
     return {
       checks: value.checks,
       ...(value.links === undefined ? {} : { links: value.links }),
       ...(value.env_allow === undefined ? {} : { env_allow: value.env_allow }),
+      ...(value.lint === undefined ? {} : { lint: value.lint }),
     };
   } catch (error) {
     throw new Error(`Invalid ${filename}: ${(error as Error).message}`);

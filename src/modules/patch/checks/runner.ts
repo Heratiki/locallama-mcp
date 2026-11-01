@@ -102,9 +102,12 @@ async function runCheck(
     clearTimeout(killTimer);
     options.signal?.removeEventListener('abort', onAbort);
   }
+  // The tool exited 0 but printed findings (gofmt -l): that is a failure.
+  const flagged = check.fail_on_stdout === true && !spawnFailed && !timedOut &&
+    exitCode === 0 && stdout.toString().trim() !== '';
   const tail = truncateTail([stdout.toString(), stderr.toString()].filter(Boolean).join('\n'), tailTokens);
   return {
-    name: check.name, exit_code: spawnFailed ? null : exitCode, timed_out: timedOut,
+    name: check.name, exit_code: spawnFailed ? null : flagged ? 1 : exitCode, timed_out: timedOut,
     duration_ms: Math.round(performance.now() - started), tail,
   };
 }

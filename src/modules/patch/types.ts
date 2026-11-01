@@ -33,6 +33,8 @@ export interface CheckSpec {
   argv: string[];
   timeout_ms?: number;
   append_changed_files?: boolean;
+  /** Tools that print findings but exit 0 (gofmt -l): non-empty stdout fails the check. */
+  fail_on_stdout?: boolean;
 }
 
 export interface CheckResult {
@@ -44,9 +46,20 @@ export interface CheckResult {
   tail: string;
 }
 
+/** `"auto"`, or the object form with tool ids to leave out. */
+export type LintConfig = 'auto' | { auto: true; exclude?: string[] };
+
+/** A linter that was not run, and why; reported as `lint_skipped` in the result. */
+export interface LintSkipped {
+  tool: string;
+  reason: string;
+}
+
 /** Snapshot's .locallama/checks.json; omitted links use backend defaults. */
 export interface ChecksConfig {
   checks: CheckSpec[];
+  /** Opt-in: also run the installed linter of every language among the changed files. */
+  lint?: LintConfig;
   links?: string[];
   env_allow?: string[];
 }

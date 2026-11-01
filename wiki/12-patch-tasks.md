@@ -60,6 +60,48 @@ rejects paths outside the worktree, `.git` paths and link paths
 `src/modules/patch/edit-blocks/applier.ts:applyEditBlocks`;
 `src/modules/api-integration/tool-definition/index.ts:patchTaskTool`).
 
+## Auto lint (opt-in)
+
+`.locallama/checks.json` can say `"lint": "auto"` (or `{"auto": true, "exclude": ["eslint"]}`).
+After the last explicit check of an attempt passes, LocalLama finds the languages of the
+files that attempt changed and runs the installed linter for each one as an extra check named
+`lint:<tool>`. A failure feeds its output tail to the next attempt like any check. Without
+`lint`, checks and the `no_checks` refusal are unchanged; `lint` alone does not satisfy
+`no_checks`. `validate` stays opt-in. Linters are never installed: a tool is looked up in the
+repo `node_modules/.bin`, `PATH`, `~/.local/bin`, `~/go/bin` and `~/.cargo/bin`, and a missing
+one is skipped and listed in `lint_skipped`. Tools that cannot take a file list (`tsc`,
+`go vet`, `staticcheck`, `cargo`, `dotnet format`) run on the whole package. `gofmt -l` prints
+findings and exits 0, so its check sets `fail_on_stdout`: non-empty stdout fails. Each lint
+check uses `PATCH_CHECK_TIMEOUT_MS`. Code: `src/modules/patch/checks/lint/registry.ts`
+(table), `lint/index.ts:planLint`, `src/modules/patch/checks/runner.ts:runCheck`,
+`src/modules/patch/worker/index.ts` (call site).
+
+| Language | Tool and argv | Notes |
+|---|---|---|
+| TS/JS | `tsc --noEmit -p .` | only with `tsconfig.json`; package scope |
+| TS/JS | `eslint --max-warnings=0 <files>`, else `biome check`, else `oxlint` | eslint and biome need the repo's own config |
+| Python | `ruff check` + `ruff format --check`; else `pyflakes`; else `python3` compile check | |
+| Go | `gofmt -l` (stdout = fail); `go vet ./...`; `staticcheck ./...` | vet and staticcheck run on the package |
+| Rust | `cargo fmt --check`; `cargo clippy --offline -- -D warnings` | needs `Cargo.toml` |
+| C/C++ | `clang-tidy <files>` (`-p .` with `compile_commands.json`, else `--`); else `gcc -fsyntax-only -Wall -Wextra` | |
+| Shell | `shellcheck --severity=style` | |
+| Ruby | `rubocop` | |
+| PHP | `php -l` | one run per file |
+| Lua | `luacheck` | |
+| Kotlin | `ktlint` | |
+| Swift | `swiftlint lint --strict` | |
+| C# | `dotnet format --verify-no-changes` | package scope |
+| Java | `javac -Xlint:all -proc:none` | only when no `pom.xml` or `build.gradle*` |
+| YAML | `yamllint` | |
+| Dockerfile | `hadolint` | |
+| Markdown | `markdownlint` | |
+
+Sandbox recipes the auto table reproduces (write these as explicit `checks` when a repo wants
+stricter flags than the table): TS `node_modules/.bin/tsc -p .` and `eslint --max-warnings=0`;
+Python `ruff check` and `ruff format --check`; Go `gofmt` via `sh -c 'test -z "$(gofmt -l .)"'`,
+`go vet`, `staticcheck`; Rust `cargo fmt --check` and `cargo clippy -D warnings`; C `gcc -Werror`
+with ASan/UBSan, and `clang-tidy`; Shell `shellcheck --severity=style`.
+
 ## Ladder, budgets and RAM
 
 The ladder is local → free → opt-in paid. Within each class, benchmark-derived code scores
@@ -135,6 +177,7 @@ The shared envelope is `src/modules/patch/types.ts:PatchResultV1`, with `CheckRe
 | `cost_usd`, `elapsed_ms` | Paid ledger total and elapsed milliseconds. |
 | `diagnosis` | Null on pass; otherwise `{last_errors, best_diff, attempts}`. Diagnosis attempts contain `{model_id, provider_id, outcome, duration_ms}`; outcomes are `apply_error`, `check_failed`, `validator_rejected`, `timed_out`, `call_error`. |
 | `validation` | Additive array of `{model_id, provider_id, passed: boolean \| null, skipped, reason}`. |
+| `lint_skipped` | Present only when `lint` is on: array of `{tool, reason}` for linters that were not run (missing, no repo config, excluded). The diagnosis `last_errors` of a failed job also ends with a `lint skipped:` line. |
 
 Result assembly, token accounting, last checks and diagnosis selection are in
 `src/modules/patch/worker/index.ts:PatchWorker.runJob`.

@@ -1,4 +1,4 @@
-import type { CheckSpec } from '../types.js';
+import type { CheckSpec, LintConfig } from '../types.js';
 
 const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(item => typeof item === 'string' && !item.includes('\0'));
@@ -15,6 +15,9 @@ export function validateChecks(value: unknown): asserts value is CheckSpec[] {
     if (check.append_changed_files !== undefined && typeof check.append_changed_files !== 'boolean') {
       throw new Error('append_changed_files must be a boolean');
     }
+    if (check.fail_on_stdout !== undefined && typeof check.fail_on_stdout !== 'boolean') {
+      throw new Error('fail_on_stdout must be a boolean');
+    }
   }
 }
 
@@ -27,4 +30,14 @@ export function validateTimeout(value: number): void {
 
 export function validateStrings(value: unknown, name: string): asserts value is string[] {
   if (!strings(value)) throw new Error(`${name} must be an array of strings`);
+}
+
+export function validateLint(value: unknown): asserts value is LintConfig {
+  if (value === 'auto') return;
+  if (value && typeof value === 'object' && !Array.isArray(value) &&
+      (value as { auto?: unknown }).auto === true &&
+      ((value as { exclude?: unknown }).exclude === undefined || strings((value as { exclude?: unknown }).exclude))) {
+    return;
+  }
+  throw new Error('lint must be "auto" or {"auto": true, "exclude": string[]}');
 }
