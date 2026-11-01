@@ -29,6 +29,8 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:05 | Order of work | Fix found problems before new work: #137, then #149-#151, then PRD 01 waves | Maintainer direction 05:00Z; steward tier rule | — |
+| 05:05 | R1 research | Flash run failed a spot check (2024 numbers, illustrative values); file marked DRAFT; run 2 on agy claude-sonnet-5-5-medium with live-page rules. Argon not used (reserved) | Routing: Pro-class after a measured Flash failure | Use run 1 draft |
 | 05:15 | route_task defects | Maintainer chose "file and fix": #149 (F1), #150 (F2), #151 (F3). F1 cause confirmed: `cost-monitor/api.ts getAvailableModels` never asks llama-cpp | Two live runs reproduce F2/F3 | Close the issues |
 | 05:15 | Test servers | Maintainer rule: watch for stuck test servers by PID; own log/data dir per run; check `df` and `ps` around runs (memory test-servers-watch). Disk at 05:15: 82G free (81% used) | Maintainer instruction | — |
 | 05:10 | Issues | Filed #138-#148 (PRD 01 §10) via ticket-writer; `PATCH_PAID_CAP_USD` default 0.25 (comment on #138, PRD R-E) | Unset default in PRD; paid is opt-in | Edit #138 and PRD R-E |

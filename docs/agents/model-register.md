@@ -65,4 +65,7 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-10-30T04:57Z | agent-a27cd1ab | claude | claude-sonnet-5-5 | medium | build | claude | completed | 32.3 | 1 | 0 | split, reset, lane=flaky-tests, gates=11 |
 | 2026-10-30T04:52Z | opencode-pid2158538 | opencode | ? | ? | ? | opencode | exited | 0.1 | 0 | 0 | shared |
 | 2026-10-30T04:58Z | agent-ab8a5d2b | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=flaky-tests |
+| 2026-11-01T04:53Z | prd01-review | codex | ? | high | review | codex | done | 2.1 | 3 | 1 | partial |
+| 2026-11-01T04:59Z | agent-a52da3f5 | claude | claude-sonnet-5-5 | low | write | claude | completed | 3 | 0.2 | 0 | split |
+| 2026-11-01T05:01Z | r1-research | agy | gemini-3.8-flash-high | high | research | agy | done | 9.7 | 4 | 1 |  |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->
