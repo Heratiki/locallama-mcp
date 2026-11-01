@@ -18,11 +18,19 @@ fails, and when the maintainer rules. Procedure:
 
 | Issue | Route | State | Next |
 |---|---|---|---|
+| PRD 01 issues (not filed yet) | opencode lane, `zai-coding-plan/` first; `opencode-go/` for some, to sample its models | queued | Steward scope (2026-11-01): all of PRD 01, waves 1-4; wave 4 floor run is a simulation |
 | R1 research (no issue yet) | research lane, `mattpocock-skills:research` | queued | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
 | #137 | lane-dev | open, not started | OpenRouter `draft_model` fix |
 
 Wave order: a file two tickets need is changed by the first ticket's lane,
 merged, then the second lane starts.
+
+## Routing preference (maintainer, 2026-11-01)
+
+Put issue lanes on Z.ai (`zai-coding-plan/`, pool `zaiWkUsed`) first. Use
+OpenCode Go (`opencode-go/`) on some lanes to learn what its models can do,
+without high use of any pool. Claude and codex lanes only when Z.ai cannot do
+the issue, or for review and verification.
 
 ## Rulings to ask
 

@@ -247,6 +247,8 @@ new text
 
 ## 6. Safety
 
+**Ruled 2026-11-01 (maintainer): approved as written below.**
+
 Risk R5 (file change needs an approval path) and R6 (no isolation):
 
 - `patch_task` is off unless the operator sets `PATCH_TASKS_ENABLED=true`.
