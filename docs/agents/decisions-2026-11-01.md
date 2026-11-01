@@ -72,6 +72,8 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 07:00 | #152 merged | `1702d3c`; re-verify PASS; full suite 99/99, 755/755. G1 has its read surface (`get_savings`) | Gates, review, suite | `git revert -m1 1702d3c` |
 | 07:00 | Steward error | My chain committed `bc68bbe` although a test failed (I checked grep, not jest's exit code). Fixed in `1dada55` before review; chains now check the jest exit code | Honest record | — |
 | 07:11 | #154 merged | `aa69207`; lane-verifier PASS; full suite 99/99, 761/761. Seed run 2 started on the same config; main frozen during the run | Gates, review, suite | `git revert -m1 aa69207` |
+| 07:58 | Seed run 2 | Stopped by Claude Code at 44/60 (host critically low on memory: 29/31 GB, 15 GB swap). Partial: 1 attempt 26/30 (0.87); 12 attempts 13/14 (0.93), incomplete. Not restarted (restart only on request). Command: `node scripts/patch-seed/run.mjs --run-config <run-local.json> --reps 3` | Memory | — |
+| 07:58 | #148 part B | Wiki page merged (`7d1ca4c`, lane-verifier PASS, 0 wrong claims); results in OPERATIONAL_TEST_PLAN.md (`30e46de`). Full suite not re-run after these docs-only merges (memory) | — | — |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
@@ -129,3 +131,11 @@ Maintainer note (2026-11-01): they use llama.cpp through llama-router, not Ollam
 - Done 05:00: new OpenRouter key; reconnect done.
 - F7: check https://openrouter.ai/settings/privacy (free endpoints / data policy). Only you can change the account.
 - Push of main (8+ commits ahead of origin at start; all docs).
+
+## Stop (07:58Z)
+
+Stop condition: everything left waits for the maintainer (PRD 02 rulings, F5/F6, push) or for host memory (seed run 2 in full, floor simulation, full suite at HEAD). No new lane started after the memory stop.
+
+Pools at stop (07:57Z): `claude5hUsed=31% claudeWkUsed=5% codex5hUsed=44% codexWkUsed=26% zai5hUsed=100% zaiWkUsed=71% go5hUsed=91% goWkUsed=48% goMoUsed=24% agyClaude5h=1% agyClaudeWk=0% gemini5h=97% geminiWk=99%` (agy: remaining). Change since start: Z.ai week +20, OpenCode Go week +37 and month +19, codex week +7, Claude week +4 (Claude unreadable at start; first reading 1% at 05:03Z).
+
+OpenCode Go samples (maintainer asked): kimi-k2.7-code (#149, #154: clean, first-round PASS), deepseek-v4-pro (#151: PASS), qwen3.8-max (#152: PASS after a one-line schema fix). Z.ai glm-5.3: #137 clean; #150 needed one fix round.

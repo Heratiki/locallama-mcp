@@ -118,4 +118,6 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T06:59Z | agent-af45fb7d | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=issue-152 |
 | 2026-11-01T07:09Z | issue-154 | opencode | opencode-go/kimi-k2.7-code | ? | build | opencode | done | 9.9 | 0 | 0 | no-reading, gates=5 |
 | 2026-11-01T07:10Z | agent-a63e64a2 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=issue-154 |
+| 2026-11-01T07:14Z | issue-148b | codex | ? | medium | write | codex | done | 2.2 | 3 | 0 | gates=4 |
+| 2026-11-01T07:15Z | agent-aa593092 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.9 | 0 | 0 | split, lane=issue-148 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->
