@@ -19,14 +19,14 @@ fails, and when the maintainer rules. Procedure:
 | Issue | Route | State | Next |
 |---|---|---|---|
 | PRD 01 issues (not filed yet) | opencode lane, `zai-coding-plan/` first; `opencode-go/` for some, to sample its models | queued | Steward scope (2026-11-01): all of PRD 01, waves 1-5 (#138-#148); wave 4 floor run is a simulation |
-| #149 F1 llama.cpp not routed | opencode, zai-coding-plan/ | filed | maintainer approved fix 2026-11-01; any wave, owns cost-monitor/api.ts |
+| #149 F1 llama.cpp not routed | opencode-go/kimi-k2.7-code | merged f88df78 (not pushed) | suite green at 69742dc |
 | #150 F2 provider = model id | opencode, zai-coding-plan/ | filed | before #147; not with #151 |
 | #151 F3 false pass | opencode, zai-coding-plan/ | filed | after #150, before #147 |
 | R1 research (no issue yet) | agy (Flash failed; Sonnet run 2 accepted) | done 2026-11-01 | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
 | #137 | opencode zai-coding-plan/glm-5.3 | merged f292453 (not pushed) | full suite 67/67, 510/510 at f292453 |
 | #138 PRD01-1 | codex (medium; steward committed) | merged 933d517 (not pushed) | full suite at 933d517 green |
 | #139 PRD01-2 | ticket-writer (Sonnet) | merged 4d4e45c (not pushed) | wave 1 done; full suite green at 4d4e45c |
-| #140 PRD01-3 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; wave-2 order 6,3,4,5,7,8 |
+| #140 PRD01-3 | lane-dev Sonnet | merged 69742dc (not pushed) | suite green at 69742dc |
 | #141 PRD01-4 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
 | #142 PRD01-5 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
 | #143 PRD01-6 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; first of wave 2 |
