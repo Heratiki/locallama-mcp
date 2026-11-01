@@ -46,6 +46,12 @@ function details(row: PatchAttemptRow): AttemptDetails {
   return Array.isArray(value) ? { blocks: value, calls: [], diff: '', files: [] } : value;
 }
 
+/** Blocks that produced the attempt's worktree: the stacked list when stacked (#159). */
+function effectiveBlocks(d: AttemptDetails): EditBlock[] {
+  const eff = (d as AttemptDetails & { effective_blocks?: EditBlock[] }).effective_blocks;
+  return Array.isArray(eff) ? eff : d.blocks;
+}
+
 function checksOf(row: PatchAttemptRow | undefined): CheckResult[] {
   return row ? JSON.parse(row.checks_json ?? '[]') as CheckResult[] : [];
 }
@@ -199,7 +205,7 @@ export class PatchWorker {
       const last = rows[rows.length - 1];
       let lastChecks = checksOf(last);
       result.checks = lastChecks;
-      let lastBlocks: EditBlock[] = last ? details(last).blocks : [];
+      let lastBlocks: EditBlock[] = last ? effectiveBlocks(details(last)) : [];
       lastError = last?.apply_error ?? '';
       let signature = errorSignature(lastChecks);
       if (!signature && lastError) signature = `${last?.outcome}\n${lastError.split('\n')[0]}`;
@@ -261,6 +267,7 @@ export class PatchWorker {
         const usageOffset = calls.usage.length;
         let attemptChecks: CheckResult[] = [];
         let blocks: EditBlock[] = [];
+        let stackedBlocks: EditBlock[] | undefined;
         let diff = '';
         let files: string[] = [];
         let validation: PatchValidation | undefined;
@@ -307,8 +314,21 @@ export class PatchWorker {
               }
               await this.options.backend.reset(ws!);
               await checkpoint();
-              const applied = applyEditBlocks(ws!, blocks, { wholeFileMaxLines: settings.patchWholeFileMaxLines });
-              if (!applied.ok) { outcome = 'apply_error'; error = applied.errors.join('\n'); return; }
+              const applyOpts = { wholeFileMaxLines: settings.patchWholeFileMaxLines };
+              let applied = applyEditBlocks(ws!, blocks, applyOpts);
+              if (!applied.ok) {
+                // #159: a weak model may write SEARCH text against its own discarded
+                // last attempt. Try once: last effective blocks, then the new ones,
+                // against the base. Failure reports the original base error.
+                const baseErrors = applied.errors;
+                if (lastBlocks.length > 0 && baseErrors.some(e => e.includes('SEARCH text not found'))) {
+                  await this.options.backend.reset(ws!);
+                  const stacked = [...lastBlocks, ...blocks];
+                  const retry = applyEditBlocks(ws!, stacked, applyOpts);
+                  if (retry.ok) { applied = retry; stackedBlocks = stacked; }
+                }
+                if (!applied.ok) { outcome = 'apply_error'; error = baseErrors.join('\n'); return; }
+              }
               files = applied.files;
               // The runner stops at first failure. Invoke once per check so the
               // worker can wrap each command in its own telemetry span.
@@ -357,8 +377,9 @@ export class PatchWorker {
         const duration = Math.max(0, this.now() - attemptStarted);
         if (began) {
           const attemptUsage = calls.usage.slice(usageOffset);
-          const meta: AttemptDetails & { research?: ResearchRecord } = {
+          const meta: AttemptDetails & { research?: ResearchRecord; stacked?: boolean; effective_blocks?: EditBlock[] } = {
             blocks, calls: attemptUsage, diff, files, ...(validation ? { validation } : {}),
+            ...(stackedBlocks ? { stacked: true, effective_blocks: stackedBlocks } : {}),
           };
           if (attemptResearch) {
             meta.research = attemptResearch;
@@ -380,7 +401,7 @@ export class PatchWorker {
           rows.push(row);
         }
         lastChecks = attemptChecks;
-        lastBlocks = blocks;
+        lastBlocks = stackedBlocks ?? blocks;
         lastError = error;
         result.checks = attemptChecks;
         if (stopped) { result.reason = stopped.reason; break; }

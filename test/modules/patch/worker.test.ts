@@ -141,6 +141,43 @@ describe('patch worker', () => {
     await clean();
   });
 
+  describe('stacked apply fallback (#159)', () => {
+    const swap = (from: number, to: number) => block(to).replace('value = 1;\n=======', `value = ${from};\n=======`);
+
+    it('stacks the last blocks when the new SEARCH targets the discarded attempt', async () => {
+      registry.register(provider('fake', 'local', async () => ({ content: calls.length === 1 ? block(3) : swap(3, 2) })));
+      await submit();
+      const result = await worker().run('job');
+      expect(result.status).toBe('passed');
+      expect(result.attempts).toBe(2);
+      const attempts = await store.getPatchAttempts('job');
+      expect(attempts[1].outcome).toBe('passed');
+      expect(JSON.parse(attempts[1].edit_blocks!)).toMatchObject({ stacked: true });
+      expect(JSON.parse(attempts[0].edit_blocks!).stacked).toBeUndefined();
+      expect(result.diff).toContain('value = 2');
+    });
+
+    it('reports the original base apply error when stacking also fails', async () => {
+      registry.register(provider('fake', 'local', async () => ({ content: calls.length === 1 ? block(3) : swap(77, 2) })));
+      await submit({ settings: { patchMaxAttempts: 2 } });
+      const result = await worker().run('job');
+      expect(result.status).not.toBe('passed');
+      const attempts = await store.getPatchAttempts('job');
+      expect(attempts[1].outcome).toBe('apply_error');
+      expect(attempts[1].apply_error).toContain('SEARCH text not found');
+      expect(attempts[1].apply_error).toContain('value = 1');
+      expect(JSON.parse(attempts[1].edit_blocks!).stacked).toBeUndefined();
+    });
+
+    it('does not stack when the new blocks apply against the base', async () => {
+      registry.register(provider('fake', 'local', async () => ({ content: calls.length === 1 ? block(3) : block(2) })));
+      await submit();
+      expect((await worker().run('job')).status).toBe('passed');
+      const attempts = await store.getPatchAttempts('job');
+      expect(JSON.parse(attempts[1].edit_blocks!).stacked).toBeUndefined();
+    });
+  });
+
   it('moves to the next model early on a repeated check signature', async () => {
     registry.register(provider('fake', 'local', async model => ({ content: block(model === 'llama-1' ? 2 : 3) })));
     await submit({ ladder: [local(), local('llama-1')] });

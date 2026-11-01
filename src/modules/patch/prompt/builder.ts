@@ -140,7 +140,9 @@ export async function buildPrompt(input: PromptInput): Promise<BuiltPrompt> {
 
     const blocks = (input.lastBlocks ?? []).map(formatBlock);
     if (blocks.length > 0) {
-      const header = '## Your last edit blocks\n';
+      const header = '## Your last edit blocks\n' +
+        'These edits were NOT kept. The files are back to the content shown above, so ' +
+        'SEARCH text must match that content exactly, not the REPLACE text below.\n';
       let body = '';
       for (const b of blocks) {
         if (countTokens(header + body + b + '\n') > remaining) break;

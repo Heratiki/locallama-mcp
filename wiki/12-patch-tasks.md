@@ -238,3 +238,15 @@ Replaced Python package imports with static AST documentation extraction and low
 credential environment-value redaction threshold to three characters. Regression tests
 cover installed-package/submodule import markers, missing source, query redaction and
 persisted research rows and metadata.
+
+
+### 2026-11-01 — Issue #159 stacked apply fallback
+
+Every attempt starts from the base commit, and the prompt now says the last edit blocks were
+not kept. A weak model can still write SEARCH text against its own discarded last attempt. When
+the new blocks fail against the base with "SEARCH text not found", the worker tries once more:
+the last attempt's effective blocks, then the new blocks, against the base. If that applies,
+the checks run on the result and the attempt record's `edit_blocks` JSON carries
+`stacked: true` and `effective_blocks`; stacking chains because the next prompt uses the
+effective list. If it also fails, the attempt reports the original base apply error. Stacking
+is within one job only; diffs come from the worktree and contain both sets of edits.
