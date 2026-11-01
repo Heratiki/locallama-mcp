@@ -1,6 +1,12 @@
-import { describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { buildQueries } from '../../../../dist/modules/patch/research/queries.js';
 import { redactText } from '../../../../dist/modules/patch/research/redact.js';
+
+// These unit tests define their own environment literals. Desktop SESSION values
+// can otherwise collide with ordinary fixture identifiers such as "user".
+let savedEnv: NodeJS.ProcessEnv;
+beforeEach(() => { savedEnv = process.env; process.env = {}; });
+afterEach(() => { process.env = savedEnv; });
 
 const TSC_ERROR = `src/modules/app.ts(10,5): error TS2339: Property 'loadConfig' does not exist on type 'App'.`;
 const PYTHON_TRACEBACK = [
@@ -114,4 +120,18 @@ it('B4 redacts filenames before deriving module and identifier queries', () => {
   const sent = JSON.stringify(buildQueries('', files, { privateTerms: ['internalrepo'], max: 20 }));
   for (const secret of ['internalrepo', 'alice', 'private.py', 'sk-abcdefgh12345678']) expect(sent).not.toContain(secret);
   expect(sent).not.toContain('/home');
+});
+
+it('round 2 #3 redacts credential values from three characters while preserving ordinary short values', () => {
+  const names = ['MY_TOKEN', 'FIX_COOKIE', 'FIX_AUTH', 'FIX_PUBLIC'];
+  const previous = names.map(name => process.env[name]);
+  Object.assign(process.env, { MY_TOKEN: 'abcde', FIX_COOKIE: 'xyz', FIX_AUTH: 'ab', FIX_PUBLIC: 'public' });
+  try {
+    const sent = JSON.stringify(buildQueries("No module named 'abcde' xyz ab public", []));
+    expect(sent).not.toContain('abcde');
+    expect(sent).not.toContain('xyz');
+    expect(redactText('abcde xyz ab public')).toBe('<redacted> <redacted> ab public');
+  } finally {
+    names.forEach((name, i) => { if (previous[i] === undefined) delete process.env[name]; else process.env[name] = previous[i]; });
+  }
 });

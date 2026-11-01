@@ -383,3 +383,27 @@ it('S6 a recovered passing attempt credits only durable used note ids', async ()
   expect((await store.getResearchNotesForJob('job')).map(note => note.helped)).toEqual([1, 0]);
   expect(result.research).toEqual([research]);
 });
+
+it('round 2 #3 short env credentials never reach queries, research rows or attempt meta JSON', async () => {
+  const previous = process.env.MY_TOKEN;
+  process.env.MY_TOKEN = 'abcde';
+  try {
+    await enableResearch();
+    registry.register(provider(async () => ({ content: calls.length < 3 ? block(3) : block() })));
+    const missingModule: CheckSpec = { name: 'unit', argv: [process.execPath, '-e',
+      `if (!require('fs').readFileSync('a.ts', 'utf8').includes('value = 2')) { console.error("No module named 'abcde'"); process.exit(1); }`] };
+    await submit({ checks: [missingModule] });
+    const result = await worker().run('job');
+    expect(result.status).toBe('passed');
+    const notes = await store.getResearchNotesForJob('job');
+    expect(notes.length).toBeGreaterThan(0);
+    expect(JSON.stringify(notes)).not.toContain('abcde');
+    const attempts = await store.getPatchAttempts('job');
+    const meta = JSON.parse(attempts.find(attempt => attempt.n === 3)!.edit_blocks!);
+    expect(meta.research.queries.length).toBeGreaterThan(0);
+    expect(JSON.stringify(meta)).not.toContain('abcde');
+    expect(JSON.stringify(result.research)).not.toContain('abcde');
+  } finally {
+    if (previous === undefined) delete process.env.MY_TOKEN; else process.env.MY_TOKEN = previous;
+  }
+});

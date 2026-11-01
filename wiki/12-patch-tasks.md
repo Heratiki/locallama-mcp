@@ -104,13 +104,17 @@ SearXNG redirects fail the source without following the redirect. Its timeout co
 headers and the complete response body. Go documentation runs with automatic toolchain,
 module and checksum downloads disabled (`GOENV=off`, `GOTOOLCHAIN=local`, `GOPROXY=off`,
 `GOFLAGS=-mod=readonly`, `GONOSUMDB=*`, `GOSUMDB=off`). Python documentation runs as
-`python3 -I -m pydoc` from a disposable neutral directory; only modules importable outside
-the workspace are eligible. Installed packages still execute Python code when imported;
-these controls do not provide an OS network sandbox.
+`python3 -I -S -c <reader> <module>` from a disposable neutral directory. The reader uses
+`find_spec` only for top-level names, walks submodule paths as files, and extracts source
+docstrings and signatures with `ast`. Researched packages, defaults and decorators never
+execute; site startup hooks and `.pth` files are disabled. Built-ins, C extensions and
+namespace packages without source are skipped as `no_python_source`. Installation paths
+come from `sysconfig`, with optional external search paths passed as arguments.
 
 Queries and results are redacted before leaving the machine or being stored: absolute
-paths, repo-private names, usernames, env-var values, bearer tokens, provider prefixes,
-long hex and base64 are removed. One row per query/source is written to the new
+paths, repo-private names, usernames, credential environment values of at least three
+characters, other environment values of at least sixteen characters, bearer tokens,
+provider prefixes, long hex and base64 are removed. One row per query/source is written to the new
 `research_notes` table with `helped` NULL while pending. If the attempt that consumed the
 note passes all checks, `helped` becomes 1 only for IDs whose complete note text survived
 research assembly and prompt fitting. Cut or dropped notes resolve to 0. The using attempt's
@@ -226,3 +230,11 @@ Hardened redirect and body-timeout handling, offline doc-tool configuration, red
 filenames/environment literals/check names, traceback comparison, scoped BM25 reuse and
 note-credit recovery. Regression tests cover the HTTP, subprocess, orchestration and worker
 boundaries; validation is recorded in the lane report.
+
+
+### 2026-11-01 — Issue #155 fix round 2
+
+Replaced Python package imports with static AST documentation extraction and lowered the
+credential environment-value redaction threshold to three characters. Regression tests
+cover installed-package/submodule import markers, missing source, query redaction and
+persisted research rows and metadata.

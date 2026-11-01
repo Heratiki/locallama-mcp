@@ -8,6 +8,7 @@ import { BM25Searcher } from '../../cost-monitor/bm25.js';
 import type { ResearchSourceKind } from '../types.js';
 import type { ResearchQuery } from './queries.js';
 import { searchSearxng, SourceTimeoutError, type FetchLike } from './searxng.js';
+import { PYTHON_DOCS_SCRIPT } from './python-docs.js';
 
 export type ResearchLanguage = 'python' | 'go' | 'typescript' | 'unknown';
 
@@ -151,6 +152,8 @@ export interface ResearchSourceContext {
   workspacePath: string;
   repoSearch: (query: string, topK: number) => Promise<{ path: string; content: string }[]>;
   timeoutMs: number;
+  /** Explicit external Python installation directories; never executed or added via site. */
+  pythonSearchPaths?: string[];
   searxng?: { url: string; results: number; fetchImpl?: FetchLike };
 }
 
@@ -182,25 +185,36 @@ export const depsAdapter: ResearchSourceAdapter = {
   },
 };
 
-const docAdapter = (source: ResearchSourceKind, argv: (target: string) => string[], isolatedPython = false): ResearchSourceAdapter => ({
+const docAdapter = (source: ResearchSourceKind, argv: (target: string) => string[]): ResearchSourceAdapter => ({
   source,
   async run(query, ctx) {
-    if (isolatedPython && !/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(query.text)) {
-      return { text: '', skipped: 'invalid_module' };
-    }
-    const neutral = isolatedPython ? await mkdtemp(path.join(tmpdir(), 'patch-pydoc-')) : undefined;
-    try {
-      const result = await runTool(argv(query.text), { cwd: neutral ?? ctx.workspacePath, timeoutMs: ctx.timeoutMs });
-      if (result.timedOut) return { text: '', timedOut: true };
-      return { text: result.ok && result.output ? clip(result.output, 1500) : '' };
-    } finally {
-      if (neutral) await rm(neutral, { recursive: true, force: true });
-    }
+    const result = await runTool(argv(query.text), { cwd: ctx.workspacePath, timeoutMs: ctx.timeoutMs });
+    if (result.timedOut) return { text: '', timedOut: true };
+    return { text: result.ok && result.output ? clip(result.output, 1500) : '' };
   },
 });
 
-/** (c) Python docstrings via pydoc. */
-export const pydocAdapter: ResearchSourceAdapter = docAdapter('pydoc', target => ['python3', '-I', '-m', 'pydoc', target], true);
+/** (c) Python source docstrings/signatures, without importing researched modules. */
+export const pydocAdapter: ResearchSourceAdapter = {
+  source: 'pydoc',
+  async run(query, ctx) {
+    if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(query.text)) {
+      return { text: '', skipped: 'invalid_module' };
+    }
+    const neutral = await mkdtemp(path.join(tmpdir(), 'patch-pydoc-'));
+    try {
+      const result = await runTool(['python3', '-I', '-S', '-c', PYTHON_DOCS_SCRIPT, query.text,
+        ...(ctx.pythonSearchPaths ?? []).map(directory => path.resolve(directory))], {
+        cwd: neutral, timeoutMs: ctx.timeoutMs,
+      });
+      if (result.timedOut) return { text: '', timedOut: true };
+      if (!result.ok) return { text: '', skipped: 'python_reader_failed' };
+      return JSON.parse(result.output) as SourceText;
+    } finally {
+      await rm(neutral, { recursive: true, force: true });
+    }
+  },
+};
 
 /** (c) Go package docs via `go doc`. */
 export const goDocAdapter: ResearchSourceAdapter = docAdapter('go doc', target => ['go', 'doc', target]);

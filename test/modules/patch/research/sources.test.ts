@@ -72,7 +72,7 @@ describe('source adapters (#155 criteria 7, 8, 9)', () => {
   });
 
   it('pydoc adapter documents a python module (python fixture)', async () => {
-    await fakeTool('python3', '#!/bin/sh\necho "requests — an HTTP library"\necho "requests.get(url, **kwargs)"\n');
+    await fakeTool('python3', `#!/bin/sh\necho '{"text":"requests — an HTTP library; requests.get(url, **kwargs)"}'\n`);
     const result = await pydocAdapter.run({ text: 'requests', kind: 'module' }, ctx());
     expect(result.skipped).toBeUndefined();
     expect(result.text).toContain('requests.get');
@@ -102,7 +102,7 @@ describe('source adapters (#155 criteria 7, 8, 9)', () => {
 
   it('spawns tools with proxy variables unset (#155 criterion 13)', async () => {
     const marker = path.join(tmp, 'env-marker');
-    await fakeTool('python3', `#!/bin/sh\nif [ -n "$HTTP_PROXY" ] || [ -n "$http_proxy" ] || [ -n "$HTTPS_PROXY" ] || [ -n "$ALL_PROXY" ]; then echo "proxy-set" > ${JSON.stringify(marker)}; else echo "clean" > ${JSON.stringify(marker)}; fi\necho docs\n`);
+    await fakeTool('python3', `#!/bin/sh\nif [ -n "$HTTP_PROXY" ] || [ -n "$http_proxy" ] || [ -n "$HTTPS_PROXY" ] || [ -n "$ALL_PROXY" ]; then echo "proxy-set" > ${JSON.stringify(marker)}; else echo "clean" > ${JSON.stringify(marker)}; fi\necho '{"text":"docs"}'\n`);
     process.env.HTTP_PROXY = 'http://127.0.0.1:9';
     process.env.https_proxy = 'http://127.0.0.1:9';
     try {
@@ -158,4 +158,59 @@ it('B2 pydoc never imports workspace modules or workspace shadows of stdlib', as
   const stdlib = await pydocAdapter.run({ text: 'json', kind: 'module' }, ctx());
   expect(stdlib.text).toContain('JSON');
   expect(existsSync(marker)).toBe(false);
+});
+
+it('round 2 #2 reads installed package docstrings and signatures without executing package code', async () => {
+  const installed = path.join(tmp, 'site-packages');
+  const pkg = path.join(installed, 'trap_package');
+  const marker = path.join(tmp, 'package-imported');
+  await mkdir(pkg, { recursive: true });
+  await writeFile(path.join(pkg, '__init__.py'), [
+    '"""Static installed package documentation."""',
+    `open(${JSON.stringify(marker)}, 'w').write('executed')`,
+    'def dangerous_default():',
+    '    raise RuntimeError("must never execute defaults")',
+    'def fetch(value: str, count: int = dangerous_default()) -> str:',
+    '    """Return documented data without running any code."""',
+    '    return value',
+  ].join('\n'));
+  await writeFile(path.join(pkg, 'child.py'), [
+    '"""Static child module documentation."""',
+    `open(${JSON.stringify(marker)}, 'w').write('child executed')`,
+    'class Client:',
+    '    """A statically documented client."""',
+    '    def send(self, payload: str) -> bool:',
+    '        """Send documentation only."""',
+    '        return True',
+  ].join('\n'));
+  const previous = process.env.PYTHONPATH;
+  process.env.PYTHONPATH = installed;
+  try {
+    for (const [name, doc] of [['trap_package', 'Static installed package documentation.'], ['trap_package.child', 'Static child module documentation.']]) {
+      const result = await pydocAdapter.run({ text: name, kind: 'module' }, ctx({ pythonSearchPaths: [installed] }));
+      expect(existsSync(marker)).toBe(false);
+      expect(result.skipped).toBeUndefined();
+      expect(result.text).toContain(doc);
+      if (name === 'trap_package') {
+        expect(result.text).toContain('fetch(value: str, count: int = dangerous_default()) -> str');
+        expect(result.text).toContain('Return documented data without running any code.');
+      } else {
+        expect(result.text).toContain('class Client');
+        expect(result.text).toContain('send(self, payload: str) -> bool');
+      }
+    }
+  } finally {
+    if (previous === undefined) delete process.env.PYTHONPATH; else process.env.PYTHONPATH = previous;
+  }
+});
+
+it('round 2 #2 clearly skips builtins, namespace packages and modules without source', async () => {
+  const installed = path.join(tmp, 'site-packages');
+  await mkdir(path.join(installed, 'namespace_fixture'), { recursive: true });
+  await writeFile(path.join(installed, 'namespace_fixture', 'child.py'), '"""Namespace child."""');
+  for (const name of ['sys', 'math', 'namespace_fixture', 'namespace_fixture.child']) {
+    const result = await pydocAdapter.run({ text: name, kind: 'module' }, ctx({ pythonSearchPaths: [installed] }));
+    expect(result.text).toBe('');
+    expect(result.skipped).toBe('no_python_source');
+  }
 });

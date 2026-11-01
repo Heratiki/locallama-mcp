@@ -45,7 +45,7 @@ const LONG_BASE64 = /\b[A-Za-z0-9+/]{32,}={0,2}\b/g;
 export function redactText(text: string, terms: RedactTerms = {}): string {
   // Replace longer literals first so overlapping secrets cannot expose a suffix.
   const values = Object.entries(process.env)
-    .filter(([name, value]) => value && value.length >= 6 && (CREDENTIAL_NAME.test(name) || value.length >= 16))
+    .filter(([name, value]) => value && ((CREDENTIAL_NAME.test(name) && value.length >= 3) || value.length >= 16))
     .map(([, value]) => value!).sort((a, b) => b.length - a.length);
   let out = text;
   for (const value of values) out = out.split(value).join('<redacted>');
