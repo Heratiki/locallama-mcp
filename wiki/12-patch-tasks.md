@@ -86,7 +86,7 @@ usage afterward; interrupted reservations are conservatively charged on recovery
 ## Harness-driven research (#155)
 
 When the grind loop is stuck — the same failing check with the same normalized error
-signature on two consecutive attempts, or an edit block that fails to apply twice — the
+signature (the normalized error tail, including traceback details) on two consecutive attempts, or an edit block that fails to apply twice — the
 worker can run a short research step before the next attempt. The model does not call any
 tool; the harness builds queries from the error text and touched files, runs local sources
 and a user-configured SearXNG instance, and appends a bounded "## Research notes" section
@@ -97,19 +97,32 @@ to a reachable SearXNG URL and `PATCH_RESEARCH_TOKENS` is greater than 0. Local 
 (BM25 over the repo, dependency docs/types, `pydoc`, `go doc`, `man`) always run; the
 SearXNG source runs only when the instance probes OK. A 403 on `format=json` means the
 instance's `settings.yml` omits `json` from `search.formats`; the worker logs one warning
-and disables web research for the run. A down or timed-out SearXNG instance skips only the
+and disables research for the run. A down or timed-out SearXNG instance skips only the
 web source; local sources still run.
+
+SearXNG redirects fail the source without following the redirect. Its timeout covers
+headers and the complete response body. Go documentation runs with automatic toolchain,
+module and checksum downloads disabled (`GOENV=off`, `GOTOOLCHAIN=local`, `GOPROXY=off`,
+`GOFLAGS=-mod=readonly`, `GONOSUMDB=*`, `GOSUMDB=off`). Python documentation runs as
+`python3 -I -m pydoc` from a disposable neutral directory; only modules importable outside
+the workspace are eligible. Installed packages still execute Python code when imported;
+these controls do not provide an OS network sandbox.
 
 Queries and results are redacted before leaving the machine or being stored: absolute
 paths, repo-private names, usernames, env-var values, bearer tokens, provider prefixes,
 long hex and base64 are removed. One row per query/source is written to the new
 `research_notes` table with `helped` NULL while pending. If the attempt that consumed the
-note passes all checks, `helped` becomes 1; otherwise the task resolves pending notes to 0.
+note passes all checks, `helped` becomes 1 only for IDs whose complete note text survived
+research assembly and prompt fitting. Cut or dropped notes resolve to 0. The using attempt's
+metadata stores these IDs and the actual research prefix sent in its prompt. Restart
+recovery restores past research records; pending notes without durable usage metadata
+resolve to 0. An empty URL or zero token budget makes no research-store calls.
 Only `helped = 1` notes are reused. Shared-scope sources (`searxng`, `deps`, `pydoc`,
 `go doc`, `man`) match from any repo; `repo` notes match only within the same `repo_path`.
 The BM25 index of helped notes is rebuilt from the table at first use, so it survives a
 process restart. Each scope is capped to `PATCH_RESEARCH_NOTES_MAX`; oldest notes are
-evicted first.
+evicted first. Scope filtering precedes top-k ranking; index fingerprints include note IDs
+and content hashes so eviction and replacement cannot leave stale documents.
 
 Sources and records:
 - Stuck detection: `src/modules/patch/research/detect.ts:detectStuck`.
@@ -154,7 +167,8 @@ Resolved worker settings are persisted at submission
 | `PATCH_RESEARCH_SEARXNG_URL` | empty | SearXNG base URL; empty disables research. Must serve `format=json`. |
 | `PATCH_RESEARCH_SOURCE_TIMEOUT_MS` | `5000` | Per-source timeout, also applied to SearXNG. |
 | `PATCH_RESEARCH_TOKENS` | `800` | Hard token budget for the research block; 0 disables research. |
-| `PATCH_RESEARCH_NOTES_MAX` | `500` | Helped notes cap per scope; oldest evicted first. |
+| `PATCH_RESEARCH_NOTES_MAX` | `500` | Helped notes cap per scope; oldest evicted first. Scope filtering precedes top-k ranking; index fingerprints include note IDs
+and content hashes so eviction and replacement cannot leave stale documents. |
 | `OPENROUTER_FREE_ONLY` | `true` | Also excludes paid patch ladder entries. |
 | `SAVINGS_TOKEN_FACTOR` | `1.0` | Positive multiplier for the savings estimate below. |
 
@@ -204,3 +218,11 @@ Costs and tokens sum all attempts of finished Jobs. Estimated frontier tokens sa
 Job. Agent tokens count goal + file hints and one reading of the returned diff. This is an
 estimate, not measured frontier usage; failed Jobs contribute zero savings
 (`src/modules/patch/stats/index.ts:getSavings`, `estimateSaved`, `agentTokensOf`).
+
+
+### 2026-11-01 — Issue #155 fix round 1
+
+Hardened redirect and body-timeout handling, offline doc-tool configuration, redaction of
+filenames/environment literals/check names, traceback comparison, scoped BM25 reuse and
+note-credit recovery. Regression tests cover the HTTP, subprocess, orchestration and worker
+boundaries; validation is recorded in the lane report.

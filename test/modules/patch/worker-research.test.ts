@@ -269,3 +269,117 @@ describe('patch worker research integration (#155)', () => {
     expect(meta.research.reusedNoteId).toBe(1);
   });
 });
+
+it.each(['empty URL', 'zero tokens'])('S12 research OFF (%s) makes zero research-store calls', async mode => {
+  config.patchResearchSearxngUrl = mode === 'empty URL' ? '' : 'http://127.0.0.1:1';
+  config.patchResearchTokens = mode === 'zero tokens' ? 0 : 800;
+  const spies = {
+    insertResearchNote: jest.fn(store.insertResearchNote),
+    getHelpedResearchNotes: jest.fn(store.getHelpedResearchNotes),
+    markResearchNotesHelped: jest.fn(store.markResearchNotesHelped),
+    failPendingResearchNotes: jest.fn(store.failPendingResearchNotes),
+    enforceResearchNotesCap: jest.fn(store.enforceResearchNotesCap),
+  };
+  registry.register(provider(async () => ({ content: calls.length < 3 ? block(3) : block() })));
+  await submit();
+  const result = await new PatchWorker({ backend, registry, store: { ...store, ...spies } }).run('job');
+  expect(result.status).toBe('passed');
+  for (const spy of Object.values(spies)) expect(spy).not.toHaveBeenCalled();
+});
+
+it('S6 notes dropped by prompt fitting are never credited for a passing attempt', async () => {
+  await enableResearch();
+  registry.register(provider(async () => ({ content: calls.length < 3 ? block(3) : block() })));
+  await submit({ settings: { patchContextTokens: 2200, patchMaxOutputTokens: 2000 } });
+  const result = await worker().run('job');
+  expect(result.status).toBe('passed');
+  expect(calls[2].prompt).not.toContain('## Research notes');
+  const notes = await store.getResearchNotesForJob('job');
+  expect(notes.length).toBeGreaterThan(0);
+  expect(notes.every(note => note.helped === 0)).toBe(true);
+});
+
+it('S6 assembly-truncated notes are not credited as fully used notes', async () => {
+  await enableResearch({ patchResearchTokens: 20 });
+  registry.register(provider(async () => ({ content: calls.length < 3 ? block(3) : block() })));
+  await submit();
+  expect((await worker().run('job')).status).toBe('passed');
+  const notes = await store.getResearchNotesForJob('job');
+  expect(notes.length).toBeGreaterThan(0);
+  expect(notes.some(note => !calls[2].prompt.includes(note.info!))).toBe(true);
+  for (const note of notes) {
+    if (!calls[2].prompt.includes(note.info!)) expect(note.helped).toBe(0);
+  }
+});
+
+it('S6 restart pending notes without restored researchForNext resolve to zero', async () => {
+  await enableResearch();
+  await submit();
+  await store.recordAttemptStart('job', { cursor_model: 1, attempts_used: 2 });
+  for (const n of [1, 2]) await store.insertPatchAttempt({
+    job_id: 'job', n, model_id: 'qwen-1', provider_id: 'fake', cost_class: 'local',
+    prompt_tokens: 0, completion_tokens: 0, cost_usd: 0, edit_blocks: '[]', outcome: 'check_failed',
+    apply_error: 'expected value TWO', checks_json: JSON.stringify([{ name: 'unit', exit_code: 1, timed_out: false, duration_ms: 1, tail: 'expected value TWO' }]),
+    duration_ms: 1, started_at: 1, ended_at: 2,
+  });
+  await store.insertResearchNote({ job_id: 'job', attempt_n: 3, created_at: 3, repo_path: repo,
+    reason: 'same_check:unit', query: 'unit', source: 'searxng', info: 'ORPHAN_NOTE_NEVER_RESTORED' });
+  await store.closeJobStore();
+  await store.initJobStore();
+  expect((await worker().run('job')).status).toBe('passed');
+  expect(calls).toHaveLength(1);
+  expect(calls[0].prompt).not.toContain('ORPHAN_NOTE_NEVER_RESTORED');
+  expect((await store.getResearchNotesForJob('job')).map(note => note.helped)).toEqual([0]);
+});
+
+it.each(['passed', 'check_failed'])('S13 restart restores %s attempt research into the task record', async outcome => {
+  await enableResearch();
+  await submit();
+  const ws = await backend.create(state.base_commit, 'job');
+  await writeFile(path.join(ws.path, 'a.ts'), 'export const value = 2;\n');
+  const diff = await backend.diff(ws);
+  const research = { schema: 'patch_research_v1', reason: 'same_check:unit',
+    queries: ['expected value TWO'], sources: [{ source: 'searxng', query: 'expected value TWO', status: 'ran', info: 'RECOVERED_RESEARCH' }],
+    block: 'RECOVERED_RESEARCH' };
+  await store.recordAttemptStart('job', { cursor_model: 0, attempts_used: 1 });
+  await store.insertPatchAttempt({ job_id: 'job', n: 1, model_id: 'qwen-1', provider_id: 'fake', cost_class: 'local',
+    prompt_tokens: 10, completion_tokens: 20, cost_usd: 0,
+    edit_blocks: JSON.stringify({ blocks: [], calls: [], files: ['a.ts'], diff, research }), outcome, apply_error: null,
+    checks_json: JSON.stringify([{ name: 'unit', exit_code: outcome === 'passed' ? 0 : 1, timed_out: false, duration_ms: 1, tail: '' }]),
+    duration_ms: 1, started_at: 1, ended_at: 2 });
+  await store.closeJobStore();
+  await store.initJobStore();
+  const result = await worker().run('job');
+  expect(result.status).toBe('passed');
+  expect(result.research).toEqual([research]);
+  expect(JSON.parse((await store.getJob('job'))!.result!).research).toEqual([research]);
+  expect(calls).toHaveLength(outcome === 'passed' ? 0 : 1);
+});
+
+it('S6 a recovered passing attempt credits only durable used note ids', async () => {
+  await enableResearch();
+  await submit();
+  const inserted = [];
+  for (const info of ['USED_NOTE', 'DROPPED_NOTE']) inserted.push(await store.insertResearchNote({
+    job_id: 'job', attempt_n: 1, created_at: 1, repo_path: repo, reason: 'same_check:unit',
+    query: 'unit', source: 'searxng', info,
+  }));
+  const research = { schema: 'patch_research_v1', reason: 'same_check:unit', queries: ['unit'],
+    sources: [], block: 'USED_NOTE', usedNoteIds: [inserted[0]] };
+  const ws = await backend.create(state.base_commit, 'job');
+  await writeFile(path.join(ws.path, 'a.ts'), 'export const value = 2;\n');
+  const diff = await backend.diff(ws);
+  await store.recordAttemptStart('job', { cursor_model: 0, attempts_used: 1 });
+  await store.insertPatchAttempt({ job_id: 'job', n: 1, model_id: 'qwen-1', provider_id: 'fake', cost_class: 'local',
+    prompt_tokens: 0, completion_tokens: 0, cost_usd: 0,
+    edit_blocks: JSON.stringify({ blocks: [], calls: [], diff, files: ['a.ts'], research }), outcome: 'passed', apply_error: null,
+    checks_json: JSON.stringify([{ name: 'unit', exit_code: 0, timed_out: false, duration_ms: 1, tail: '' }]),
+    duration_ms: 1, started_at: 1, ended_at: 2 });
+  await store.closeJobStore();
+  await store.initJobStore();
+  const result = await worker().run('job');
+  expect(result.status).toBe('passed');
+  expect(calls).toHaveLength(0);
+  expect((await store.getResearchNotesForJob('job')).map(note => note.helped)).toEqual([1, 0]);
+  expect(result.research).toEqual([research]);
+});

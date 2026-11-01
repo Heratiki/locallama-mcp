@@ -75,6 +75,8 @@ export interface ResearchOutcome {
   block: string;
   record: ResearchRecord;
   inserts: ResearchNoteInsert[];
+  /** Info ranges in the uncut assembly, in the same order as inserts. */
+  insertSpans?: { start: number; end: number }[];
 }
 
 const message = (error: unknown): string => error instanceof Error ? error.message : String(error);
@@ -112,11 +114,11 @@ function assembleBlock(parts: string[], tokens: number): string {
 }
 
 function raced<T>(work: Promise<T>, ms: number): Promise<{ value?: T; timedOut: boolean }> {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const timer = setTimeout(() => resolve({ timedOut: true }), ms);
     work.then(
       value => { clearTimeout(timer); resolve({ value, timedOut: false }); },
-      () => { clearTimeout(timer); resolve({ timedOut: false }); },
+      error => { clearTimeout(timer); reject(error); },
     );
   });
 }
@@ -163,13 +165,13 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
   // the token budget is positive.
   if (!limits.searxngUrl || limits.tokens <= 0) return off();
 
-  const privateTerms = [...(input.privateTerms ?? []), homeBasename()].filter(Boolean) as string[];
+  const privateTerms = [...(input.privateTerms ?? []), path.basename(input.repoPath), homeBasename()].filter(Boolean) as string[];
   const terms: RedactTerms = { privateTerms };
   const queries = buildQueries(input.stuck.errorText, input.files, terms);
   const signature = redactText(input.stuck.signature, terms);
   const record: ResearchRecord = {
     schema: 'patch_research_v1',
-    reason: `${input.stuck.reason}\n${signature}`,
+    reason: redactText(`${input.stuck.reason}\n${signature}`, terms),
     queries: queries.map(query => query.text),
     sources: [],
     block: '',
@@ -226,7 +228,7 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
       // is recorded and the remaining sources still run (criterion 10).
       run = error instanceof ToolMissingError
         ? { source: item.adapter.source, query: item.query.text, status: 'skipped', detail: 'tool_missing' }
-        : { source: item.adapter.source, query: item.query.text, status: 'error', detail: message(error) };
+        : { source: item.adapter.source, query: item.query.text, status: 'error', detail: redactText(message(error), terms) };
     }
     record.sources.push(run);
     if (run.status === 'ran' && run.info) contributions.push(`[${run.source}] ${run.query}\n${run.info}`);
@@ -234,18 +236,26 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
   record.block = assembleBlock(contributions, limits.tokens);
 
   // One row per query/source that returned information (criterion 12a).
+  let offset = 0;
+  const insertSpans: { start: number; end: number }[] = [];
   const inserts: ResearchNoteInsert[] = record.sources
     .filter(run => run.status === 'ran' && run.info)
-    .map(run => ({
-      job_id: input.jobId,
-      attempt_n: input.attemptN,
-      created_at: now(),
-      repo_path: input.repoPath,
-      reason: record.reason,
-      query: run.query,
-      source: run.source,
-      info: run.info!,
-      helped: null,
-    }));
-  return { enabled: true, block: record.block, record, inserts };
+    .map(run => {
+      const start = offset + `[${run.source}] ${run.query}\n`.length;
+      const end = start + run.info!.length;
+      insertSpans.push({ start, end });
+      offset = end + 2; // blank line separating contributions
+      return {
+        job_id: input.jobId,
+        attempt_n: input.attemptN,
+        created_at: now(),
+        repo_path: input.repoPath,
+        reason: record.reason,
+        query: run.query,
+        source: run.source,
+        info: run.info!,
+        helped: null,
+      };
+    });
+  return { enabled: true, block: record.block, record, inserts, insertSpans };
 }

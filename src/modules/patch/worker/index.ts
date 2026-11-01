@@ -126,6 +126,7 @@ export class PatchWorker {
     // #155: research record feeding the next attempt, and every record an
     // attempt actually used (surfaced in the result and diagnosis).
     let researchForNext: ResearchRecord | undefined;
+    let noteSpansForNext: { id: number; end: number }[] = [];
     const researchUsed: ResearchRecord[] = [];
     const researchEnabled = (): boolean =>
       config.patchResearchSearxngUrl !== '' && config.patchResearchTokens > 0;
@@ -185,6 +186,8 @@ export class PatchWorker {
             prompt_tokens: row.prompt_tokens ?? 0, completion_tokens: row.completion_tokens ?? 0, cost_usd: row.cost_usd ?? 0 });
         }
         if (d.validation) result.validation.push(d.validation);
+        const recoveredResearch = (d as AttemptDetails & { research?: ResearchRecord }).research;
+        if (recoveredResearch) researchUsed.push(recoveredResearch);
         const passed = checksOf(row).filter(c => c.exit_code === 0 && !c.timed_out).length;
         if (d.diff && passed > bestPassed) { bestPassed = passed; bestDiff = d.diff; }
         if (row.outcome !== 'passed') summaries.push({ model_id: row.model_id ?? 'unknown', provider_id: row.provider_id ?? 'unknown',
@@ -228,7 +231,8 @@ export class PatchWorker {
       if (last?.outcome === 'passed' && lastChecks.length === specs.length && lastChecks.every(c => c.exit_code === 0 && !c.timed_out)) {
         const saved = details(last);
         result.status = 'passed'; result.reason = 'passed'; result.diff = saved.diff; result.files_changed = saved.files;
-        try { await store.markResearchNotesHelped(jobId, last.n, 1); } catch { /* research bookkeeping only */ }
+        try { if (researchEnabled()) await store.markResearchNotesHelped(jobId, last.n, 1,
+          (saved as AttemptDetails & { research?: ResearchRecord }).research?.usedNoteIds ?? []); } catch { /* research bookkeeping only */ }
         return await terminal();
       }
       await this.options.backend.reset(ws);
@@ -260,6 +264,7 @@ export class PatchWorker {
         let diff = '';
         let files: string[] = [];
         let validation: PatchValidation | undefined;
+        let attemptResearch: ResearchRecord | undefined;
         let error = '';
         let outcome: AttemptOutcome | 'passed' = 'call_error';
         let stopped: WorkerStop | undefined;
@@ -278,7 +283,6 @@ export class PatchWorker {
             try {
               const window = await calls.contextWindow(entry);
               await checkpoint();
-              if (researchForNext) researchUsed.push(researchForNext);
               const prompt = await buildPrompt({
                 goal: request.goal, attempt: state.attempts_used + 1, hintedFiles: hints,
                 lastChecks, lastBlocks, lastErrorText: lastError, search: search!.search,
@@ -286,6 +290,11 @@ export class PatchWorker {
                 modelContextWindow: window, contextTokens: settings.patchContextTokens,
                 maxOutputTokens: settings.patchMaxOutputTokens, errorTailTokens: settings.patchErrorTailTokens,
               });
+              if (researchForNext) {
+                const block = prompt.researchText ?? '';
+                attemptResearch = { ...researchForNext, block,
+                  usedNoteIds: noteSpansForNext.filter(note => note.end <= block.length).map(note => note.id) };
+              }
               await checkpoint();
               const response = await calls.execute(entry, prompt.system, prompt.prompt, start);
               await checkpoint();
@@ -351,7 +360,10 @@ export class PatchWorker {
           const meta: AttemptDetails & { research?: ResearchRecord } = {
             blocks, calls: attemptUsage, diff, files, ...(validation ? { validation } : {}),
           };
-          if (researchForNext) meta.research = researchForNext;
+          if (attemptResearch) {
+            meta.research = attemptResearch;
+            researchUsed.push(attemptResearch);
+          }
           const row: PatchAttemptRow = {
             job_id: jobId, n: state.attempts_used, model_id: entry.model_id, provider_id: entry.provider_id,
             cost_class: entry.cost_class, prompt_tokens: attemptUsage.reduce((s, u) => s + u.prompt_tokens, 0),
@@ -364,7 +376,7 @@ export class PatchWorker {
           usage.push(...attemptUsage);
           if (recordedOutcome !== 'passed') summaries.push({ model_id: entry.model_id, provider_id: entry.provider_id,
             outcome: recordedOutcome, duration_ms: duration,
-            ...(researchForNext ? { research: researchForNext } : {}) });
+            ...(attemptResearch ? { research: attemptResearch } : {}) });
           rows.push(row);
         }
         lastChecks = attemptChecks;
@@ -374,7 +386,7 @@ export class PatchWorker {
         if (stopped) { result.reason = stopped.reason; break; }
         if (recordedOutcome === 'passed') {
           // #155 criterion 12b: the attempt that used the notes passed all checks.
-          try { await store.markResearchNotesHelped(jobId, state.attempts_used, 1); } catch { /* research bookkeeping only */ }
+          try { if (researchEnabled()) await store.markResearchNotesHelped(jobId, state.attempts_used, 1, attemptResearch?.usedNoteIds ?? []); } catch { /* research bookkeeping only */ }
           result.status = 'passed'; result.reason = 'passed'; result.diff = diff; result.files_changed = files;
           break;
         }
@@ -388,6 +400,7 @@ export class PatchWorker {
         // SearXNG, and feeds a bounded, redacted block to the next prompt.
         // Research is best-effort: it never fails the task.
         researchForNext = undefined;
+        noteSpansForNext = [];
         if (researchEnabled()) {
           const lastTwo = rows.slice(-2).map(row => ({
             outcome: row.outcome, applyError: row.apply_error, checks: checksOf(row),
@@ -410,7 +423,12 @@ export class PatchWorker {
               });
               if (outcome.enabled) {
                 researchForNext = outcome.record;
-                for (const note of outcome.inserts) await store.insertResearchNote(note);
+                for (const [i, note] of outcome.inserts.entries()) {
+                  const id = await store.insertResearchNote(note);
+                  const span = outcome.insertSpans?.[i];
+                  // Credit only complete note text, never headers or cut fragments.
+                  if (span && span.end <= outcome.block.length) noteSpansForNext.push({ id, end: span.end });
+                }
                 if (outcome.inserts.length > 0) await store.enforceResearchNotesCap(config.patchResearchNotesMax);
               }
             } catch {
@@ -468,7 +486,7 @@ export class PatchWorker {
       };
       // #155 criterion 12b: the task ended — any still-pending note never
       // helped its attempt and resolves to 0.
-      try { await store.failPendingResearchNotes(jobId); } catch { /* research bookkeeping only */ }
+      try { if (researchEnabled()) await store.failPendingResearchNotes(jobId); } catch { /* research bookkeeping only */ }
       const written = await store.finishPatchJob(jobId, {
         status: result.status === 'passed' ? 'completed' : result.status,
         result: JSON.stringify(result), error: result.status === 'passed' ? null : result.reason, completed_at: now(),

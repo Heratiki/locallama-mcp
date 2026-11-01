@@ -78,3 +78,12 @@ describe('detectStuck (#155 criterion 2)', () => {
     expect(detectStuck(attempts)).toBeNull();
   });
 });
+
+it('S8 distinguishes Python traceback tails and detects identical tracebacks', () => {
+  const traceback = (tail: string) => ({ outcome: 'check_failed', applyError: null,
+    checks: [check('python', `Traceback (most recent call last):\n  File "main.py", line 12\n${tail}`)] });
+  const first = traceback("ModuleNotFoundError: No module named 'requests'");
+  const different = traceback("TypeError: unsupported operand type for +: str and int");
+  expect(detectStuck([first, different])).toBeNull();
+  expect(detectStuck([first, first])).toMatchObject({ reason: 'same_check:python' });
+});

@@ -1,5 +1,4 @@
 import type { CheckResult } from '../types.js';
-import { errorSignature } from '../ladder/policy.js';
 import { normalizeSignatureText } from './redact.js';
 
 /** What detectStuck needs from one persisted attempt row. */
@@ -22,8 +21,10 @@ const failedCheck = (checks: CheckResult[]): CheckResult | undefined =>
   checks.find(c => c.timed_out || c.exit_code !== 0);
 
 function signatureOf(attempt: StuckAttempt): string | null {
-  const check = errorSignature(attempt.checks);
-  if (check) return check;
+  const check = failedCheck(attempt.checks);
+  // Compare the complete bounded tail: traceback headers and final summaries
+  // alone can be identical for unrelated failures.
+  if (check) return `${check.name}\n${check.tail}`;
   if (attempt.applyError) return `${attempt.outcome}\n${attempt.applyError.split('\n')[0]}`;
   return attempt.outcome ?? null;
 }

@@ -107,3 +107,39 @@ describe('SearXNG source (#155 criteria 5 and 6)', () => {
     expect(fs.existsSync(path.join(os.tmpdir(), 'locallama-searxng-nonexistent'))).toBe(false);
   });
 });
+
+
+it('B1 rejects redirects without connecting to the redirect target', async () => {
+  let connections = 0;
+  const target = http.createServer((_req, res) => res.end('{"results":[]}'));
+  target.on('connection', () => connections++);
+  await new Promise<void>(resolve => target.listen(0, '127.0.0.1', resolve));
+  try {
+    await start((_req, res) => {
+      res.writeHead(302, { location: `http://127.0.0.1:${(target.address() as AddressInfo).port}/search` });
+      res.end();
+    });
+    const result = await searchSearxng(baseUrl, 'redirect', 1000, 3).then(() => 'ok', () => 'failed');
+    expect(connections).toBe(0);
+    expect(result).toBe('failed');
+    expect(await probeSearxng(baseUrl, 1000)).toBe('unreachable');
+    expect(connections).toBe(0);
+  } finally {
+    target.closeAllConnections();
+    await new Promise<void>(resolve => target.close(() => resolve()));
+  }
+});
+
+it('S7 times out while reading a stalled response body after headers', async () => {
+  await start((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.write('{"results":[');
+    // Finite fallback makes the broken implementation fail without hanging Jest.
+    const fallback = setTimeout(() => res.end(']}'), 700);
+    res.on('close', () => clearTimeout(fallback));
+  });
+  const began = Date.now();
+  await expect(searchSearxng(baseUrl, 'stalled body', 100, 3)).rejects.toThrow('timed out');
+  expect(Date.now() - began).toBeLessThan(500);
+  expect(await probeSearxng(baseUrl, 100)).toBe('unreachable');
+});

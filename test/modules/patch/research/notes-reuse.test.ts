@@ -97,3 +97,43 @@ describe('research note reuse (#155 criteria 12c, 12d, 12f, 12g, 12h)', () => {
     expect(reused!.info).toBe('Import the module before using it.');
   });
 });
+
+it('S9 eviction and same-length replacement refresh the BM25 index', async () => {
+  const { ResearchNotesIndex } = await import('../../../../dist/modules/cost-monitor/codeSearchEngine.js');
+  const index = new ResearchNotesIndex();
+  const item = (id: number, content: string) => ({ id, content, repoPath: '/repos/app', source: 'deps', path: `research-note:${id}` });
+  await index.sync([item(1, 'obsolete')]);
+  expect((await index.search('obsolete')).map(hit => hit.id)).toEqual([1]);
+  // id + content.length collides (1 + 8 === 2 + 7).
+  await index.sync([item(2, 'current')]);
+  expect(await index.search('obsolete')).toEqual([]);
+  expect((await index.search('current')).map(hit => hit.id)).toEqual([2]);
+  // Same id and length, different content must also invalidate the index.
+  await index.sync([item(2, 'updated')]);
+  expect(await index.search('current')).toEqual([]);
+  expect((await index.search('updated')).map(hit => hit.id)).toEqual([2]);
+});
+
+it('S10 ineligible repo notes cannot crowd eligible notes out of top-k', async () => {
+  const foreign = Array.from({ length: 6 }, (_, i) => ({
+    id: i + 100, repo_path: '/repos/foreign', source: 'repo',
+    reason: reason('crowded widget failure'), query: 'crowded widget', info: 'crowded widget',
+  }));
+  const eligible = { id: 200, repo_path: '/repos/app', source: 'repo',
+    reason: reason('crowded widget'), query: 'crowded widget', info: 'helpful docs ' + 'padding '.repeat(200) };
+  const found = await findReusedNote([...foreign, eligible], lookup('crowded widget', '/repos/app', ['crowded', 'widget']));
+  expect(found?.id).toBe(200);
+});
+
+it('S9 SQLite eviction and replacement are reflected in BM25 reuse', async () => {
+  await db.initJobStore();
+  const oldId = await insertHelped({ reason: reason('obsolete flavor'), query: 'flavor', info: 'guide', created_at: 1 });
+  expect((await findReusedNote(await store.getHelpedResearchNotes(), lookup('obsolete flavor', '/repos/app', ['flavor'])))?.id).toBe(oldId);
+  const newId = await insertHelped({ reason: reason('current flavor'), query: 'flavor', info: 'guide', created_at: 2 });
+  expect(await store.enforceResearchNotesCap(1)).toEqual([oldId]);
+  const rows = await store.getHelpedResearchNotes();
+  expect(rows.map(row => row.id)).toEqual([newId]);
+  expect((await findReusedNote(rows, lookup('current flavor', '/repos/app', ['flavor'])))?.id).toBe(newId);
+  const { getResearchNotesIndex } = await import('../../../../dist/modules/cost-monitor/codeSearchEngine.js');
+  expect(await getResearchNotesIndex().search('obsolete')).toEqual([]);
+});

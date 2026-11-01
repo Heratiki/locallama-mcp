@@ -30,6 +30,8 @@ function terms(text: string): Set<string> {
  * from the same repo_path.
  */
 export async function findReusedNote(notes: ReusableNote[], lookup: ReuseLookup): Promise<ReusableNote | undefined> {
+  // Scope before ranking: foreign repo notes must not consume top-k slots.
+  notes = notes.filter(note => note.source !== 'repo' || note.repo_path === lookup.repoPath);
   if (notes.length === 0) return undefined;
   const index = getResearchNotesIndex();
   await index.sync(notes.map(note => ({

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { glob } from 'glob';
 import { BM25Searcher } from '../../cost-monitor/bm25.js';
@@ -40,6 +41,9 @@ function toolEnv(): NodeJS.ProcessEnv {
   }
   // An own undefined property suppresses Node's forwarding of the variable.
   for (const name of TOOL_ENV_UNSET) env[name] = undefined;
+  // Ignore user Go configuration and forbid all automatic downloads.
+  Object.assign(env, { GOENV: 'off', GOTOOLCHAIN: 'local', GOPROXY: 'off',
+    GOFLAGS: '-mod=readonly', GONOSUMDB: '*', GOSUMDB: 'off' });
   return env;
 }
 
@@ -178,17 +182,25 @@ export const depsAdapter: ResearchSourceAdapter = {
   },
 };
 
-const docAdapter = (source: ResearchSourceKind, argv: (target: string) => string[]): ResearchSourceAdapter => ({
+const docAdapter = (source: ResearchSourceKind, argv: (target: string) => string[], isolatedPython = false): ResearchSourceAdapter => ({
   source,
   async run(query, ctx) {
-    const result = await runTool(argv(query.text), { cwd: ctx.workspacePath, timeoutMs: ctx.timeoutMs });
-    if (result.timedOut) return { text: '', timedOut: true };
-    return { text: result.ok && result.output ? clip(result.output, 1500) : '' };
+    if (isolatedPython && !/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(query.text)) {
+      return { text: '', skipped: 'invalid_module' };
+    }
+    const neutral = isolatedPython ? await mkdtemp(path.join(tmpdir(), 'patch-pydoc-')) : undefined;
+    try {
+      const result = await runTool(argv(query.text), { cwd: neutral ?? ctx.workspacePath, timeoutMs: ctx.timeoutMs });
+      if (result.timedOut) return { text: '', timedOut: true };
+      return { text: result.ok && result.output ? clip(result.output, 1500) : '' };
+    } finally {
+      if (neutral) await rm(neutral, { recursive: true, force: true });
+    }
   },
 });
 
 /** (c) Python docstrings via pydoc. */
-export const pydocAdapter: ResearchSourceAdapter = docAdapter('pydoc', target => ['pydoc', target]);
+export const pydocAdapter: ResearchSourceAdapter = docAdapter('pydoc', target => ['python3', '-I', '-m', 'pydoc', target], true);
 
 /** (c) Go package docs via `go doc`. */
 export const goDocAdapter: ResearchSourceAdapter = docAdapter('go doc', target => ['go', 'doc', target]);

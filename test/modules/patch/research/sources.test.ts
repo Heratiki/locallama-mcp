@@ -72,7 +72,7 @@ describe('source adapters (#155 criteria 7, 8, 9)', () => {
   });
 
   it('pydoc adapter documents a python module (python fixture)', async () => {
-    await fakeTool('pydoc', '#!/bin/sh\necho "requests — an HTTP library"\necho "requests.get(url, **kwargs)"\n');
+    await fakeTool('python3', '#!/bin/sh\necho "requests — an HTTP library"\necho "requests.get(url, **kwargs)"\n');
     const result = await pydocAdapter.run({ text: 'requests', kind: 'module' }, ctx());
     expect(result.skipped).toBeUndefined();
     expect(result.text).toContain('requests.get');
@@ -102,7 +102,7 @@ describe('source adapters (#155 criteria 7, 8, 9)', () => {
 
   it('spawns tools with proxy variables unset (#155 criterion 13)', async () => {
     const marker = path.join(tmp, 'env-marker');
-    await fakeTool('pydoc', `#!/bin/sh\nif [ -n "$HTTP_PROXY" ] || [ -n "$http_proxy" ] || [ -n "$HTTPS_PROXY" ] || [ -n "$ALL_PROXY" ]; then echo "proxy-set" > ${JSON.stringify(marker)}; else echo "clean" > ${JSON.stringify(marker)}; fi\necho docs\n`);
+    await fakeTool('python3', `#!/bin/sh\nif [ -n "$HTTP_PROXY" ] || [ -n "$http_proxy" ] || [ -n "$HTTPS_PROXY" ] || [ -n "$ALL_PROXY" ]; then echo "proxy-set" > ${JSON.stringify(marker)}; else echo "clean" > ${JSON.stringify(marker)}; fi\necho docs\n`);
     process.env.HTTP_PROXY = 'http://127.0.0.1:9';
     process.env.https_proxy = 'http://127.0.0.1:9';
     try {
@@ -116,9 +116,9 @@ describe('source adapters (#155 criteria 7, 8, 9)', () => {
 
   it('runTool kills a slow tool after the timeout', async () => {
     const pidFile = path.join(tmp, 'slow.pid');
-    await fakeTool('pydoc', `#!/bin/sh\necho $$ > ${JSON.stringify(pidFile)}\nsleep 30\necho late\n`);
+    await fakeTool('python3', `#!/bin/sh\necho $$ > ${JSON.stringify(pidFile)}\nsleep 30\necho late\n`);
     const started = Date.now();
-    const result = await runTool(['pydoc', 'requests'], { cwd: workspace, timeoutMs: 300 });
+    const result = await runTool(['python3', 'requests'], { cwd: workspace, timeoutMs: 300 });
     expect(result.timedOut).toBe(true);
     expect(Date.now() - started).toBeLessThan(10_000);
     const pid = Number(await readFile(pidFile, 'utf8'));
@@ -139,4 +139,23 @@ describe('workspace layout', () => {
   it('the fixture workspace exists', () => {
     expect(existsSync(workspace)).toBe(true);
   });
+});
+
+it('B2 go doc disables module, checksum and toolchain downloads', async () => {
+  await fakeTool('go', '#!/bin/sh\nprintf "%s|%s|%s|%s|%s" "$GOTOOLCHAIN" "$GOPROXY" "$GOFLAGS" "$GONOSUMDB" "$GOSUMDB"\n');
+  const result = await goDocAdapter.run({ text: 'fmt', kind: 'module' }, ctx());
+  expect(result.text).toBe('local|off|-mod=readonly|*|off');
+});
+
+it('B2 pydoc never imports workspace modules or workspace shadows of stdlib', async () => {
+  const marker = path.join(tmp, 'imported');
+  const trap = `open(${JSON.stringify(marker)}, 'w').write('imported')\n`;
+  await writeFile(path.join(workspace, 'private_workspace_module.py'), trap);
+  await writeFile(path.join(workspace, 'json.py'), trap);
+  const local = await pydocAdapter.run({ text: 'private_workspace_module', kind: 'module' }, ctx());
+  expect(local.text).toBe('');
+  expect(existsSync(marker)).toBe(false);
+  const stdlib = await pydocAdapter.run({ text: 'json', kind: 'module' }, ctx());
+  expect(stdlib.text).toContain('JSON');
+  expect(existsSync(marker)).toBe(false);
 });

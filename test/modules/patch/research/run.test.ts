@@ -142,8 +142,8 @@ describe('runResearch (#155 criteria 1, 10, 11, 13)', () => {
 
   it('a slow source is killed and recorded timed_out while the rest still run (#155 criterion 10)', async () => {
     const pidFile = path.join(tmp, 'slow.pid');
-    await writeFile(path.join(binDir, 'pydoc'), `#!/bin/sh\necho $$ > ${JSON.stringify(pidFile)}\nsleep 30\n`, 'utf8');
-    await chmod(path.join(binDir, 'pydoc'), 0o755);
+    await writeFile(path.join(binDir, 'python3'), `#!/bin/sh\necho $$ > ${JSON.stringify(pidFile)}\nsleep 30\n`, 'utf8');
+    await chmod(path.join(binDir, 'python3'), 0o755);
     const stub = await stubServer({
       probe: (_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); },
       default: (_req, res) => { setTimeout(() => { res.writeHead(200); res.end(JSON.stringify({ results: [] })); }, 5000); },
@@ -230,4 +230,37 @@ describe('runResearch (#155 criteria 1, 10, 11, 13)', () => {
       expect(outcome.inserts).toHaveLength(0);
     } finally { await stub.close(); }
   });
+});
+
+it('B5 redacts the check name in stored reasons and infers private repo terms', async () => {
+  const stub = await stubServer({});
+  try {
+    const outcome = await runResearch({
+      jobId: 'job', attemptN: 3, repoPath: '/repos/secretproject', workspacePath: workspace,
+      stuck: { reason: 'same_check:secretproject API_TOKEN="two secret words"', signature: 'TS2339 Widget', errorText: 'error TS2339 Widget' },
+      files: [], repoSearch: async () => [{ path: 'a.ts', content: 'Widget documentation' }],
+      helpedNotes: [], limits: limits({ searxngUrl: stub.url }),
+    });
+    expect(outcome.inserts.length).toBeGreaterThan(0);
+    for (const reason of [outcome.record.reason, ...outcome.inserts.map(row => row.reason)]) {
+      expect(reason).not.toContain('secretproject');
+      expect(reason).not.toContain('two secret words');
+      expect(reason).toContain('TS2339');
+    }
+  } finally { await stub.close(); }
+});
+
+it('S11 records missing doc tools as tool_missing through orchestration', async () => {
+  const stub = await stubServer({});
+  process.env.PATH = binDir; // deliberately empty; python3, go and man are absent
+  try {
+    for (const [error, source] of [[PYTHON_ERROR, 'pydoc'], ['main.go:5:2: undefined: fmt', 'go doc'], ['unknown Widget error', 'man']]) {
+      const outcome = await runResearch({
+        jobId: 'job', attemptN: 3, repoPath: '/repos/app', workspacePath: workspace,
+        stuck: stuckOf(error), files: [], repoSearch: async () => [], helpedNotes: [],
+        limits: limits({ searxngUrl: stub.url }),
+      });
+      expect(outcome.record.sources.find(run => run.source === source)).toMatchObject({ status: 'skipped', detail: 'tool_missing' });
+    }
+  } finally { await stub.close(); }
 });

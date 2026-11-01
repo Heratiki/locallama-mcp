@@ -52,12 +52,15 @@ export async function getHelpedResearchNotes(): Promise<ResearchNoteRow[]> {
 
 /**
  * Resolve the pending notes one attempt used: 1 when that attempt passed all
- * checks, 0 otherwise. Only NULL rows change (12b).
+ * checks, 0 otherwise. Only NULL rows change (12b). An explicit ID list limits
+ * credit to notes that survived prompt fitting; an empty list credits nothing.
  */
-export async function markResearchNotesHelped(jobId: string, attemptN: number, helped: 1 | 0): Promise<number> {
+export async function markResearchNotesHelped(jobId: string, attemptN: number, helped: 1 | 0, noteIds?: readonly number[]): Promise<number> {
+  if (noteIds?.length === 0) return 0;
+  const selected = noteIds ? ` AND id IN (${noteIds.map(() => '?').join(',')})` : '';
   const result = await getDbForPatchStore().run(
-    'UPDATE research_notes SET helped = ? WHERE job_id = ? AND attempt_n = ? AND helped IS NULL',
-    [helped, jobId, attemptN],
+    `UPDATE research_notes SET helped = ? WHERE job_id = ? AND attempt_n = ? AND helped IS NULL${selected}`,
+    [helped, jobId, attemptN, ...(noteIds ?? [])],
   );
   return result.changes ?? 0;
 }

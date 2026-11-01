@@ -44,6 +44,8 @@ export interface BuiltPrompt {
   /** Tokens available for the prompt (after output cap and system prompt). */
   budget: number;
   used: number;
+  /** Exact research prefix surviving section fitting and final prompt trimming. */
+  researchText?: string;
 }
 
 export function formatBlock(b: EditBlock): string {
@@ -92,6 +94,8 @@ export async function buildPrompt(input: PromptInput): Promise<BuiltPrompt> {
   const budget = Math.max(0, window - input.maxOutputTokens - countTokens(system));
   let remaining = budget;
   const parts: string[] = [];
+  let researchStart = -1;
+  let researchLength = 0;
   const add = (s: string | null): boolean => {
     if (s === null) return false;
     parts.push(s);
@@ -124,7 +128,14 @@ export async function buildPrompt(input: PromptInput): Promise<BuiltPrompt> {
     // the research budget and the overall prompt budget. Like the BM25 fill,
     // drop it entirely when the remaining budget is trivial.
     if (input.researchNotes && remaining > 50) {
-      add(fit('## Research notes\n', input.researchNotes, remaining, '[research cut]'));
+      const header = '## Research notes\n';
+      const section = fit(header, input.researchNotes, remaining, '[research cut]');
+      if (section) {
+        researchStart = parts.join('\n').length + (parts.length ? 1 : 0) + header.length;
+        const body = section.slice(header.length);
+        while (researchLength < input.researchNotes.length && body[researchLength] === input.researchNotes[researchLength]) researchLength++;
+        add(section);
+      }
     }
 
     const blocks = (input.lastBlocks ?? []).map(formatBlock);
@@ -158,5 +169,6 @@ export async function buildPrompt(input: PromptInput): Promise<BuiltPrompt> {
   let prompt = parts.join('\n');
   // Joins and token merges at section edges can differ from the sum; trim to be sure.
   if (countTokens(prompt) > budget) prompt = headTokens(prompt, budget);
-  return { system, prompt, budget, used: countTokens(prompt) };
+  return { system, prompt, budget, used: countTokens(prompt),
+    ...(researchStart >= 0 ? { researchText: prompt.slice(researchStart, researchStart + researchLength) } : {}) };
 }

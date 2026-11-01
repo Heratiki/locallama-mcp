@@ -51,12 +51,13 @@ const STOP_WORDS = new Set([
 export function buildQueries(errorText: string, files: string[] = [], options: BuildQueriesOptions = {}): ResearchQuery[] {
   const max = options.max ?? 6;
   const safe = redactText(errorText, options);
+  const safeFiles = files.map(file => redactText(file, options).replace(/\\/g, '/'));
   const lines = safe.split(/\r?\n/).filter(line => line.trim() !== '');
   const queries: ResearchQuery[] = [];
   const seen = new Set<string>();
   const push = (text: string, kind: ResearchQueryKind): void => {
-    const trimmed = text.trim();
-    if (!trimmed || trimmed.length > 80 || trimmed.startsWith('<')) return;
+    const trimmed = redactText(text, options).trim();
+    if (!trimmed || trimmed.length > 80 || trimmed.includes('<')) return;
     const key = trimmed.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
@@ -71,7 +72,7 @@ export function buildQueries(errorText: string, files: string[] = [], options: B
   for (const pattern of MODULE_PATTERNS) {
     for (const match of safe.matchAll(pattern)) push(match[1], 'module');
   }
-  for (const file of files) {
+  for (const file of safeFiles) {
     if (file.endsWith('.py')) push(file.replace(/\.py$/, '').replace(/\//g, '.'), 'module');
   }
 
@@ -81,7 +82,7 @@ export function buildQueries(errorText: string, files: string[] = [], options: B
   for (const match of focus.matchAll(PLAIN_IDENTIFIER)) {
     if (!STOP_WORDS.has(match[0].toLowerCase())) push(match[0], 'identifier');
   }
-  for (const file of files) {
+  for (const file of safeFiles) {
     const base = file.split('/').pop() ?? file;
     push(base.replace(/\.[a-z0-9]+$/i, ''), 'identifier');
   }

@@ -24,7 +24,8 @@ function escapeRegExp(text: string): string {
 const ABSOLUTE_PATH = /(^|[\s"'`(=[:,{])((?:[A-Za-z]:[\\/]|~\/|\/)[^\s"'`)\]},]+)/g;
 
 /** Values of env-like assignments whose name looks credential-related. */
-const ENV_VALUE = /([A-Za-z][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|CREDENTIAL|CRED|AUTH)[A-Za-z0-9_]*\s*[:=]\s*)(\S+)/g;
+const ENV_VALUE = /(\b[A-Za-z_][A-Za-z0-9_]*\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;]+)/g;
+const CREDENTIAL_NAME = /KEY|TOKEN|SECRET|PASS|AUTH|CRED|COOKIE|SESSION/i;
 
 /** Bearer/basic authorization headers and bare long tokens. */
 const BEARER = /\b(bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{12,}/gi;
@@ -42,12 +43,18 @@ const LONG_BASE64 = /\b[A-Za-z0-9+/]{32,}={0,2}\b/g;
 
 /** Strip absolute paths, private terms and secret-looking values. */
 export function redactText(text: string, terms: RedactTerms = {}): string {
-  let out = text.replace(ABSOLUTE_PATH, '$1<path>');
+  // Replace longer literals first so overlapping secrets cannot expose a suffix.
+  const values = Object.entries(process.env)
+    .filter(([name, value]) => value && value.length >= 6 && (CREDENTIAL_NAME.test(name) || value.length >= 16))
+    .map(([, value]) => value!).sort((a, b) => b.length - a.length);
+  let out = text;
+  for (const value of values) out = out.split(value).join('<redacted>');
+  out = out.replace(ABSOLUTE_PATH, '$1<path>');
   for (const term of terms.privateTerms ?? []) {
     if (term && term.length >= 4) out = out.replace(new RegExp(`\\b${escapeRegExp(term)}\\b`, 'g'), '<private>');
   }
   out = out
-    .replace(ENV_VALUE, '$1<redacted>')
+    .replace(ENV_VALUE, (match, assignment: string) => CREDENTIAL_NAME.test(assignment) ? `${assignment}<redacted>` : match)
     .replace(BEARER, '$1 <redacted>')
     .replace(TOKEN_PREFIX, '<redacted>')
     .replace(AWS_KEY, '<redacted>')

@@ -13,7 +13,7 @@ export class SourceTimeoutError extends Error {
   constructor() { super('SearXNG request timed out'); }
 }
 
-export type FetchLike = (input: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>;
+export type FetchLike = (input: string, init?: { signal?: AbortSignal; redirect?: RequestRedirect; headers?: Record<string, string> }) => Promise<Response>;
 
 /** Memoized per URL: 'ok' and 'disabled' hold for the whole run (#155 criterion 6). */
 const probeCache = new Map<string, 'ok' | 'disabled'>();
@@ -31,11 +31,19 @@ function searchUrl(base: string, query: string): string {
   return url.toString();
 }
 
-async function get(base: string, query: string, timeoutMs: number, fetchImpl: FetchLike): Promise<Response> {
+async function get(base: string, query: string, timeoutMs: number, fetchImpl: FetchLike): Promise<{ status: number; ok: boolean; body: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new SourceTimeoutError()), timeoutMs);
   try {
-    return await fetchImpl(searchUrl(base, query), { signal: controller.signal, headers: { accept: 'application/json' } });
+    const response = await fetchImpl(searchUrl(base, query), { signal: controller.signal, redirect: 'manual', headers: { accept: 'application/json' } });
+    if (!response.ok) {
+      await response.body?.cancel();
+      return { status: response.status, ok: false, body: '' };
+    }
+    return { status: response.status, ok: true, body: await response.text() };
+  } catch (error) {
+    if (controller.signal.aborted) throw new SourceTimeoutError();
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -51,7 +59,7 @@ async function get(base: string, query: string, timeoutMs: number, fetchImpl: Fe
 export async function probeSearxng(base: string, timeoutMs: number, fetchImpl: FetchLike = fetch): Promise<SearxngProbeState> {
   const cached = probeCache.get(base);
   if (cached) return cached;
-  let response: Response;
+  let response: Awaited<ReturnType<typeof get>>;
   try {
     response = await get(base, 'locallama probe', timeoutMs, fetchImpl);
   } catch {
@@ -82,7 +90,7 @@ export async function searchSearxng(
 ): Promise<SearxngResult[]> {
   const response = await get(base, query, timeoutMs, fetchImpl);
   if (!response.ok) throw new Error(`SearXNG HTTP ${response.status}`);
-  const body = JSON.parse(await response.text()) as { results?: Partial<SearxngResult>[] };
+  const body = JSON.parse(response.body) as { results?: Partial<SearxngResult>[] };
   return (body.results ?? []).slice(0, Math.max(1, topN)).map(result => ({
     title: String(result.title ?? ''),
     url: String(result.url ?? ''),

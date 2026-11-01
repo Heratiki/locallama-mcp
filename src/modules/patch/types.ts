@@ -129,6 +129,8 @@ export interface ResearchRecord {
   block: string;
   /** Helped note reused through the BM25 notes index, when one matched. */
   reusedNoteId?: number;
+  /** New note IDs whose complete info survived assembly and prompt fitting. */
+  usedNoteIds?: number[];
 }
 
 /** Exact Job result JSON envelope from PRD 01 §5.1. */

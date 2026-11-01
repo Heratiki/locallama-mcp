@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { CodeSearchEngine, CodeSearchEngineOptions, CodeSearchResult } from './codeSearch.js';
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
@@ -391,8 +392,8 @@ export class ResearchNotesIndex {
 
   /** Rebuild when the helped-note set changed (first use, new helped note, eviction). */
   public async sync(items: ResearchNotesIndexItem[]): Promise<void> {
-    let fingerprint = `${items.length}`;
-    for (const item of items) fingerprint = `${fingerprint}:${(fingerprint.length * 31 + item.id + item.content.length) | 0}`;
+    const fingerprint = JSON.stringify(items.map(item => [item.id, item.repoPath, item.source, item.path,
+      createHash('sha256').update(item.content).digest('hex')]));
     if (fingerprint === this.fingerprint) return;
     this.items = items;
     this.fingerprint = fingerprint;

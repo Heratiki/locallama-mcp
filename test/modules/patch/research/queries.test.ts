@@ -89,3 +89,29 @@ describe('redactText (#155 criterion 4)', () => {
     expect(out).toContain("'foo'");
   });
 });
+
+it('B3 redacts literal environment values and quoted credential assignments', () => {
+  const previous = { ...process.env };
+  Object.assign(process.env, {
+    FIX_API_TOKEN: 'shortSecret', FIX_SESSION: 'session words',
+    FIX_ORDINARY: 'long value with punctuation!', FIX_SHORT: 'public',
+  });
+  try {
+    const secrets = ['shortSecret', 'session words', 'long value with punctuation!', 'two secret words', 'quoted cookie value'];
+    const out = redactText(`boom ${secrets.slice(0, 3).join('; ')} password="two secret words" COOKIE='quoted cookie value' public TS2339`);
+    for (const secret of secrets) expect(out).not.toContain(secret);
+    expect(out).toContain('public');
+    expect(out).toContain('TS2339');
+  } finally {
+    for (const name of ['FIX_API_TOKEN', 'FIX_SESSION', 'FIX_ORDINARY', 'FIX_SHORT']) {
+      if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name];
+    }
+  }
+});
+
+it('B4 redacts filenames before deriving module and identifier queries', () => {
+  const files = ['internalrepo/client.py', '/home/alice/private.py', 'sk-abcdefgh12345678.ts', 'internalrepo.ts'];
+  const sent = JSON.stringify(buildQueries('', files, { privateTerms: ['internalrepo'], max: 20 }));
+  for (const secret of ['internalrepo', 'alice', 'private.py', 'sk-abcdefgh12345678']) expect(sent).not.toContain(secret);
+  expect(sent).not.toContain('/home');
+});
