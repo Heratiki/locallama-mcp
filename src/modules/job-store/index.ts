@@ -31,4 +31,14 @@ export {
   getPatchAttempts,
 } from './patch-store.js';
 export type { PatchAttemptRow, PatchTerminalWrite } from './patch-store.js';
+export {
+  insertResearchNote,
+  getResearchNotesForJob,
+  getResearchNotesForAttempt,
+  getHelpedResearchNotes,
+  markResearchNotesHelped,
+  failPendingResearchNotes,
+  enforceResearchNotesCap,
+} from './research-store.js';
+export type { ResearchNoteRow, ResearchNoteInsert } from './research-store.js';
 export { refreshAlertState, isAlertActive, buildQueueAlert } from './alert.js';

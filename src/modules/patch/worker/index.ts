@@ -1,13 +1,16 @@
+import * as path from 'node:path';
 import * as jobStore from '../../job-store/index.js';
+import { config } from '../../../config/index.js';
 import { getProviderRegistry, type ProviderRegistry } from '../../core/provider/registry.js';
 import { withSpan } from '../../telemetry/index.js';
 import { runChecks, loadChecksConfig } from '../checks/index.js';
 import { parseEditBlocks, applyEditBlocks } from '../edit-blocks/index.js';
 import { buildPrompt } from '../prompt/index.js';
 import { errorSignature, sameSignature, nextCursor, stopReason, pickValidator, hasBudgetNow } from '../ladder/index.js';
+import { detectStuck, runResearch } from '../research/index.js';
 import { truncateTail } from '../checks/output.js';
 import type {
-  AttemptOutcome, CheckResult, CheckSpec, ChecksConfig, EditBlock, LadderEntry, PatchDiagnosis, Workspace, WorkspaceBackend,
+  AttemptOutcome, CheckResult, CheckSpec, ChecksConfig, EditBlock, LadderEntry, PatchDiagnosis, ResearchRecord, Workspace, WorkspaceBackend,
 } from '../types.js';
 import type { PatchAttemptRow } from '../../job-store/index.js';
 import {
@@ -22,11 +25,13 @@ export type { WorkerSettings, WorkerResult, PatchValidation, PatchRequest } from
 
 export type PatchWorkerStore = Pick<typeof jobStore,
   'getPatchState' | 'getPatchAttempts' | 'getJob' | 'recordAttemptStart' |
-  'insertPatchAttempt' | 'finishPatchJob' | 'updatePatchSpend'>;
+  'insertPatchAttempt' | 'finishPatchJob' | 'updatePatchSpend' |
+  'insertResearchNote' | 'getHelpedResearchNotes' | 'markResearchNotesHelped' |
+  'failPendingResearchNotes' | 'enforceResearchNotesCap'>;
 
 export interface PatchWorkerOptions {
   backend: WorkspaceBackend;
-  registry?: Pick<ProviderRegistry, 'get' | 'executeWithConcurrencyLimit'>;
+  registry?: Pick<ProviderRegistry, 'get' | 'executeWithConcurrencyLimit' | 'recordProviderSuccess' | 'recordProviderFailure'>;
   store?: PatchWorkerStore;
   now?: () => number;
 }
@@ -118,6 +123,12 @@ export class PatchWorker {
     let lastError = '';
     let bestDiff = '';
     let bestPassed = -1;
+    // #155: research record feeding the next attempt, and every record an
+    // attempt actually used (surfaced in the result and diagnosis).
+    let researchForNext: ResearchRecord | undefined;
+    const researchUsed: ResearchRecord[] = [];
+    const researchEnabled = (): boolean =>
+      config.patchResearchSearxngUrl !== '' && config.patchResearchTokens > 0;
     const summaries: PatchDiagnosis['attempts'] = [];
     const usage: CallUsage[] = [];
     try {
@@ -177,7 +188,10 @@ export class PatchWorker {
         const passed = checksOf(row).filter(c => c.exit_code === 0 && !c.timed_out).length;
         if (d.diff && passed > bestPassed) { bestPassed = passed; bestDiff = d.diff; }
         if (row.outcome !== 'passed') summaries.push({ model_id: row.model_id ?? 'unknown', provider_id: row.provider_id ?? 'unknown',
-          outcome: outcomeOf(row), duration_ms: row.duration_ms ?? 0 });
+          outcome: outcomeOf(row), duration_ms: row.duration_ms ?? 0,
+          ...((d as AttemptDetails & { research?: ResearchRecord }).research
+            ? { research: (d as AttemptDetails & { research?: ResearchRecord }).research }
+            : {})});
       }
       const last = rows[rows.length - 1];
       let lastChecks = checksOf(last);
@@ -214,6 +228,7 @@ export class PatchWorker {
       if (last?.outcome === 'passed' && lastChecks.length === specs.length && lastChecks.every(c => c.exit_code === 0 && !c.timed_out)) {
         const saved = details(last);
         result.status = 'passed'; result.reason = 'passed'; result.diff = saved.diff; result.files_changed = saved.files;
+        try { await store.markResearchNotesHelped(jobId, last.n, 1); } catch { /* research bookkeeping only */ }
         return await terminal();
       }
       await this.options.backend.reset(ws);
@@ -263,9 +278,11 @@ export class PatchWorker {
             try {
               const window = await calls.contextWindow(entry);
               await checkpoint();
+              if (researchForNext) researchUsed.push(researchForNext);
               const prompt = await buildPrompt({
                 goal: request.goal, attempt: state.attempts_used + 1, hintedFiles: hints,
                 lastChecks, lastBlocks, lastErrorText: lastError, search: search!.search,
+                researchNotes: researchForNext?.block,
                 modelContextWindow: window, contextTokens: settings.patchContextTokens,
                 maxOutputTokens: settings.patchMaxOutputTokens, errorTailTokens: settings.patchErrorTailTokens,
               });
@@ -331,7 +348,10 @@ export class PatchWorker {
         const duration = Math.max(0, this.now() - attemptStarted);
         if (began) {
           const attemptUsage = calls.usage.slice(usageOffset);
-          const meta: AttemptDetails = { blocks, calls: attemptUsage, diff, files, ...(validation ? { validation } : {}) };
+          const meta: AttemptDetails & { research?: ResearchRecord } = {
+            blocks, calls: attemptUsage, diff, files, ...(validation ? { validation } : {}),
+          };
+          if (researchForNext) meta.research = researchForNext;
           const row: PatchAttemptRow = {
             job_id: jobId, n: state.attempts_used, model_id: entry.model_id, provider_id: entry.provider_id,
             cost_class: entry.cost_class, prompt_tokens: attemptUsage.reduce((s, u) => s + u.prompt_tokens, 0),
@@ -343,7 +363,8 @@ export class PatchWorker {
           await store.insertPatchAttempt(row);
           usage.push(...attemptUsage);
           if (recordedOutcome !== 'passed') summaries.push({ model_id: entry.model_id, provider_id: entry.provider_id,
-            outcome: recordedOutcome, duration_ms: duration });
+            outcome: recordedOutcome, duration_ms: duration,
+            ...(researchForNext ? { research: researchForNext } : {}) });
           rows.push(row);
         }
         lastChecks = attemptChecks;
@@ -352,6 +373,8 @@ export class PatchWorker {
         result.checks = attemptChecks;
         if (stopped) { result.reason = stopped.reason; break; }
         if (recordedOutcome === 'passed') {
+          // #155 criterion 12b: the attempt that used the notes passed all checks.
+          try { await store.markResearchNotesHelped(jobId, state.attempts_used, 1); } catch { /* research bookkeeping only */ }
           result.status = 'passed'; result.reason = 'passed'; result.diff = diff; result.files_changed = files;
           break;
         }
@@ -360,6 +383,41 @@ export class PatchWorker {
         cursor = next.cursor;
         onModel = next.attemptsOnModel;
         signature = currentSignature;
+        // #155: harness-driven research between attempts. The harness detects
+        // that the model is stuck, runs local sources plus the configured
+        // SearXNG, and feeds a bounded, redacted block to the next prompt.
+        // Research is best-effort: it never fails the task.
+        researchForNext = undefined;
+        if (researchEnabled()) {
+          const lastTwo = rows.slice(-2).map(row => ({
+            outcome: row.outcome, applyError: row.apply_error, checks: checksOf(row),
+          }));
+          const stuck = detectStuck(lastTwo);
+          if (stuck) {
+            try {
+              const outcome = await runResearch({
+                jobId, attemptN: state.attempts_used + 1, repoPath: request.repo_path, workspacePath: ws.path,
+                privateTerms: [path.basename(request.repo_path)], stuck,
+                files: lastBlocks.map(block => block.path), repoSearch: search!.search,
+                helpedNotes: await store.getHelpedResearchNotes(),
+                limits: {
+                  searxngUrl: config.patchResearchSearxngUrl,
+                  sourceTimeoutMs: config.patchResearchSourceTimeoutMs,
+                  tokens: config.patchResearchTokens,
+                  notesMax: config.patchResearchNotesMax,
+                },
+                now: this.now,
+              });
+              if (outcome.enabled) {
+                researchForNext = outcome.record;
+                for (const note of outcome.inserts) await store.insertResearchNote(note);
+                if (outcome.inserts.length > 0) await store.enforceResearchNotesCap(config.patchResearchNotesMax);
+              }
+            } catch {
+              // Research is optional context; the grind loop goes on without it.
+            }
+          }
+        }
         await persistCursor();
       }
       return await terminal();
@@ -404,9 +462,13 @@ export class PatchWorker {
         models.set(key, m);
       }
       result.models = [...models.values()];
+      if (researchUsed.length > 0) result.research = researchUsed;
       result.diagnosis = result.status === 'passed' ? null : {
         last_errors: truncateTail(lastError, errorTailTokens), best_diff: bestDiff, attempts: summaries,
       };
+      // #155 criterion 12b: the task ended — any still-pending note never
+      // helped its attempt and resolves to 0.
+      try { await store.failPendingResearchNotes(jobId); } catch { /* research bookkeeping only */ }
       const written = await store.finishPatchJob(jobId, {
         status: result.status === 'passed' ? 'completed' : result.status,
         result: JSON.stringify(result), error: result.status === 'passed' ? null : result.reason, completed_at: now(),

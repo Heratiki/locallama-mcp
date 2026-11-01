@@ -70,6 +70,11 @@ Free providers without current rate budget are skipped rather than waited on
 `src/modules/patch/ladder/policy.ts:hasBudgetNow`;
 `src/modules/patch/worker/index.ts:PatchWorker.runJob`).
 
+**One model in RAM depends on the runtime:** use llama-router `--models-max 1` or Ollama's
+unload behavior. Serial attempts alone do not unload models; llama.cpp resource release is
+a documented no-op (`src/modules/api-integration/tool-definition/index.ts:patchTaskTool`;
+`src/modules/llama-cpp/provider.ts:LlamaCppProvider.releaseResources`).
+
 Attempts stay on a model until its allowance is used or the error signature repeats, then
 advance. Stops include total attempts, original deadline, ladder exhaustion, cancellation
 and paid cap. Paid generation and judge calls reserve cost before execution and settle
@@ -78,10 +83,47 @@ usage afterward; interrupted reservations are conservatively charged on recovery
 `src/modules/patch/worker/model-call.ts:PatchModelCalls`;
 `src/modules/patch/worker/index.ts:PatchWorker.runJob`).
 
-**One model in RAM depends on the runtime:** use llama-router `--models-max 1` or Ollama's
-unload behavior. Serial attempts alone do not unload models; llama.cpp resource release is
-a documented no-op (`src/modules/api-integration/tool-definition/index.ts:patchTaskTool`;
-`src/modules/llama-cpp/provider.ts:LlamaCppProvider.releaseResources`).
+## Harness-driven research (#155)
+
+When the grind loop is stuck — the same failing check with the same normalized error
+signature on two consecutive attempts, or an edit block that fails to apply twice — the
+worker can run a short research step before the next attempt. The model does not call any
+tool; the harness builds queries from the error text and touched files, runs local sources
+and a user-configured SearXNG instance, and appends a bounded "## Research notes" section
+to the next prompt after the errors section.
+
+Research is **off by default**. It turns on only when `PATCH_RESEARCH_SEARXNG_URL` is set
+to a reachable SearXNG URL and `PATCH_RESEARCH_TOKENS` is greater than 0. Local sources
+(BM25 over the repo, dependency docs/types, `pydoc`, `go doc`, `man`) always run; the
+SearXNG source runs only when the instance probes OK. A 403 on `format=json` means the
+instance's `settings.yml` omits `json` from `search.formats`; the worker logs one warning
+and disables web research for the run. A down or timed-out SearXNG instance skips only the
+web source; local sources still run.
+
+Queries and results are redacted before leaving the machine or being stored: absolute
+paths, repo-private names, usernames, env-var values, bearer tokens, provider prefixes,
+long hex and base64 are removed. One row per query/source is written to the new
+`research_notes` table with `helped` NULL while pending. If the attempt that consumed the
+note passes all checks, `helped` becomes 1; otherwise the task resolves pending notes to 0.
+Only `helped = 1` notes are reused. Shared-scope sources (`searxng`, `deps`, `pydoc`,
+`go doc`, `man`) match from any repo; `repo` notes match only within the same `repo_path`.
+The BM25 index of helped notes is rebuilt from the table at first use, so it survives a
+process restart. Each scope is capped to `PATCH_RESEARCH_NOTES_MAX`; oldest notes are
+evicted first.
+
+Sources and records:
+- Stuck detection: `src/modules/patch/research/detect.ts:detectStuck`.
+- Query building and redaction: `src/modules/patch/research/queries.ts`,
+  `src/modules/patch/research/redact.ts`.
+- Local source adapters and doc-tool runners: `src/modules/patch/research/sources.ts`.
+- SearXNG probe and snippet search: `src/modules/patch/research/searxng.ts`.
+- Note reuse and BM25 index: `src/modules/patch/research/notes.ts`,
+  `src/modules/cost-monitor/codeSearchEngine.ts:ResearchNotesIndex`.
+- Orchestration and prompt insertion: `src/modules/patch/research/index.ts:runResearch`,
+  `src/modules/patch/worker/index.ts:PatchWorker.runJob`,
+  `src/modules/patch/prompt/builder.ts:buildPrompt`.
+- Persistence: `src/modules/job-store/db.ts`,
+  `src/modules/job-store/research-store.ts`.
 
 ## Environment defaults
 
@@ -109,6 +151,10 @@ Resolved worker settings are persisted at submission
 | `PATCH_ERROR_TAIL_TOKENS` | `800` | Error/output feedback tail budget. |
 | `PATCH_WHOLE_FILE_MAX_LINES` | `150` | Existing-file whole-file replacement limit. |
 | `PATCH_PAID_CAP_USD` | `0.25` | Default cap when paid calls are opted into. |
+| `PATCH_RESEARCH_SEARXNG_URL` | empty | SearXNG base URL; empty disables research. Must serve `format=json`. |
+| `PATCH_RESEARCH_SOURCE_TIMEOUT_MS` | `5000` | Per-source timeout, also applied to SearXNG. |
+| `PATCH_RESEARCH_TOKENS` | `800` | Hard token budget for the research block; 0 disables research. |
+| `PATCH_RESEARCH_NOTES_MAX` | `500` | Helped notes cap per scope; oldest evicted first. |
 | `OPENROUTER_FREE_ONLY` | `true` | Also excludes paid patch ladder entries. |
 | `SAVINGS_TOKEN_FACTOR` | `1.0` | Positive multiplier for the savings estimate below. |
 
@@ -134,6 +180,7 @@ The shared envelope is `src/modules/patch/types.ts:PatchResultV1`, with `CheckRe
 | `tokens` | `{local, free, paid}` prompt + completion token totals, including judge usage. |
 | `cost_usd`, `elapsed_ms` | Paid ledger total and elapsed milliseconds. |
 | `diagnosis` | Null on pass; otherwise `{last_errors, best_diff, attempts}`. Diagnosis attempts contain `{model_id, provider_id, outcome, duration_ms}`; outcomes are `apply_error`, `check_failed`, `validator_rejected`, `timed_out`, `call_error`. |
+| `research` | Absent when research never ran; otherwise array of `patch_research_v1` records used by attempts, in order. |
 | `validation` | Additive array of `{model_id, provider_id, passed: boolean \| null, skipped, reason}`. |
 
 Result assembly, token accounting, last checks and diagnosis selection are in

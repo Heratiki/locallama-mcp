@@ -12,7 +12,7 @@ type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends
 type Assert<T extends true> = T;
 type ResultKeys = Assert<Equal<keyof PatchResultV1,
   'schema' | 'status' | 'reason' | 'diff' | 'base' | 'files_changed' | 'checks' |
-  'attempts' | 'models' | 'tokens' | 'cost_usd' | 'elapsed_ms' | 'diagnosis'>>;
+  'attempts' | 'models' | 'tokens' | 'cost_usd' | 'elapsed_ms' | 'diagnosis' | 'research'>>;
 type Outcomes = Assert<Equal<AttemptOutcome,
   'apply_error' | 'check_failed' | 'validator_rejected' | 'timed_out' | 'call_error'>>;
 type StateKeys = Assert<Equal<keyof PatchState,

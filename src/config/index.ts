@@ -102,6 +102,13 @@ export interface Config {
   patchWholeFileMaxLines: number;
   patchPaidCapUsd: number;
 
+  // Harness-driven research between patch attempts (#155): off unless
+  // PATCH_RESEARCH_SEARXNG_URL is configured (maintainer ruling 3).
+  patchResearchSearxngUrl: string;
+  patchResearchSourceTimeoutMs: number;
+  patchResearchTokens: number;
+  patchResearchNotesMax: number;
+
   // Savings report (G1, get_savings): estimated frontier tokens saved per
   // small-model token on accepted patch tasks. Must be > 0; an invalid
   // SAVINGS_TOKEN_FACTOR fails loudly when the config is read.
@@ -217,6 +224,10 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'patchErrorTailTokens',
   'patchWholeFileMaxLines',
   'patchPaidCapUsd',
+  'patchResearchSearxngUrl',
+  'patchResearchSourceTimeoutMs',
+  'patchResearchTokens',
+  'patchResearchNotesMax',
   'savingsTokenFactor',
 ] as const;
 
@@ -367,6 +378,12 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     patchErrorTailTokens: parseNumber(env.PATCH_ERROR_TAIL_TOKENS, 800),
     patchWholeFileMaxLines: parseNumber(env.PATCH_WHOLE_FILE_MAX_LINES, 150),
     patchPaidCapUsd: parseNumber(env.PATCH_PAID_CAP_USD, 0.25),
+
+    // Research between attempts (#155): no default URL — empty means off.
+    patchResearchSearxngUrl: (env.PATCH_RESEARCH_SEARXNG_URL || '').trim(),
+    patchResearchSourceTimeoutMs: parseNumber(env.PATCH_RESEARCH_SOURCE_TIMEOUT_MS, 5000),
+    patchResearchTokens: parseNumber(env.PATCH_RESEARCH_TOKENS, 800),
+    patchResearchNotesMax: parseNumber(env.PATCH_RESEARCH_NOTES_MAX, 500),
 
     // Savings report (G1): steward ruling 1 on #152 — default factor 1.0.
     savingsTokenFactor: parsePositiveNumberStrict(env.SAVINGS_TOKEN_FACTOR, 1.0, 'SAVINGS_TOKEN_FACTOR'),

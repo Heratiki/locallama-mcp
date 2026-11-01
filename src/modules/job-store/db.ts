@@ -127,6 +127,25 @@ export async function initJobStore(): Promise<void> {
     `);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_patch_attempts_job ON patch_attempts(job_id)`);
 
+    // Research notes (#155 ruling 5): one row per query/source, shared BM25
+    // reuse of helped notes. Additive, like patch_state/patch_attempts.
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS research_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT NOT NULL,
+        attempt_n INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        repo_path TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        query TEXT NOT NULL,
+        source TEXT NOT NULL,
+        info TEXT,
+        helped INTEGER
+      )
+    `);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_research_notes_job ON research_notes(job_id)`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_research_notes_helped ON research_notes(helped)`);
+
     dbInstance = db;
     logger.debug('Job store database initialized');
   } catch (error) {
