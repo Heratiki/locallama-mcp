@@ -94,4 +94,7 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T05:35Z | agent-ad51af45 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=issue-150 |
 | 2026-11-01T05:38Z | agent-aed5699e | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=agent-a16060dbc626f9571 |
 | 2026-11-01T05:39Z | agent-a4c1970e | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.4 | 0 | 0 | split, lane=agent-a16060dbc626f9571 |
+| 2026-11-01T05:43Z | issue-150b | opencode | zai-coding-plan/glm-5.3 | ? | build | opencode | done | 7.5 | 0 | 0 | no-reading, gates=7 |
+| 2026-11-01T05:43Z | agy-pid142664 | agy | ? | ? | ? | agy | exited | 0.1 | 0 | 0 | reset |
+| 2026-11-01T05:44Z | agent-a2b2b17a | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0 | 0 | split, lane=issue-150 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->

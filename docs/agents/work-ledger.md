@@ -20,8 +20,8 @@ fails, and when the maintainer rules. Procedure:
 |---|---|---|---|
 | PRD 01 issues (not filed yet) | opencode lane, `zai-coding-plan/` first; `opencode-go/` for some, to sample its models | queued | Steward scope (2026-11-01): all of PRD 01, waves 1-5 (#138-#148); wave 4 floor run is a simulation |
 | #149 F1 llama.cpp not routed | opencode-go/kimi-k2.7-code | merged f88df78 (not pushed) | suite green at 69742dc |
-| #150 F2 provider = model id | opencode, zai-coding-plan/ | filed | before #147; not with #151 |
-| #151 F3 false pass | opencode, zai-coding-plan/ | filed | after #150, before #147 |
+| #150 F2 provider = model id | opencode zai-coding-plan/glm-5.3 (1 fix round) | merged a03c81c (not pushed) | producer fixed in modelsDb.ts; read-time repair kept; suite green |
+| #151 F3 false pass | opencode zai-coding-plan/glm-5.3 | building (lane issue-151) | after #150 |
 | R1 research (no issue yet) | agy (Flash failed; Sonnet run 2 accepted) | done 2026-11-01 | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
 | #137 | opencode zai-coding-plan/glm-5.3 | merged f292453 (not pushed) | full suite 67/67, 510/510 at f292453 |
 | #138 PRD01-1 | codex (medium; steward committed) | merged 933d517 (not pushed) | full suite at 933d517 green |

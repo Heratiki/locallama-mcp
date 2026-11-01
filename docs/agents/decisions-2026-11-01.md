@@ -45,6 +45,9 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 05:36 | #150 review FAIL | Qualified-id probe picks the wrong provider; producer `modelsDb.ts:156` still writes provider = model id. Scope widened to modelsDb.ts (comment on #150); fix round on Z.ai (lane issue-150b) | Fix the source, not only the symptom | — |
 | 05:40 | #145 merged | `edde477` after 2 fix rounds (found a real timer leak on cancel; OpenRouter abort error); re-verify PASS; merge hook enforced the verifier verdict. Wave 2 of PRD 01 done | Gates, review, suite | `git revert -m1 edde477` |
 | 05:40 | #146 | codex high, danger-full-access, from edde477 | Central integration issue; codex idle | `lanes stop issue-146` |
+| 05:45 | #150 merged | `a03c81c` after 1 fix round; re-verify PASS; producer `modelsDb.ts` fixed (no more provider = model id); full suite green | Gates, review, suite | `git revert -m1 a03c81c` |
+| 05:45 | docs/CLAUDE.md | PowerShell rule made Windows-only, Linux line added (`871918b`) | Tier 2: it misled agents on this Linux host | `git revert 871918b` |
+| 05:45 | #151 | Z.ai glm-5.3 lane from a03c81c | Fix found problems first | `lanes stop issue-151` |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
