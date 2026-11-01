@@ -31,8 +31,8 @@ fails, and when the maintainer rules. Procedure:
 | #142 PRD01-5 | codex high | merged cd4eb7a (not pushed) | suite green; follow-ups: snapshot `git diff --cached --name-only` reads the real index (read-only); a git-ignored hint aborts the snapshot |
 | #143 PRD01-6 | lane-dev Sonnet | merged ecacbe7 (not pushed) | suite green at cd4eb7a |
 | #144 PRD01-7 | lane-dev Sonnet (1 fix round) | merged a50b675 (not pushed) | suite green at a50b675 |
-| #145 PRD01-8 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; last of wave 2 |
-| #146 PRD01-9 | opencode, zai-coding-plan/ (wave 3) | filed | after #140-#145 |
+| #145 PRD01-8 | lane-dev Sonnet (2 fix rounds) | merged edde477 (not pushed) | wave 2 done; suite green at edde477 |
+| #146 PRD01-9 | codex high | building (lane issue-146) | wave 3 |
 | #147 PRD01-10 | opencode, zai-coding-plan/ (wave 4) | filed | after #146 |
 | #148 PRD01-11 | opencode, zai-coding-plan/ (wave 5) | filed | after #147; floor run is a simulation |
 

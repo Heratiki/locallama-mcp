@@ -43,6 +43,8 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 05:36 | Stuck test process | Killed jest pid 84405 + 15 workers (stalled #144 gate run, 4.5 min, tiktoken on a 200k-char run) by PID | Maintainer rule: watch for stuck test processes | — |
 | 05:36 | #145 review FAIL | Open socket in the HTTP test (jest does not exit); caller abort reported as timeout. Fix round to the same lane-dev. G4 now greps `^Tests:` (was `tail -6`) | Review | — |
 | 05:36 | #150 review FAIL | Qualified-id probe picks the wrong provider; producer `modelsDb.ts:156` still writes provider = model id. Scope widened to modelsDb.ts (comment on #150); fix round on Z.ai (lane issue-150b) | Fix the source, not only the symptom | — |
+| 05:40 | #145 merged | `edde477` after 2 fix rounds (found a real timer leak on cancel; OpenRouter abort error); re-verify PASS; merge hook enforced the verifier verdict. Wave 2 of PRD 01 done | Gates, review, suite | `git revert -m1 edde477` |
+| 05:40 | #146 | codex high, danger-full-access, from edde477 | Central integration issue; codex idle | `lanes stop issue-146` |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |

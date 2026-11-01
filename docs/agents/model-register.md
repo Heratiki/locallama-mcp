@@ -85,11 +85,13 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T05:23Z | agent-aae44a5c | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1.2 | 0 | 0.4 | split, lane=issue-142 |
 | 2026-11-01T05:33Z | agent-ab457b2d | claude | claude-sonnet-5-5 | medium | build | claude | completed | 10.4 | 0.2 | 0 | split, lane=issue-144 |
 | 2026-11-01T05:27Z | agent-ac2c606e | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0 | 0 | split, lane=agent-ab457b2d4ffa422d7 |
-| 2026-11-01T05:32Z | agent-a16060db | claude | claude-sonnet-5-5 | medium | build | claude | completed | 5.8 | 0.2 | 0 | split, lane=issue-145 |
+| 2026-11-01T05:38Z | agent-a16060db | claude | claude-sonnet-5-5 | medium | build | claude | completed | 11.7 | 0.3 | 0 | split, lane=issue-145 |
 | 2026-11-01T05:32Z | issue-141 | codex | ? | high | build | codex | done | 10.2 | 8 | 1 | gates=5 |
 | 2026-11-01T05:33Z | issue-150 | opencode | zai-coding-plan/glm-5.3 | ? | build | opencode | done | 15.5 | 0 | 0 | no-reading, gates=6 |
 | 2026-11-01T05:34Z | agent-a6d1129b | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.9 | 0 | 0 | split, lane=issue-141 |
 | 2026-11-01T05:34Z | agent-a09536b9 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1.3 | 0 | 0 | split, lane=agent-a16060dbc626f9571 |
 | 2026-11-01T05:35Z | agent-a29faa80 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.6 | 0 | 0 | split, lane=agent-ab457b2d4ffa422d7 |
 | 2026-11-01T05:35Z | agent-ad51af45 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=issue-150 |
+| 2026-11-01T05:38Z | agent-aed5699e | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=agent-a16060dbc626f9571 |
+| 2026-11-01T05:39Z | agent-a4c1970e | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.4 | 0 | 0 | split, lane=agent-a16060dbc626f9571 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->
