@@ -19,11 +19,13 @@ Line numbers point at the `name:` declaration in `tool-definition/index.ts`.
 | Tool | Line | Purpose |
 |------|------|---------|
 | `route_task` | 33 | Submit a Task. Routes local→free→paid, enqueues Job(s), returns `task_id` immediately (non-blocking). |
+| `patch_task` | 22 (`patchTaskTool`) | Submit a verified patch Job, returning `task_id` after snapshot/preparation. Listed only with `PATCH_TASKS_ENABLED=true`; requires an allowed git repo and checks. Poll for a `patch_result_v1` diff/diagnosis. Checks execute as the user, outside a sandbox. See [12-patch-tasks](12-patch-tasks.md). |
 | `preemptive_route_task` | 203 | Cheap pre-flight: which provider/model *would* handle this, without enqueuing. Reads `modelsDb` heuristics. |
 | `get_task_status` | 129 | Poll aggregate Task status + per-Job state. The completion path for `route_task`. |
 | `cancel_task` | 144 | Cancel all remaining Jobs of a Task. |
 | `cancel_job` | 115 | Cancel a single Job by ID. |
 | `get_cost_estimate` | 240 | Estimate token cost for a prompt/model before committing. |
+| `get_savings` | 235 (`ToolDefinitionProvider.getAvailableTools`) | Read-only finished patch Job statistics by UTC day or task type: pass rate, spend, tokens and estimated frontier tokens saved. Dispatch: `src/index.ts:LocalLamaMcpServer`; report: `src/modules/patch/stats/index.ts:getSavings`. See [12-patch-tasks](12-patch-tasks.md#get_savings). |
 
 ### System & config
 | Tool | Line | Purpose |
