@@ -446,6 +446,17 @@ export class LocalLamaMcpServer {
                   const { getSystemState } = await import('./modules/api-integration/system-state/index.js');
                   return await getSystemState();
                 }
+                case 'get_savings': {
+                  // G1 (#152): read-only savings report over jobs.db; performs no writes.
+                  const [{ getSavings }, { getDbForPatchStore }] = await Promise.all([
+                    import('./modules/patch/stats/index.js'),
+                    import('./modules/job-store/db.js'),
+                  ]);
+                  return await getSavings(getDbForPatchStore(), {
+                    since: args?.since as string | number | undefined,
+                    group_by: args?.group_by as 'day' | 'task_type' | undefined,
+                  });
+                }
                 case 'get_telemetry_summary': {
                   const lookbackHours = typeof args?.lookback_hours === 'number' && args.lookback_hours > 0
                     ? args.lookback_hours

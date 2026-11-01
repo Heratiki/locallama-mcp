@@ -231,6 +231,30 @@ class ToolDefinitionProvider implements IToolDefinitionProvider {
         },
       },
       {
+        name: 'get_savings',
+        description:
+          'Read-only savings report for patch_task jobs (goal G1). Per UTC day (default) or per task_type, plus totals: ' +
+          'finished tasks, accepted count (patch result status "passed"), pass_rate, cost_usd (sum of attempt costs), ' +
+          'prompt+completion tokens by cost class (local/free/paid), avg_elapsed_ms, and est_frontier_tokens_saved — ' +
+          'the accepted attempt\'s tokens times SAVINGS_TOKEN_FACTOR minus agent request and review tokens, floored at 0 ' +
+          'per task. Never writes.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            since: {
+              type: 'string',
+              description: 'Only count jobs completed at or after this time: ISO date (YYYY-MM-DD), ISO timestamp, or unix milliseconds. Default: all time.'
+            },
+            group_by: {
+              type: 'string',
+              enum: ['day', 'task_type'],
+              description: 'Grouping key. "day" (default) groups by the UTC date of completion; "task_type" by the task_type given on patch_task ("unspecified" when absent).'
+            }
+          },
+          required: [],
+        },
+      },
+      {
         name: 'reload_config',
         description:
           'Reload runtime configuration from the project .env file and apply only hot-reloadable fields. ' +
