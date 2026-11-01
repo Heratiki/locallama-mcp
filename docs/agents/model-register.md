@@ -102,4 +102,6 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T05:54Z | agent-a5eb5eff | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1.6 | 0 | 0 | split, lane=issue-146 |
 | 2026-11-01T05:59Z | issue-151b | opencode | opencode-go/deepseek-v4-pro | ? | build | opencode | done | 10.6 | 0 | 0 | no-reading, UNPROVEN, gates=5 |
 | 2026-11-01T06:00Z | agent-a9e164de | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=issue-151 |
+| 2026-11-01T06:02Z | issue-148a | codex | ? | medium | build | codex | done | 6.3 | 4 | 0 | gates=5 |
+| 2026-11-01T06:04Z | agent-a88b5c74 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1.3 | 0 | 0 | split, lane=issue-148 |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->

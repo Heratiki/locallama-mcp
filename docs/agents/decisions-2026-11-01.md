@@ -53,6 +53,7 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 05:55 | #148 split | Part A (fixtures, seed requests, hidden tests, runner with --dry-run) on codex now; part B (live runs, floor sim, wiki, test plan) after #147 | Parallel work while #147 waits for #151 (shared routing/index.ts) | — |
 | 06:01 | #151 merged | `61010ed`; lane-verifier PASS; suite green. Text-match failure detection kept as a ledger follow-up (patch_task does not use this path) | Bounded review rounds (memory) | `git revert -m1 61010ed` |
 | 06:01 | #147 | lane-dev Opus (public MCP tool + src/index.ts: the riskiest integration) | CLAUDE.md: Opus for an issue with design inside; Claude week 3% | stop agent |
+| 06:05 | #148 part A merged | `69502ed`; lane-verifier PASS; dry run: 10 requests, both baselines pass, 10 hidden tests fail before a patch; no process or temp folder left | Gates, review | `git revert -m1 69502ed` |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
