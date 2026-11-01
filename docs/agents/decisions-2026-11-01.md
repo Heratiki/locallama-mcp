@@ -48,6 +48,7 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 05:45 | #150 merged | `a03c81c` after 1 fix round; re-verify PASS; producer `modelsDb.ts` fixed (no more provider = model id); full suite green | Gates, review, suite | `git revert -m1 a03c81c` |
 | 05:45 | docs/CLAUDE.md | PowerShell rule made Windows-only, Linux line added (`871918b`) | Tier 2: it misled agents on this Linux host | `git revert 871918b` |
 | 05:45 | #151 | Z.ai glm-5.3 lane from a03c81c | Fix found problems first | `lanes stop issue-151` |
+| 05:48 | Z.ai 5h limit | Lane issue-151 stopped at Z.ai `Usage limit reached for 5 hour` (429); zai5h 99%, resets 09:51Z; Z.ai week 51%→71% this run. Build lanes go to OpenCode Go until 09:51Z; #151 restarted on `opencode-go/deepseek-v4-pro` | Pool limit; maintainer asked to sample OC-Go | Back to Z.ai after 09:51Z |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
@@ -92,6 +93,8 @@ server (pid 3872940, started 04:21Z, older than `dist/` of 04:26Z). Log:
 Maintainer note (2026-11-01): they use llama.cpp through llama-router, not Ollama.
 
 ## Waits for the maintainer
+
+- `~/.claude/skills/watch/watch.sh`: the `file` kind printed `WATCH OK` for lane issue-151, whose `exit.json` held `"code": 1, "failed": true` (Z.ai 429). A pattern cannot fix it (the kind does not read content). Suggest a lane-exit kind that reads `exit.json` and gives `WATCH FAIL` on a non-zero code. Outside the repo, so not changed. The steward reads `exit.json` after every lane end.
 
 - Validator default for patch tasks: I set opt-in (`validate: false`). Say if you want it on by default.
 - Done 05:00: new OpenRouter key; reconnect done.
