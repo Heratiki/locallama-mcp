@@ -21,6 +21,17 @@ describe('buildPrompt', () => {
     expect(p.prompt).not.toContain('Errors from your last attempt');
   });
 
+  it('says the last edit blocks were not kept and SEARCH must match the shown files (#159)', async () => {
+    const p = await buildPrompt({
+      ...cfg, goal: 'g', attempt: 2,
+      hintedFiles: [{ path: 'src/a.ts', content: 'const a=1;\n' }],
+      lastBlocks: [blk('const a=1;\n', 'const a=2;\n')],
+    });
+    expect(p.prompt).toMatch(/NOT kept/);
+    expect(p.prompt).toMatch(/back to the content shown above/);
+    expect(p.prompt).toMatch(/SEARCH text must match that content exactly/);
+  });
+
   it('attempt 2+ has the last check tail and last blocks and nothing older', async () => {
     const p = await buildPrompt({
       ...cfg, goal: 'g', attempt: 3,
