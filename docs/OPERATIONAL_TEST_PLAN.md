@@ -507,3 +507,19 @@ node -e "const fs=require('fs'); if (fs.existsSync('locallama.lock')) console.lo
 
 If smoke passes, continue from the "Known Issues" section above or extend the suite
 for whichever tool is being developed.
+
+## Patch task live runs (PRD 01, 2026-11-01)
+
+Runner: `scripts/patch-seed/run.mjs` (seed set `test/fixtures/patch-seed/`). Each condition starts its own LocalLama server from `dist/index.js` with its own log, scratch and data folders. Host: Linux workstation with a GPU; llama.cpp llama-router on :8080 (`--models-max 1`) and Ollama. Local models only; free OpenRouter models were off, because they returned `404 No allowed providers` (finding F7). Paid: off. Cost of every run: $0.
+
+| Run | Main | Condition | Runs | Passes | Pass rate | Note |
+|---|---|---|---|---|---|---|
+| Single request `ts-slug` | `cd4eb7a`+`5a5d981` | max 3 attempts | 1 | 0 → 1 | — | Before #153 the ladder chose `tinyllama`; after #153 it passed in 1 attempt on `llama-cpp:gemma-4-12B-it-qat-UD-Q4_K_XL` (418 local tokens, 39 s) |
+| Seed run 1 | `5a5d981` | 1 attempt | 30 | 0 | 0.00 | NOT VALID: the llama.cpp probe timed out at start (cold router), so the ladder had only `ollama:mistral:7b` (F9, fixed in #154) |
+| Seed run 1 | `5a5d981` | 12 attempts | 30 | 29 | 0.97 | 59 s and 547 local tokens per pass; almost all on attempt 1 with gemma-4-12B |
+| Seed run 2 | `aa69207` | 1 attempt | 30 | 26 | 0.87 | After #154 |
+| Seed run 2 | `aa69207` | 12 attempts | 14 of 30 | 13 | 0.93 | INCOMPLETE: Claude Code stopped the run because the host was low on memory |
+
+Findings: the patch path works end to end at $0 (snapshot, BM25 context, edit blocks, checks with errors fed back, model switch with unload, diff, hidden test). Two live defects were found and fixed: F8 (#153, ladder ranking) and F9 (#154, router probe). The grind-loop gain (PRD 01 criterion 16) is not proven yet: run 2 must be repeated in full.
+
+Floor simulation (PRD 01 §7, criterion 17): NOT RUN. Plan: one `systemd-run --user --scope -p MemoryMax=8G` scope with llama-server CPU only (`-ngl 0 -t 4 -c 8192`, `Qwen3-4B-Instruct-2507-Q4_K_M`, port 8191) and the runner. It waits for free memory on the host.
