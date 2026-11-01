@@ -1,3 +1,4 @@
+import { linkAbort } from '../core/provider/types.js';
 import axios, { AxiosError } from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -716,7 +717,7 @@ export const lmStudioModule = {
     modelId: string,
     task: string,
     timeout: number
-    , options?: { systemPrompt?: string; temperature?: number; maxTokens?: number }): Promise<LMStudioApiCallResult> {
+    , options?: { systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }): Promise<LMStudioApiCallResult> {
     logger.debug(`Calling LM Studio API for model ${modelId}`);
     let url: string | undefined;
 
@@ -769,6 +770,7 @@ export const lmStudioModule = {
       // Create the request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
+      linkAbort(controller, options?.signal);
 
       // Prefer task-tuned execution options, then fall back to the model defaults.
       const temperature = options?.temperature ?? config.defaultModelConfig.temperature;
@@ -1247,7 +1249,7 @@ export const lmStudioModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number }): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
     logger.info(`Executing task using LM Studio model ${modelId}`);
 
     try {
@@ -1266,7 +1268,7 @@ export const lmStudioModule = {
         modelId,
         task,
         timeout,
-        buildCodeTaskExecutionOptions(task, 'lm-studio'),
+        { ...buildCodeTaskExecutionOptions(task, 'lm-studio'), signal: options?.signal },
       ); // Use this.
 
       if (!result.success || !result.text) {

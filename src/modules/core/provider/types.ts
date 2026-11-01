@@ -32,6 +32,13 @@ export interface TaskExecutionOptions {
   signal?: AbortSignal;
 }
 
+/** Abort `controller` when `signal` aborts (now, if it already has). */
+export function linkAbort(controller: AbortController, signal?: AbortSignal): void {
+  if (!signal) return;
+  if (signal.aborted) { controller.abort(); return; }
+  signal.addEventListener('abort', () => controller.abort(), { once: true });
+}
+
 /**
  * Settle with `work` unless `signal` aborts first, then reject with an
  * AbortError. The underlying work is left to finish and its output is
