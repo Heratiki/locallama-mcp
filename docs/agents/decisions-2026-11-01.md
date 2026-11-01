@@ -29,6 +29,7 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:10 | Issues | Filed #138-#148 (PRD 01 §10) via ticket-writer; `PATCH_PAID_CAP_USD` default 0.25 (comment on #138, PRD R-E) | Unset default in PRD; paid is opt-in | Edit #138 and PRD R-E |
 | 05:05 | Live tests | Never use the maintainer's `locallama-dev` MCP connection for live runs; each run starts its own server from the build under test (`test-operational.mjs` pattern, stdio client) | Maintainer cannot reconnect `/mcp` while the steward works | — |
 | 05:25 | Stop time | 14:00Z (10:00 local), beyond PRD 01 allowed | Maintainer's second `/steward` | — |
 | 05:20 | PRD 01 review | codex review: 9 blockers, 3 follow-ups; all taken into PRD 01 revision 1 | Each blocker matched the code I read | `git revert` the revision commit |

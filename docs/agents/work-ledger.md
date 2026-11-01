@@ -18,9 +18,20 @@ fails, and when the maintainer rules. Procedure:
 
 | Issue | Route | State | Next |
 |---|---|---|---|
-| PRD 01 issues (not filed yet) | opencode lane, `zai-coding-plan/` first; `opencode-go/` for some, to sample its models | queued | Steward scope (2026-11-01): all of PRD 01, waves 1-4; wave 4 floor run is a simulation |
+| PRD 01 issues (not filed yet) | opencode lane, `zai-coding-plan/` first; `opencode-go/` for some, to sample its models | queued | Steward scope (2026-11-01): all of PRD 01, waves 1-5 (#138-#148); wave 4 floor run is a simulation |
 | R1 research (no issue yet) | research lane, `mattpocock-skills:research` | queued | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
 | #137 | lane-dev | open, not started | OpenRouter `draft_model` fix |
+| #138 PRD01-1 | opencode, zai-coding-plan/ (wave 1) | filed | contracts; first, alone |
+| #139 PRD01-2 | opencode, zai-coding-plan/ (wave 1) | filed | docs; parallel with #138 |
+| #140 PRD01-3 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; wave-2 order 6,3,4,5,7,8 |
+| #141 PRD01-4 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
+| #142 PRD01-5 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
+| #143 PRD01-6 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; first of wave 2 |
+| #144 PRD01-7 | opencode, zai-coding-plan/ (wave 2) | filed | after #138 |
+| #145 PRD01-8 | opencode, zai-coding-plan/ (wave 2) | filed | after #138; last of wave 2 |
+| #146 PRD01-9 | opencode, zai-coding-plan/ (wave 3) | filed | after #140-#145 |
+| #147 PRD01-10 | opencode, zai-coding-plan/ (wave 4) | filed | after #146 |
+| #148 PRD01-11 | opencode, zai-coding-plan/ (wave 5) | filed | after #147; floor run is a simulation |
 
 Wave order: a file two tickets need is changed by the first ticket's lane,
 merged, then the second lane starts.

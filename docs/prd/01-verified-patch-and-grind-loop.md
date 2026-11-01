@@ -30,6 +30,7 @@ From `docs/prd/00-goals-roadmap.md`, Rulings 1-9, and these rulings of
   the existing `get_task_status` and stops a task with the existing
   `cancel_task`. `route_task` does not change.
 - **R-C Safety (maintainer):** §6 as written.
+- **R-E Paid cap default (steward):** `PATCH_PAID_CAP_USD` = 0.25 per task.
 - **R-D Own model path (steward):** the patch worker calls providers through
   `ProviderRegistry` directly. It does not use `executeRouteTaskBlocking`,
   `codeTaskCoordinator` or `buildRankedTrio`. Reason: the live run of
