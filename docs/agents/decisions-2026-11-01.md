@@ -13,8 +13,8 @@ From `docs/prd/00-goals-roadmap.md`:
 ## Run
 
 - Started: 2026-11-01T04:50Z, by `/steward` (no stop time given).
-- Stop: when PRD 01 (`docs/prd/01-verified-patch-and-grind-loop.md`) is done,
-  when a pool is at its limit, or at 2026-11-02T05:00Z, whichever is first.
+- Stop (maintainer, second `/steward`): 10:00 local = 2026-11-01T14:00Z, or a
+  pool limit. Work may go on beyond PRD 01 when it is done.
 - Scope (maintainer, 2026-11-01): all of PRD 01, waves 1-4. The hardware-floor
   run is a simulation, reported as one.
 - Routing (maintainer, 2026-11-01): build lanes on Z.ai first; some on
@@ -29,6 +29,7 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:25 | Stop time | 14:00Z (10:00 local), beyond PRD 01 allowed | Maintainer's second `/steward` | — |
 | 05:20 | PRD 01 review | codex review: 9 blockers, 3 follow-ups; all taken into PRD 01 revision 1 | Each blocker matched the code I read | `git revert` the revision commit |
 | 05:20 | R-D own model path | Patch worker calls providers through ProviderRegistry; not executeRouteTaskBlocking / buildRankedTrio | Live findings F1, F2; review blocker 2 | PRD 01 §2 R-D |
 | 05:20 | Validator default | `validate` defaults to false for patch tasks (opt-in filter) | Ruling 1 keeps the filter; one extra call per pass is costly on the floor; checks are the proof | PRD 01 §5.9: set default true |
