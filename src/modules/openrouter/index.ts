@@ -14,7 +14,6 @@ import {
   PromptingStrategy,
   OpenRouterErrorType
 } from './types.js';
-import { speculativeDecodingService } from '../decision-engine/services/speculativeDecoding.js';
 import { getPromptingStrategyService } from '../core/prompting/service.js';
 import { buildCodeTaskExecutionOptions } from '../core/prompting/execution-profile.js';
 import { InferenceTimeoutError } from '../utils/inferenceTimeout.js';
@@ -673,7 +672,11 @@ export const openRouterModule = {
   },
 
   /**
-   * Call OpenRouter API with a task and optionally use speculative decoding
+   * Call OpenRouter API with a task.
+   *
+   * Speculative decoding (draft_model) is intentionally never requested here:
+   * OpenRouter is a remote endpoint where the client cannot control
+   * speculative decoding, and sending draft_model can cause API errors.
    */
   async callOpenRouterApi(
     modelId: string,
@@ -748,28 +751,17 @@ export const openRouterModule = {
         max_tokens: options?.maxTokens ?? 1000,
       };
 
-      // Try to find a compatible draft model for speculative decoding
-      // First get all available models
-      const allModels = await this.getAvailableModels();
-      
-      // Create a Model object for this model
-      const targetModel: Model = {
-        id: modelId,
-        name: model.name,
-        provider: 'openrouter',
-        capabilities: model.capabilities,
-        costPerToken: model.costPerToken,
-        contextWindow: model.contextWindow
-      };
-      
-      // Use speculative decoding service to find a compatible draft model
-      const draftModel = speculativeDecodingService.findCompatibleDraftModel(targetModel, allModels);
-      
-      // If a draft model was found, add it to the request
-      if (draftModel) {
-        logger.info(`Using speculative decoding with draft model ${draftModel.id} for target model ${modelId}`);
-        requestBody.draft_model = draftModel.id;
-      }
+      // OpenRouter is a remote API service - speculative decoding is not supported
+      // Speculative decoding requires both target and draft models to be available locally
+      // or on the same inference server. OpenRouter routes requests to various cloud providers
+      // where we cannot control the draft model selection or speculative decoding parameters.
+      //
+      // Note: OpenRouter may use speculative decoding internally on their infrastructure,
+      // but this is handled transparently and doesn't require draft_model parameters from clients.
+      logger.debug(`OpenRouter API call for model ${modelId} - speculative decoding disabled (remote endpoint)`);
+
+      // The draft_model parameter is intentionally omitted from the request body
+      // to prevent API errors from OpenRouter's endpoints
       
       // Make the request
       const response = await axios.post<OpenRouterChatCompletion>(

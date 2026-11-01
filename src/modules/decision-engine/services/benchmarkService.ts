@@ -788,9 +788,16 @@ export const benchmarkService = {
         logger.info(`Benchmarking model: ${model.id}`);
         
         // Try to find a compatible draft model for speculative decoding
-        const draftModel: Model | null = speculativeDecodingService.findCompatibleDraftModel(model, availableModels);
-        if (draftModel) {
-          logger.info(`Found compatible draft model ${draftModel.id} for target model ${model.id}`);
+        // Only enable speculative decoding for local models (LM Studio, Ollama)
+        // Remote API endpoints like OpenRouter don't support client-controlled speculative decoding
+        let draftModel: Model | null = null;
+        if (model.provider === 'lm-studio' || model.provider === 'ollama') {
+          draftModel = speculativeDecodingService.findCompatibleDraftModel(model, availableModels);
+          if (draftModel) {
+            logger.info(`Found compatible draft model ${draftModel.id} for target model ${model.id} (${model.provider})`);
+          }
+        } else {
+          logger.debug(`Speculative decoding disabled for model ${model.id} (provider: ${model.provider}) - only supported for local models`);
         }
         
         for (const task of benchmarkTasks) {
