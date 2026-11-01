@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import { buildPrompt } from '../../../dist/modules/patch/prompt/builder.js';
 import { PATCH_SYSTEM_PROMPT } from '../../../dist/modules/patch/prompt/system.js';
-import { estimateTokens } from '../../../dist/modules/patch/ladder/paid.js';
+import { countTokens } from '../../../dist/modules/utils/tokenCount.js';
 import type { CheckResult, EditBlock } from '../../../src/modules/patch/types.js';
 
 const cfg = { modelContextWindow: 32768, contextTokens: 6000, maxOutputTokens: 2000, errorTailTokens: 800 };
@@ -35,7 +35,7 @@ describe('buildPrompt', () => {
   });
 
   it('never exceeds the budget, with huge inputs and a small window', async () => {
-    const big = 'x'.repeat(200_000);
+    const big = 'let value = compute(items);\n'.repeat(7000);
     for (const win of [3000, 4096, 8192, 32768]) {
       const p = await buildPrompt({
         ...cfg, modelContextWindow: win, goal: big, attempt: 2,
@@ -43,7 +43,7 @@ describe('buildPrompt', () => {
         lastChecks: [check(big)], lastBlocks: [blk(big, big)],
         search: async () => [{ path: 'c', content: big }],
       });
-      expect(estimateTokens(p.prompt) + estimateTokens(p.system) + cfg.maxOutputTokens)
+      expect(countTokens(p.prompt) + countTokens(p.system) + cfg.maxOutputTokens)
         .toBeLessThanOrEqual(Math.min(win, cfg.contextTokens));
     }
   });
@@ -60,10 +60,24 @@ describe('buildPrompt', () => {
     expect([...idx].sort((a, b) => a - b)).toEqual(idx);
   });
 
+  it('never exceeds the budget with code-heavy text (many short tokens)', async () => {
+    const code = '{[(a=>b)]};\n'.repeat(8000);
+    for (const win of [3000, 4096, 6000, 32768]) {
+      const p = await buildPrompt({
+        ...cfg, modelContextWindow: win, goal: code, attempt: 2,
+        hintedFiles: [{ path: 'a', content: code }],
+        lastChecks: [check(code)], lastBlocks: [blk(code, code)],
+        search: async () => [{ path: 'c', content: code }],
+      });
+      expect(countTokens(p.prompt) + countTokens(p.system) + cfg.maxOutputTokens)
+        .toBeLessThanOrEqual(Math.min(win, cfg.contextTokens));
+    }
+  });
+
   it('when the budget is tight, BM25 is dropped before the goal and hinted files', async () => {
     const p = await buildPrompt({
       ...cfg, modelContextWindow: 2900, contextTokens: 6000, maxOutputTokens: 2000, goal: 'GOAL_X', attempt: 1,
-      hintedFiles: [{ path: 'hint.ts', content: 'h'.repeat(3000) }],
+      hintedFiles: [{ path: 'hint.ts', content: 'let h = go();\n'.repeat(300) }],
       search: async () => [{ path: 'rel.ts', content: 'REL_BODY' }],
     });
     expect(p.prompt).toContain('GOAL_X');

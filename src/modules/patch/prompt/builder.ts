@@ -1,5 +1,5 @@
 import type { CheckResult, EditBlock } from '../types.js';
-import { estimateTokens } from '../ladder/paid.js';
+import { countTokens } from '../../utils/tokenCount.js';
 import { PATCH_SYSTEM_PROMPT } from './system.js';
 
 export interface HintedFile {
@@ -50,26 +50,34 @@ export function formatBlock(b: EditBlock): string {
   return `${b.path}\n<<<<<<< SEARCH\n${nl(b.search)}=======\n${nl(b.replace)}>>>>>>> REPLACE\n`;
 }
 
-/** Keep the last `tokens` worth of text. */
-function tailTokens(text: string, tokens: number): string {
-  const chars = Math.max(0, tokens) * 4;
-  return text.length <= chars ? text : text.slice(text.length - chars);
+/** Largest prefix (or suffix when `fromEnd`) of text that fits `tokens`. */
+function cutTokens(text: string, tokens: number, fromEnd: boolean): string {
+  if (tokens <= 0) return '';
+  // A token is rarely over 16 chars; pre-cut so the search never encodes huge text.
+  const maxChars = tokens * 16;
+  if (text.length > maxChars) text = fromEnd ? text.slice(text.length - maxChars) : text.slice(0, maxChars);
+  if (countTokens(text) <= tokens) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const piece = fromEnd ? text.slice(text.length - mid) : text.slice(0, mid);
+    if (countTokens(piece) <= tokens) lo = mid; else hi = mid - 1;
+  }
+  return fromEnd ? text.slice(text.length - lo) : text.slice(0, lo);
 }
 
-/** Cut text to fit `tokens`, keeping the start. */
-function headTokens(text: string, tokens: number): string {
-  const chars = Math.max(0, tokens) * 4;
-  return text.length <= chars ? text : text.slice(0, chars);
-}
+const tailTokens = (text: string, tokens: number): string => cutTokens(text, tokens, true);
+const headTokens = (text: string, tokens: number): string => cutTokens(text, tokens, false);
 
 /** Section with a header; returns null when even the header does not fit. */
 function fit(header: string, body: string, remaining: number, note: string): string | null {
   const full = `${header}${body}\n`;
-  if (estimateTokens(full) <= remaining) return full;
-  const room = remaining - estimateTokens(header) - estimateTokens(note) - 2;
+  if (countTokens(full) <= remaining) return full;
+  const room = remaining - countTokens(header) - countTokens(note) - 2;
   if (room <= 0) return null;
   const out = `${header}${headTokens(body, room)}\n${note}\n`;
-  return estimateTokens(out) <= remaining ? out : null;
+  return countTokens(out) <= remaining ? out : null;
 }
 
 /**
@@ -79,13 +87,13 @@ function fit(header: string, body: string, remaining: number, note: string): str
 export async function buildPrompt(input: PromptInput): Promise<BuiltPrompt> {
   const system = PATCH_SYSTEM_PROMPT;
   const window = Math.min(input.modelContextWindow, input.contextTokens);
-  const budget = Math.max(0, window - input.maxOutputTokens - estimateTokens(system));
+  const budget = Math.max(0, window - input.maxOutputTokens - countTokens(system));
   let remaining = budget;
   const parts: string[] = [];
   const add = (s: string | null): boolean => {
     if (s === null) return false;
     parts.push(s);
-    remaining -= estimateTokens(s);
+    remaining -= countTokens(s);
     return true;
   };
 
@@ -115,7 +123,7 @@ export async function buildPrompt(input: PromptInput): Promise<BuiltPrompt> {
       const header = '## Your last edit blocks\n';
       let body = '';
       for (const b of blocks) {
-        if (estimateTokens(header + body + b + '\n') > remaining) break;
+        if (countTokens(header + body + b + '\n') > remaining) break;
         body += b;
       }
       if (body) add(`${header}${body}\n`);
@@ -138,6 +146,8 @@ export async function buildPrompt(input: PromptInput): Promise<BuiltPrompt> {
     }
   }
 
-  const prompt = parts.join('\n');
-  return { system, prompt, budget, used: estimateTokens(prompt) };
+  let prompt = parts.join('\n');
+  // Joins and token merges at section edges can differ from the sum; trim to be sure.
+  if (countTokens(prompt) > budget) prompt = headTokens(prompt, budget);
+  return { system, prompt, budget, used: countTokens(prompt) };
 }

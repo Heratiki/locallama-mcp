@@ -1,4 +1,10 @@
 import type { LadderEntry } from '../types.js';
+import { countTokens } from '../../utils/tokenCount.js';
+
+/** Prompt tokens for a reservation (js-tiktoken). */
+export function promptTokensOf(system: string, prompt: string): number {
+  return countTokens(system) + countTokens(prompt);
+}
 
 export interface PaidState {
   paid_spent_usd: number;
@@ -13,11 +19,6 @@ export interface PaidUsage {
 export type Reservation =
   | { ok: true; amount: number }
   | { ok: false; reason: 'paid_cap' };
-
-/** Rough token estimate (4 chars per token); used for reservations and budgets. */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
 
 /**
  * PRD 5.11 paid accounting. `persist` writes paid_spent_usd / paid_reserved_usd
@@ -50,8 +51,10 @@ export class PaidLedger {
   }
 
   /**
-   * After the call: add actual cost from usage, else the reservation. Actual is
-   * clamped to the reservation so spent never exceeds the cap. Returns the cost added.
+   * After the call: add the true actual cost from provider usage, else the
+   * reservation. Not clamped: the cap holds through the next reserve(), which
+   * refuses when spent + amount > cap (the loop then stops with paid_cap).
+   * Returns the cost added.
    */
   settle(entry: LadderEntry, reservation: number, usage?: PaidUsage): number {
     let cost = reservation;
@@ -59,7 +62,7 @@ export class PaidLedger {
         Number.isFinite(usage.promptTokens) && Number.isFinite(usage.completionTokens)) {
       const actual = (usage.promptTokens as number) * entry.prompt_price +
         (usage.completionTokens as number) * entry.completion_price;
-      if (Number.isFinite(actual) && actual >= 0) cost = Math.min(actual, reservation);
+      if (Number.isFinite(actual) && actual >= 0) cost = actual;
     }
     this.state.paid_spent_usd += cost;
     this.state.paid_reserved_usd = 0;

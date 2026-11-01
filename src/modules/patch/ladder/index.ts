@@ -5,5 +5,5 @@ export {
   pickValidator, defaultFamily, hasBudgetNow,
 } from './policy.js';
 export type { StopInput, StopReason } from './policy.js';
-export { PaidLedger, estimateTokens } from './paid.js';
+export { PaidLedger, promptTokensOf } from './paid.js';
 export type { PaidState, PaidUsage, Reservation } from './paid.js';

@@ -135,7 +135,7 @@ describe('PaidLedger', () => {
     return { state, calls, stopped };
   }
 
-  it('reports usage: spent never exceeds the cap and stops with paid_cap', () => {
+  it('reports usage: spent stays within the cap and stops with paid_cap', () => {
     const o = run(() => ({ promptTokens: 1000, completionTokens: 500 }));
     expect(o.stopped).toBe(true);
     expect(o.state.paid_spent_usd).toBeLessThanOrEqual(cap);
@@ -149,9 +149,16 @@ describe('PaidLedger', () => {
     expect(o.state.paid_spent_usd).toBeLessThanOrEqual(cap);
   });
 
-  it('usage above the reservation is clamped', () => {
-    const o = run(() => ({ promptTokens: 1e6, completionTokens: 1e6 }));
-    expect(o.state.paid_spent_usd).toBeLessThanOrEqual(cap);
+  it('usage above the reservation is recorded in full and the next reserve is refused', () => {
+    const state = { paid_spent_usd: 0, paid_reserved_usd: 0 };
+    const ledger = new PaidLedger(state, cap, 2000);
+    const r = ledger.reserve(paid, 1000);
+    expect(r.ok).toBe(true);
+    const added = ledger.settle(paid, (r as { amount: number }).amount, { promptTokens: 1e6, completionTokens: 1e6 });
+    expect(added).toBeCloseTo(1e6 * 1e-5 + 1e6 * 2e-5, 6);
+    expect(state.paid_spent_usd).toBeCloseTo(added, 6);
+    expect(state.paid_reserved_usd).toBe(0);
+    expect(ledger.reserve(paid, 1)).toEqual({ ok: false, reason: 'paid_cap' });
   });
 
   it('unknown price is refused, never zero', () => {
