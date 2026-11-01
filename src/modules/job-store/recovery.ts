@@ -11,6 +11,8 @@ export async function recoverInProgressJobs(): Promise<RecoveryResult> {
   let permanentlyFailed = 0;
 
   for (const job of inProgress) {
+    // Patch Jobs are requeued by recoverInProgressPatchJobs (no retry_count).
+    if (job.kind === 'patch') continue;
     if (job.retry_count === 0) {
       await updateJob({ id: job.id, status: 'queued', retry_count: 1 });
       recovering++;

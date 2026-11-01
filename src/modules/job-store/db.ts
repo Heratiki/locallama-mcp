@@ -83,6 +83,50 @@ export async function initJobStore(): Promise<void> {
       // Column already exists — safe to ignore.
     }
 
+    // Patch-job persistence (PRD 01 §5.6, risk R4): additive only, never in the main DDL block.
+    try {
+      await db.exec(`ALTER TABLE jobs ADD COLUMN kind TEXT`);
+    } catch {
+      // Column already exists — safe to ignore.
+    }
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS patch_state (
+        job_id TEXT PRIMARY KEY,
+        request_json TEXT NOT NULL,
+        base_commit TEXT NOT NULL,
+        checks_json TEXT NOT NULL,
+        ladder_json TEXT NOT NULL,
+        settings_json TEXT NOT NULL,
+        deadline_at INTEGER NOT NULL,
+        cursor_model INTEGER NOT NULL DEFAULT 0,
+        attempts_used INTEGER NOT NULL DEFAULT 0,
+        paid_spent_usd REAL NOT NULL DEFAULT 0,
+        paid_reserved_usd REAL NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS patch_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT NOT NULL,
+        n INTEGER NOT NULL,
+        model_id TEXT,
+        provider_id TEXT,
+        cost_class TEXT,
+        prompt_tokens INTEGER,
+        completion_tokens INTEGER,
+        cost_usd REAL,
+        edit_blocks TEXT,
+        outcome TEXT,
+        apply_error TEXT,
+        checks_json TEXT,
+        duration_ms INTEGER,
+        started_at INTEGER,
+        ended_at INTEGER
+      )
+    `);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_patch_attempts_job ON patch_attempts(job_id)`);
+
     dbInstance = db;
     logger.debug('Job store database initialized');
   } catch (error) {
@@ -96,6 +140,10 @@ function getDb(): Database {
     throw new Error('Job store not initialized. Call initJobStore() first.');
   }
   return dbInstance;
+}
+
+export function getDbForPatchStore(): Database {
+  return getDb();
 }
 
 export async function getDbOrNull(): Promise<Database | null> {

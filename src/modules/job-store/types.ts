@@ -20,6 +20,8 @@ export interface PersistedJob {
   started_at: number | null;
   completed_at: number | null;
   validation?: string | null;
+  /** 'patch' for patch Jobs; null/undefined = route. */
+  kind?: 'route' | 'patch' | null;
 }
 
 export interface PersistedTask {

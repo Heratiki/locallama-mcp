@@ -18,4 +18,17 @@ export {
   getQueuedJobCounts,
 } from './db.js';
 export { recoverInProgressJobs } from './recovery.js';
+export {
+  submitPatchJob,
+  getPatchState,
+  recordAttemptStart,
+  updatePatchSpend,
+  finishPatchJob,
+  claimPatchJob,
+  claimNextPatchJob,
+  recoverInProgressPatchJobs,
+  insertPatchAttempt,
+  getPatchAttempts,
+} from './patch-store.js';
+export type { PatchAttemptRow, PatchTerminalWrite } from './patch-store.js';
 export { refreshAlertState, isAlertActive, buildQueueAlert } from './alert.js';
