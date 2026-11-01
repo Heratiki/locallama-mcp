@@ -1,0 +1,24 @@
+{
+  "checks": [
+    {
+      "name": "tsc",
+      "argv": [
+        "tsc",
+        "--project",
+        "tsconfig.json"
+      ],
+      "timeout_ms": 30000
+    },
+    {
+      "name": "unit",
+      "argv": [
+        "node",
+        "--test",
+        "test/basic.test.mjs"
+      ],
+      "timeout_ms": 10000
+    }
+  ],
+  "links": [],
+  "env_allow": []
+}

@@ -1,0 +1,18 @@
+{
+  "checks": [
+    {
+      "name": "unit",
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests"
+      ],
+      "timeout_ms": 10000
+    }
+  ],
+  "links": [],
+  "env_allow": []
+}

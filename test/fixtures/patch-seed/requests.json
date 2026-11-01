@@ -1,0 +1,264 @@
+[
+  {
+    "id": "ts-slug",
+    "goal": "Update slugify: lowercase ASCII letters, replace each run of non-ASCII-alphanumeric characters with one hyphen, and remove leading/trailing hyphens. Empty or punctuation-only input returns an empty string.",
+    "repo": "ts",
+    "file_hints": [
+      "src/text.ts"
+    ],
+    "checks": [
+      {
+        "name": "tsc",
+        "argv": [
+          "tsc",
+          "--project",
+          "tsconfig.json"
+        ],
+        "timeout_ms": 30000
+      },
+      {
+        "name": "unit",
+        "argv": [
+          "node",
+          "--test",
+          "test/basic.test.mjs"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/ts-slug.mjs"
+  },
+  {
+    "id": "ts-truncate",
+    "goal": "Update truncate: if text exceeds limit, return a string of at most limit characters ending in a single Unicode ellipsis (which counts as one character). A non-positive limit returns empty; unchanged text fits as-is. Inputs use BMP characters and integer limits.",
+    "repo": "ts",
+    "file_hints": [
+      "src/text.ts"
+    ],
+    "checks": [
+      {
+        "name": "tsc",
+        "argv": [
+          "tsc",
+          "--project",
+          "tsconfig.json"
+        ],
+        "timeout_ms": 30000
+      },
+      {
+        "name": "unit",
+        "argv": [
+          "node",
+          "--test",
+          "test/basic.test.mjs"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/ts-truncate.mjs"
+  },
+  {
+    "id": "ts-initials",
+    "goal": "Update initials to use the first letter of each whitespace-separated word, uppercase, taking at most two words. Ignore surrounding and repeated whitespace; blank input returns empty.",
+    "repo": "ts",
+    "file_hints": [
+      "src/text.ts"
+    ],
+    "checks": [
+      {
+        "name": "tsc",
+        "argv": [
+          "tsc",
+          "--project",
+          "tsconfig.json"
+        ],
+        "timeout_ms": 30000
+      },
+      {
+        "name": "unit",
+        "argv": [
+          "node",
+          "--test",
+          "test/basic.test.mjs"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/ts-initials.mjs"
+  },
+  {
+    "id": "ts-median",
+    "goal": "Update median to compute the numeric median of an unsorted array without mutating it. Even length uses the mean of the two middle values; an empty array returns 0.",
+    "repo": "ts",
+    "file_hints": [
+      "src/numbers.ts"
+    ],
+    "checks": [
+      {
+        "name": "tsc",
+        "argv": [
+          "tsc",
+          "--project",
+          "tsconfig.json"
+        ],
+        "timeout_ms": 30000
+      },
+      {
+        "name": "unit",
+        "argv": [
+          "node",
+          "--test",
+          "test/basic.test.mjs"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/ts-median.mjs"
+  },
+  {
+    "id": "ts-receipt",
+    "goal": "Update formatCents to format integer cents with exactly two decimal places and a minus before the amount for negative cents. Update receipt to trim its label and prefix the formatted amount with $. Example: receipt(\" Tea \", -125) is \"Tea: $-1.25\".",
+    "repo": "ts",
+    "file_hints": [
+      "src/price.ts",
+      "src/receipt.ts"
+    ],
+    "checks": [
+      {
+        "name": "tsc",
+        "argv": [
+          "tsc",
+          "--project",
+          "tsconfig.json"
+        ],
+        "timeout_ms": 30000
+      },
+      {
+        "name": "unit",
+        "argv": [
+          "node",
+          "--test",
+          "test/basic.test.mjs"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/ts-receipt.mjs"
+  },
+  {
+    "id": "py-unique",
+    "goal": "Update unique_words to split on whitespace, lowercase words, and deduplicate preserving first appearance. Punctuation remains part of a word. Blank input returns an empty list.",
+    "repo": "py",
+    "file_hints": [
+      "text.py"
+    ],
+    "checks": [
+      {
+        "name": "unit",
+        "argv": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/py-unique.py"
+  },
+  {
+    "id": "py-snake",
+    "goal": "Update camel_to_snake to convert camelCase and PascalCase identifiers to lowercase snake_case. Keep acronym runs together, splitting before the next capitalized word (HTTPServer -> http_server). Existing underscores remain.",
+    "repo": "py",
+    "file_hints": [
+      "text.py"
+    ],
+    "checks": [
+      {
+        "name": "unit",
+        "argv": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/py-snake.py"
+  },
+  {
+    "id": "py-clamp",
+    "goal": "Update clamp to return value restricted to the inclusive range low..high. Raise ValueError if low exceeds high. Support integers and floats.",
+    "repo": "py",
+    "file_hints": [
+      "sequences.py"
+    ],
+    "checks": [
+      {
+        "name": "unit",
+        "argv": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/py-clamp.py"
+  },
+  {
+    "id": "py-chunks",
+    "goal": "Update chunked to partition a list into consecutive lists of size elements, preserving a final shorter chunk. Empty input returns []; size <= 0 raises ValueError. Do not mutate the input. Size is an integer.",
+    "repo": "py",
+    "file_hints": [
+      "sequences.py"
+    ],
+    "checks": [
+      {
+        "name": "unit",
+        "argv": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/py-chunks.py"
+  },
+  {
+    "id": "py-receipt",
+    "goal": "Update format_cents to format integer cents with exactly two decimal places and a minus before the amount for negative cents. Update receipt to trim its label and prefix the formatted amount with $. Example: receipt(\" Tea \", -125) is \"Tea: $-1.25\".",
+    "repo": "py",
+    "file_hints": [
+      "price.py",
+      "receipt.py"
+    ],
+    "checks": [
+      {
+        "name": "unit",
+        "argv": [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests"
+        ],
+        "timeout_ms": 10000
+      }
+    ],
+    "hidden_test": "hidden/py-receipt.py"
+  }
+]
