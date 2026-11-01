@@ -6,6 +6,7 @@ import { openRouterModule } from '../openrouter/index.js';
 import { calculateTokenEstimates, modelContextWindows } from './utils.js';
 import { RetrieverType } from './codeSearch.js';
 import { getModelRegistry } from '../core/model/registry.js';
+import { getProviderRegistry } from '../core/provider/index.js';
 
 // Define response types
 interface OpenRouterCreditsResponse {
@@ -299,6 +300,44 @@ export async function getAvailableModels(): Promise<Model[]> {
     }
   } catch (error) {
     logger.warn('Failed to get models from OpenRouter:', error);
+  }
+
+  // Ask the registered llama.cpp provider (llama-router or single-model server)
+  try {
+    const registry = getProviderRegistry();
+    const llamaCppProvider = registry.get('llama-cpp');
+
+    if (llamaCppProvider) {
+      const isAvailable =
+        typeof llamaCppProvider.isAvailable === 'function'
+          ? await llamaCppProvider.isAvailable()
+          : true;
+
+      if (isAvailable) {
+        const llamaModels = await llamaCppProvider.listModels();
+
+        for (const model of llamaModels) {
+          models.push({
+            id: model.id,
+            name: model.displayName ?? model.id,
+            provider: 'llama-cpp',
+            capabilities: {
+              chat: true,
+              completion: true,
+            },
+            costPerToken: model.costPerToken ?? {
+              prompt: 0,
+              completion: 0,
+            },
+            contextWindow: model.contextWindow ?? 4096,
+          });
+        }
+
+        logger.debug(`Added ${llamaModels.length} models from llama.cpp provider`);
+      }
+    }
+  } catch (error) {
+    logger.warn('Failed to get models from llama.cpp provider:', error);
   }
 
   // If no models were found from live HTTP calls, fall back to the ModelRegistry
