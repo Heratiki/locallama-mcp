@@ -29,6 +29,8 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:15 | route_task defects | Maintainer chose "file and fix": #149 (F1), #150 (F2), #151 (F3). F1 cause confirmed: `cost-monitor/api.ts getAvailableModels` never asks llama-cpp | Two live runs reproduce F2/F3 | Close the issues |
+| 05:15 | Test servers | Maintainer rule: watch for stuck test servers by PID; own log/data dir per run; check `df` and `ps` around runs (memory test-servers-watch). Disk at 05:15: 82G free (81% used) | Maintainer instruction | — |
 | 05:10 | Issues | Filed #138-#148 (PRD 01 §10) via ticket-writer; `PATCH_PAID_CAP_USD` default 0.25 (comment on #138, PRD R-E) | Unset default in PRD; paid is opt-in | Edit #138 and PRD R-E |
 | 05:05 | Live tests | Never use the maintainer's `locallama-dev` MCP connection for live runs; each run starts its own server from the build under test (`test-operational.mjs` pattern, stdio client) | Maintainer cannot reconnect `/mcp` while the steward works | — |
 | 05:25 | Stop time | 14:00Z (10:00 local), beyond PRD 01 allowed | Maintainer's second `/steward` | — |

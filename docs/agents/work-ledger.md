@@ -19,6 +19,9 @@ fails, and when the maintainer rules. Procedure:
 | Issue | Route | State | Next |
 |---|---|---|---|
 | PRD 01 issues (not filed yet) | opencode lane, `zai-coding-plan/` first; `opencode-go/` for some, to sample its models | queued | Steward scope (2026-11-01): all of PRD 01, waves 1-5 (#138-#148); wave 4 floor run is a simulation |
+| #149 F1 llama.cpp not routed | opencode, zai-coding-plan/ | filed | maintainer approved fix 2026-11-01; any wave, owns cost-monitor/api.ts |
+| #150 F2 provider = model id | opencode, zai-coding-plan/ | filed | before #147; not with #151 |
+| #151 F3 false pass | opencode, zai-coding-plan/ | filed | after #150, before #147 |
 | R1 research (no issue yet) | research lane, `mattpocock-skills:research` | queued | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
 | #137 | lane-dev | open, not started | OpenRouter `draft_model` fix |
 | #138 PRD01-1 | opencode, zai-coding-plan/ (wave 1) | filed | contracts; first, alone |
