@@ -12,6 +12,7 @@ import {
   ProviderModel,
   TaskExecutionOptions,
   TaskExecutionResult,
+  raceAbort,
 } from '../core/provider/types.js';
 import { localProviderLifecycle } from '../core/provider/local-runtime-lifecycle.js';
 import { llamaCppModule } from './index.js';
@@ -80,7 +81,7 @@ class LlamaCppProvider implements LLMProvider {
       ...buildCodeTaskExecutionOptions(task, 'llama-cpp'),
       ...options,
     };
-    const content = await llamaCppModule.executeTask(id, task, executionOptions);
+    const content = await raceAbort(llamaCppModule.executeTask(id, task, executionOptions), options?.signal);
     this.lastExecutedModelId = id;
     return { content, model: id };
   }

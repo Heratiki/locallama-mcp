@@ -28,6 +28,34 @@ export interface TaskExecutionOptions {
   temperature?: number;
   systemPrompt?: string;
   timeoutMs?: number;
+  /** Cancel the model call. Providers that cannot abort ignore it. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Settle with `work` unless `signal` aborts first, then reject with an
+ * AbortError. The underlying work is left to finish and its output is
+ * discarded (PRD 01 5.10). With no signal, `work` is returned unchanged.
+ */
+export function raceAbort<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  const abortError = (): Error => {
+    const err = new Error('The operation was aborted');
+    err.name = 'AbortError';
+    return err;
+  };
+  if (signal.aborted) {
+    work.catch(() => undefined);
+    return Promise.reject(abortError());
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    work.then(
+      (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
+      (e) => { signal.removeEventListener('abort', onAbort); reject(e); },
+    );
+  });
 }
 
 export interface TaskExecutionResult {
