@@ -43,6 +43,7 @@ If you read nothing else, read **[01-architecture](01-architecture.md)** and the
 | [09-config-and-env](09-config-and-env.md) | Config loading + the env var reference |
 | [10-glossary](10-glossary.md) | Condensed domain glossary (canonical: `CONTEXT.md`) |
 | [11-doc-map](11-doc-map.md) | Which docs are authoritative, and where archived material went |
+| [12-patch-tasks](12-patch-tasks.md) | Verified patch tasks: snapshots, scratch worktrees, attempts, checks, diffs and savings |
 
 ## Authoritative docs (this wiki links to these, never forks them)
 
