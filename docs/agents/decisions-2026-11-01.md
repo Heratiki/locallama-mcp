@@ -31,6 +31,9 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:18 | G4 gate defect | The steward's G4 CHECK (`tr` + unquoted list) found no tests; lane 149 wrote ABANDON correctly. Fixed in mkbrief.sh and the 140/142/149/150 ledgers; lanes did not change gates | Steward fault, not a lane fault | — |
+| 05:18 | #149, #140 done | Both ALL MET after the fix; lane-verifier on each. #140 built in its own lane-dev worktree (lesson in external-lanes.md) | — | — |
+| 05:18 | #150 | Z.ai glm-5.3 lane started (worktree reset to main 95eeb82 first) | Fix found problems before new work | `lanes stop issue-150` |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |

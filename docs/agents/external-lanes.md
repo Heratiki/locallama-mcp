@@ -64,6 +64,14 @@ owned paths for it (`git add <owned paths>`, a message that ends with
 `Refs #<N>`), or start a build lane with `--sandbox danger-full-access` when
 the brief allows commits. Review lanes stay `read-only`.
 
+## Claude lane-dev lanes (learned 2026-11-01)
+
+`lane-dev` runs with its own worktree isolation
+(`.claude/worktrees/agent-<id>`). It cannot write a worktree made by
+`scripts/lane-worktree.sh`. Do not make one for a lane-dev lane: tell it to
+build and commit in its own worktree, give gate-check `--cwd <its worktree>`,
+and merge its branch `worktree-agent-<id>`.
+
 ## tmux windows
 
 Not used in this repo (`tmux_session: none`). All external lanes run through
