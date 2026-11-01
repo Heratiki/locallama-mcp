@@ -29,6 +29,7 @@ From `docs/prd/00-goals-roadmap.md`:
 
 | Time (UTC) | Item | Decision | Reason | Revert |
 |---|---|---|---|---|
+| 05:05 | Live tests | Never use the maintainer's `locallama-dev` MCP connection for live runs; each run starts its own server from the build under test (`test-operational.mjs` pattern, stdio client) | Maintainer cannot reconnect `/mcp` while the steward works | — |
 | 05:25 | Stop time | 14:00Z (10:00 local), beyond PRD 01 allowed | Maintainer's second `/steward` | — |
 | 05:20 | PRD 01 review | codex review: 9 blockers, 3 follow-ups; all taken into PRD 01 revision 1 | Each blocker matched the code I read | `git revert` the revision commit |
 | 05:20 | R-D own model path | Patch worker calls providers through ProviderRegistry; not executeRouteTaskBlocking / buildRankedTrio | Live findings F1, F2; review blocker 2 | PRD 01 §2 R-D |
@@ -51,6 +52,7 @@ server (pid 3872940, started 04:21Z, older than `dist/` of 04:26Z). Log:
 | F3 | 1 | An error text is returned as `completed` with validation `passed: true` while both validators were skipped | `get_task_status` 6c6d4d06…: result = `Error: Failed to execute subtask…`, `attempts[0].passed: true`, both validations `skipped: true` |
 | F4 | env | OpenRouter key refused | log 04:50:39 `401 … "User not found."`; maintainer gets a new key |
 | F5 | 2 | Ladder puts `tinyllama` (1.1B) as `best`, above `mistral:7b-instruct` | `route_task` response `ranked_trio` |
+| F7 | env? | Free OpenRouter models fail with 404 `No allowed providers are available for the selected model` (new key works; no 401) | log 04:57:52, 04:57:54. Likely the account's privacy setting for free endpoints; not confirmed |
 | F6 | 2 | `get_system_state` shows OpenRouter as `paid` while `OPENROUTER_FREE_ONLY` defaults true | `get_system_state` response |
 
 Maintainer note (2026-11-01): they use llama.cpp through llama-router, not Ollama.
@@ -58,5 +60,6 @@ Maintainer note (2026-11-01): they use llama.cpp through llama-router, not Ollam
 ## Waits for the maintainer
 
 - Validator default for patch tasks: I set opt-in (`validate: false`). Say if you want it on by default.
-- New OpenRouter key in `.env` line 24, then reconnect `locallama-dev` (/mcp).
+- Done 05:00: new OpenRouter key; reconnect done.
+- F7: check https://openrouter.ai/settings/privacy (free endpoints / data policy). Only you can change the account.
 - Push of main (8+ commits ahead of origin at start; all docs).
