@@ -24,6 +24,7 @@ fails, and when the maintainer rules. Procedure:
 | #151 F3 false pass | opencode-go/deepseek-v4-pro (after a Z.ai 429) | merged 61010ed (not pushed) | suite green; follow-up: `isSubtaskExecutionFailure` matches error text (fragile; one failed subtask fails the attempt); wants a typed failure flag from codeTaskCoordinator; the task result text does not say "unverified" (only validation.passed: null) |
 | #152 G1 savings stats | opencode-go/qwen3.8-max (+ steward one-line schema fix) | merged 1702d3c (not pushed) | suite green 99/99, 755/755 |
 | #153 F8 ladder ranking | lane-dev Sonnet | merged 5a5d981 (not pushed) | suite green 736/736 |
+| #154 F9 llama.cpp probe | opencode-go/kimi-k2.7-code | merged aa69207 (not pushed) | suite green 99/99, 761/761 |
 | R1 research (no issue yet) | agy (Flash failed; Sonnet run 2 accepted) | done 2026-11-01 | Feeds G7/G8 of `docs/prd/00-goals-roadmap.md`; brief = its "R1" section |
 | #137 | opencode zai-coding-plan/glm-5.3 | merged f292453 (not pushed) | full suite 67/67, 510/510 at f292453 |
 | #138 PRD01-1 | codex (medium; steward committed) | merged 933d517 (not pushed) | full suite at 933d517 green |

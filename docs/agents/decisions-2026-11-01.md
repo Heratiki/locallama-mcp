@@ -71,6 +71,7 @@ Note: rows marked 05:15-05:40 were estimated times; the true times are 05:00-05:
 | 06:59 | Pools | agy-Claude 5h/week at the limit (hook); Z.ai 5h at limit until 09:51Z; builds on OC-Go and codex | Pool limits | — |
 | 07:00 | #152 merged | `1702d3c`; re-verify PASS; full suite 99/99, 755/755. G1 has its read surface (`get_savings`) | Gates, review, suite | `git revert -m1 1702d3c` |
 | 07:00 | Steward error | My chain committed `bc68bbe` although a test failed (I checked grep, not jest's exit code). Fixed in `1dada55` before review; chains now check the jest exit code | Honest record | — |
+| 07:11 | #154 merged | `aa69207`; lane-verifier PASS; full suite 99/99, 761/761. Seed run 2 started on the same config; main frozen during the run | Gates, review, suite | `git revert -m1 aa69207` |
 | 05:14 | Claude lanes | At most 1 Sonnet lane-dev at a time for wave-2 issues, next to the one opencode (Z.ai/OC-Go) lane and codex | One opencode lane at a time; Claude week 1% (reset 2026-11-06); Z.ai stays the main build route | Stop using lane-dev |
 | 05:13 | #139 merged | `4d4e45c`; lane-verifier PASS (docs only); wave 1 of PRD 01 complete | Gates, review | `git revert -m1 4d4e45c` |
 | 05:40 | #138 merged | `933d517`; lane-verifier PASS; full suite green. Codex sandbox could not commit in a worktree; steward committed; lesson in external-lanes.md | Gates, review, suite | `git revert -m1 933d517` |
