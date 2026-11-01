@@ -2,6 +2,12 @@
 
 ## Last Updated
 
+2026-11-01, /ship: PRD 01 wave (#137-#154) on origin at `3b6e0e6`. Full
+suite green at `3b6e0e6` (99/99 suites, 761/761 tests, `--maxWorkers=2`
+because host RAM was low). `dist/` rebuilt at HEAD for `locallama-dev`
+(deploy: none). The 18 issues did NOT close on push: the lane commits say
+`Refs #N`, not `Closes #N`; close them by hand.
+
 2026-11-01T08:00Z, by the steward (`/steward`, stop condition: everything left
 waits for the maintainer or for host memory). Decisions log:
 `docs/agents/decisions-2026-11-01.md`.
@@ -25,8 +31,7 @@ the host was low on memory.
 
 ## Next session, first things
 
-1. Push (maintainer) after a full suite run at HEAD; the 18 open issues close
-   with the push.
+1. Done: pushed at `3b6e0e6`. Close #137-#154 by hand (`Refs`, not `Closes`).
 2. Re-run seed run 2 in full when memory allows (Claude Code stopped it at
    44/60 for low memory). Command and config: see the decisions log
    ("Seed run 2"); run config at the session scratch path is temporary —
