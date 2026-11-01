@@ -28,6 +28,20 @@ does not.
    grind loop stops and LocalLama returns a diagnosis: the check errors, the
    best attempt and what was tried. An optional paid override on the task
    allows paid "repairs". The default is no paid spend.
+4. **Checks:** the agent can send the check commands in the request. A repo
+   can also keep default checks in `.locallama/checks.json`. The request
+   wins over the file.
+5. **Scratch workspace:** a temporary `git worktree` of the target repo now,
+   with dependency folders linked from the main tree, a timeout and a
+   controlled env. The check runner has a backend seam, so a container
+   backend can replace the worktree later with no change to the MCP surface.
+6. **Savings estimate (G1):** saved = the prompt and completion tokens that the
+   small models used on the accepted attempt, times a fixed factor, minus the
+   agent's request and review tokens. The factor is a setting. The A/B runs in
+   G6 check the factor later.
+7. **Patch request shape:** the agent sends a goal line, the repo path,
+   optional file hints and optional checks. LocalLama finds the rest of the
+   context itself with BM25.
 
 ## Gaps in the code today (2026-11-01)
 
@@ -105,15 +119,10 @@ directly (measured, not estimated).
 G1 first, so every later goal has a number. G2 and G3 together are the first
 useful product. G4 builds on G2/G3. G5 and G6 can start after G2.
 
-## Open questions for the next planning round
+## Next planning step
 
-1. How does a repo declare its checks? Options: a `.locallama/checks.json`
-   file, the `gates` block in `CLAUDE.md`, or a field on the request.
-2. What is the scratch workspace? Options: `git worktree`, a copy, or a
-   container.
-3. How does G1 estimate the frontier tokens saved?
-4. What request shape does the agent send for a patch task: the files, a goal
-   line and the checks, or more?
+Write `docs/prd/01-verified-patch-and-grind-loop.md` (G2 and G3) on top of
+these rulings and the grounding map. Then split it into GitHub issues.
 
 See `docs/prd/validated-patch-dag/00-repo-grounding-and-reuse-map.md` for the
 code that G2–G4 reuse, and the seven gaps that need new code.
