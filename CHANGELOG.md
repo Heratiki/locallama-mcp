@@ -1,3 +1,20 @@
+# [1.33.0](https://github.com/Heratiki/locallama-mcp/compare/v1.32.0...v1.33.0) (2026-11-02)
+
+
+### Bug Fixes
+
+* **lm-studio:** refused connection means not running, no stale models ([f1c0855](https://github.com/Heratiki/locallama-mcp/commit/f1c08550a49e261032376c7b732faba15de77fd8)), closes [#156](https://github.com/Heratiki/locallama-mcp/issues/156)
+* **patch:** feed provider circuit breaker from patch model calls ([e685366](https://github.com/Heratiki/locallama-mcp/commit/e685366a89a4efd654c9dbc1ea1e4c95d01cb278)), closes [#157](https://github.com/Heratiki/locallama-mcp/issues/157)
+* **patch:** harden research boundaries and credit only used notes ([ad821de](https://github.com/Heratiki/locallama-mcp/commit/ad821de40742e844cc3ee48ba34d363f5cf0aa9d)), closes [#155](https://github.com/Heratiki/locallama-mcp/issues/155)
+* **patch:** read Python docs without imports and redact short credentials ([ab33738](https://github.com/Heratiki/locallama-mcp/commit/ab33738823bca5d4d90327af59cf4a85ffe95733)), closes [#155](https://github.com/Heratiki/locallama-mcp/issues/155)
+* **patch:** say last blocks were discarded; stacked apply fallback ([cb84b7a](https://github.com/Heratiki/locallama-mcp/commit/cb84b7aa1019081e19358cfe01838de5c9d2982a)), closes [#159](https://github.com/Heratiki/locallama-mcp/issues/159)
+
+
+### Features
+
+* **patch:** harness-driven research for stuck grind loop ([#155](https://github.com/Heratiki/locallama-mcp/issues/155)) ([8ed0d44](https://github.com/Heratiki/locallama-mcp/commit/8ed0d4458c71888a01be3131b530c2def57ba610))
+* **patch:** opt-in auto lint for patch_task ("lint": "auto") ([f1e187e](https://github.com/Heratiki/locallama-mcp/commit/f1e187e875a6acc9b505167564d42c2473fa6c97)), closes [#158](https://github.com/Heratiki/locallama-mcp/issues/158)
+
 # [1.32.0](https://github.com/Heratiki/locallama-mcp/compare/v1.31.4...v1.32.0) (2026-11-01)
 
 
