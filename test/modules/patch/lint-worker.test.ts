@@ -28,7 +28,7 @@ const unit = { name: 'unit', argv: [process.execPath, '-e', "if(!require('fs').r
 
 async function git(...args: string[]) { return (await exec('git', args, { cwd: repo })).stdout.trim(); }
 
-async function run(checksConfig: object) {
+async function run(checksConfig: object, seed?: (backend: InstanceType<typeof GitWorkspaceBackend>, base: string) => Promise<void>) {
   const backend = new GitWorkspaceBackend(repo, { rootDir: root });
   const base = await snapshotPatchWorkspace(backend, repo, ['a.ts'], 'job');
   const now = Date.now();
@@ -43,6 +43,7 @@ async function run(checksConfig: object) {
     queue_position: null, is_local: null, progress_pct: 0, poll_again_after_ms: null, retry_count: 0, created_at: now, started_at: null, completed_at: null, kind: 'patch',
   }, state);
   expect(await store.claimPatchJob('job')).toBe(true);
+  if (seed) await seed(backend, base);
   const registry = new ProviderRegistry();
   const provider: LLMProvider = {
     id: 'fake', displayName: 'fake', costClass: 'local', isLocal: true, init: async () => {}, isAvailable: async () => true,
@@ -100,5 +101,31 @@ describe('patch worker with lint auto', () => {
     const result = await run({ checks: [unit] });
     expect(result).toMatchObject({ status: 'passed', attempts: 1 });
     expect(result).not.toHaveProperty('lint_skipped');
+  });
+
+  // A restart between the durable passing attempt and the terminal write must reuse it.
+  const persistPassed = (lintExit: number) => async (backend: InstanceType<typeof GitWorkspaceBackend>, base: string) => {
+    const ws = await backend.create(base, 'job');
+    await writeFile(path.join(ws.path, 'a.ts'), 'export const value = 2; // ok\n');
+    const diff = await backend.diff(ws);
+    await store.recordAttemptStart('job', { cursor_model: 0, attempts_used: 1 });
+    const check = (name: string, exit_code: number) => ({ name, exit_code, timed_out: false, duration_ms: 1, tail: '' });
+    await store.insertPatchAttempt({ job_id: 'job', n: 1, model_id: 'qwen-1', provider_id: 'fake', cost_class: 'local',
+      prompt_tokens: 10, completion_tokens: 20, cost_usd: 0,
+      edit_blocks: JSON.stringify({ blocks: [], calls: [], files: ['a.ts'], diff }), outcome: 'passed', apply_error: null,
+      checks_json: JSON.stringify([check('unit', 0), check('lint:oxlint', lintExit)]),
+      duration_ms: 1, started_at: 1, ended_at: 2 });
+  };
+
+  it('resumes a persisted passing attempt (explicit + lint checks) with no new model call', async () => {
+    const result = await run({ checks: [unit], lint: 'auto' }, persistPassed(0));
+    expect(result).toMatchObject({ status: 'passed', attempts: 1 });
+    expect(prompts).toHaveLength(0);
+  });
+
+  it('does not take the resume shortcut when a persisted lint check failed', async () => {
+    const result = await run({ checks: [unit], lint: 'auto' }, persistPassed(1));
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(result.status).toBe('passed');
   });
 });

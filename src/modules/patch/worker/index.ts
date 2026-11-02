@@ -235,7 +235,11 @@ export class PatchWorker {
       if (specs.length === 0) { result.reason = 'no_checks'; return await terminal(); }
       // If the process died between the durable passing attempt and terminal
       // write, its proven diff can complete without another inference/check run.
-      if (last?.outcome === 'passed' && lastChecks.length === specs.length && lastChecks.every(c => c.exit_code === 0 && !c.timed_out)) {
+      // With lint on, a passing attempt also stored the planned lint checks (named lint:*).
+      const lintResumable = lint !== undefined && lastChecks.length > specs.length
+        && specs.every(s => lastChecks.some(c => c.name === s.name))
+        && lastChecks.filter(c => !specs.some(s => s.name === c.name)).every(c => c.name.startsWith('lint:'));
+      if (last?.outcome === 'passed' && (lastChecks.length === specs.length || lintResumable) && lastChecks.every(c => c.exit_code === 0 && !c.timed_out)) {
         const saved = details(last);
         result.status = 'passed'; result.reason = 'passed'; result.diff = saved.diff; result.files_changed = saved.files;
         try { if (researchEnabled()) await store.markResearchNotesHelped(jobId, last.n, 1,
