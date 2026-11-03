@@ -468,7 +468,7 @@ export const llamaCppModule = {
 
     const result = await this.callApi(modelId, task, timeout, options);
 
-    if (!result.success || !result.text) {
+    if (!result.success || (!result.text && result.truncated !== true)) {
       if (options?.signal?.aborted) throw abortError();
       switch (result.error) {
         case LlamaCppErrorType.CONTEXT_LENGTH_EXCEEDED:
@@ -489,7 +489,7 @@ export const llamaCppModule = {
     }
 
     options?.onFinish?.({ truncated: result.truncated === true });
-    return result.text;
+    return result.text ?? '';
   },
 
   /**
@@ -540,7 +540,8 @@ export const llamaCppModule = {
       clearTimeout(timeoutId);
 
       const content = response.data?.choices?.[0]?.message?.content;
-      if (!content) {
+      const finishReason = response.data?.choices?.[0]?.finish_reason;
+      if (!content && finishReason !== 'length') {
         logger.warn('llama.cpp returned an empty choices array or missing content');
         return { success: false, error: LlamaCppErrorType.INVALID_REQUEST };
       }
@@ -548,11 +549,11 @@ export const llamaCppModule = {
       const usage = response.data.usage;
       return {
         success: true,
-        text: content,
+        text: content ?? '',
         usage: usage
           ? { prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens }
           : undefined,
-        truncated: response.data.choices[0].finish_reason === 'length',
+        truncated: finishReason === 'length',
       };
     } catch (error) {
       clearTimeout(timeoutId);

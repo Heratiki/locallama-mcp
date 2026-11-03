@@ -1299,7 +1299,7 @@ export const lmStudioModule = {
         },
       ); // Use this.
 
-      if (!result.success || !result.text) {
+      if (!result.success || (!result.text && result.truncated !== true)) {
         if (options?.signal?.aborted) throw abortError();
         const diagnosticsSummary = this.summarizeErrorDiagnostics(result.diagnostics);
         const throwWithDiagnostics = (message: string): never => {
@@ -1345,12 +1345,12 @@ export const lmStudioModule = {
       }
 
       const text = result.text;
-      if (!text) {
+      if (!text && result.truncated !== true) {
         throw new Error('LM Studio returned an empty response payload');
       }
 
       options?.onFinish?.({ truncated: result.truncated === true });
-      return text;
+      return text ?? '';
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`Error executing task with LM Studio model ${modelId}:`, error);
