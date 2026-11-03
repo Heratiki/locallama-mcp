@@ -231,6 +231,7 @@ export const openRouterModule = {
             provider: this.getProviderFromModelId(model.id),
             isFree,
             contextWindow: model.context_length || 4096,
+            maxCompletionTokens: model.top_provider?.max_completion_tokens,
             capabilities: {
               chat: model.features?.chat || false,
               completion: model.features?.completion || false,

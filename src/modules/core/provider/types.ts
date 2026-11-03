@@ -20,6 +20,8 @@ export interface ProviderModel {
   family?: string;
   contextWindow?: number;
   costPerToken?: { prompt: number; completion: number };
+  /** Largest completion the serving provider accepts, when known. */
+  maxCompletionTokens?: number;
 }
 
 export interface TaskExecutionOptions {
