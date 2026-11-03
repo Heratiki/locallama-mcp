@@ -1,3 +1,10 @@
+## [1.35.2](https://github.com/Heratiki/locallama-mcp/compare/v1.35.1...v1.35.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* **patch:** clang-tidy lint applies only with a .clang-tidy in the repo ([4b2e709](https://github.com/Heratiki/locallama-mcp/commit/4b2e709f11bf66d1947eb4f61c39b84183f279b2)), closes [#166](https://github.com/Heratiki/locallama-mcp/issues/166)
+
 ## [1.35.1](https://github.com/Heratiki/locallama-mcp/compare/v1.35.0...v1.35.1) (2026-11-03)
 
 
