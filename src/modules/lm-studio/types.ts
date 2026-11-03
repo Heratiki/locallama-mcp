@@ -62,6 +62,8 @@ export interface LMStudioApiCallResult {
   };
   error?: LMStudioErrorType;
   diagnostics?: LMStudioErrorDiagnostics;
+  /** finish_reason was "length": the answer was cut at the output cap. */
+  truncated?: boolean;
 }
 
 /**

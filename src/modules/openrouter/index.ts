@@ -699,6 +699,7 @@ export const openRouterModule = {
     };
     error?: OpenRouterErrorType;
     errorInstance?: Error; // Add this to pass the specific error instance
+    truncated?: boolean;
   }> {
     logger.debug(`Calling OpenRouter API for model ${modelId}`);
     
@@ -789,7 +790,7 @@ export const openRouterModule = {
         Array.isArray(response.data.choices) &&
         response.data.choices.length > 0
       ) {
-        const firstChoice = response.data.choices[0] as { message: { content: string } };
+        const firstChoice = response.data.choices[0] as { message: { content: string }; finish_reason?: string };
         if (
           firstChoice.message &&
           typeof firstChoice.message.content === 'string'
@@ -797,6 +798,7 @@ export const openRouterModule = {
           const result: {
             success: boolean;
             text?: string;
+            truncated?: boolean;
             usage?: {
               prompt_tokens: number;
               completion_tokens: number;
@@ -810,6 +812,7 @@ export const openRouterModule = {
           } = {
             success: true,
             text: firstChoice.message.content,
+            truncated: firstChoice.finish_reason === 'length',
             usage: response.data.usage &&
               typeof response.data.usage === 'object' &&
               'prompt_tokens' in response.data.usage &&
@@ -1242,7 +1245,7 @@ export const openRouterModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal; onFinish?: (info: { truncated: boolean }) => void }): Promise<string> {
     logger.info(`Executing task using OpenRouter model ${modelId}`);
     
     try {
@@ -1306,6 +1309,7 @@ export const openRouterModule = {
 
       await this.recordFreeModelSuccess(normalizedModelId);
       
+      options?.onFinish?.({ truncated: result.truncated === true });
       return result.text;
     } catch (error) {
       if (error instanceof Error) {

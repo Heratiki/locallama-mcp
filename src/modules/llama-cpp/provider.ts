@@ -89,9 +89,13 @@ class LlamaCppProvider implements LLMProvider {
       ...buildCodeTaskExecutionOptions(task, 'llama-cpp'),
       ...options,
     };
-    const content = await raceAbort(llamaCppModule.executeTask(id, task, executionOptions), options?.signal);
+    let truncated = false;
+    const content = await raceAbort(
+      llamaCppModule.executeTask(id, task, { ...executionOptions, onFinish: info => { truncated = info.truncated; } }),
+      options?.signal,
+    );
     this.lastExecutedModelId = id;
-    return { content, model: id };
+    return { content, model: id, truncated };
   }
 
   /**

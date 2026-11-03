@@ -138,8 +138,12 @@ class OpenRouterProvider implements LLMProvider {
       ...buildCodeTaskExecutionOptions(task, 'openrouter'),
       ...options,
     };
-    const content = await raceAbort(openRouterModule.executeTask(id, task, executionOptions), options?.signal);
-    return { content, model: id };
+    let truncated = false;
+    const content = await raceAbort(
+      openRouterModule.executeTask(id, task, { ...executionOptions, onFinish: info => { truncated = info.truncated; } }),
+      options?.signal,
+    );
+    return { content, model: id, truncated };
   }
 
   getCost(modelId: string): { prompt: number; completion: number } {

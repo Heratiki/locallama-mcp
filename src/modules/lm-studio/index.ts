@@ -846,7 +846,8 @@ export const lmStudioModule = {
         return {
           success: true,
           text: response.data.choices[0].message.content,
-          usage: response.data.usage
+          usage: response.data.usage,
+          truncated: response.data.choices[0].finish_reason === 'length',
         };
       } else {
         logger.warn('Invalid response from LM Studio API:', response.data);
@@ -1269,7 +1270,7 @@ export const lmStudioModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; signal?: AbortSignal; onFinish?: (info: { truncated: boolean }) => void }): Promise<string> {
     logger.info(`Executing task using LM Studio model ${modelId}`);
 
     try {
@@ -1341,6 +1342,7 @@ export const lmStudioModule = {
         throw new Error('LM Studio returned an empty response payload');
       }
 
+      options?.onFinish?.({ truncated: result.truncated === true });
       return text;
     } catch (error) {
       if (error instanceof Error) {

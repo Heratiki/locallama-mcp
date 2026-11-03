@@ -17,6 +17,20 @@ export interface ModelCallOptions {
   persistSpend: (value: { paid_spent_usd: number; paid_reserved_usd: number }) => Promise<void>;
 }
 
+/** Tokens kept free below the output cap: our token count is an estimate of the model's own. */
+const OUTPUT_SAFETY_MARGIN_TOKENS = 128;
+
+/**
+ * Output cap for one call (#167). Local and free entries may use the whole free
+ * context, so a long answer is not cut at PATCH_MAX_OUTPUT_TOKENS. Paid entries
+ * keep PATCH_MAX_OUTPUT_TOKENS because the paid ledger reserves money on it.
+ */
+export function outputCap(entry: LadderEntry, window: number, promptTokens: number, minimum: number): number {
+  if (entry.cost_class === 'paid') return minimum;
+  const margin = Math.max(OUTPUT_SAFETY_MARGIN_TOKENS, Math.ceil(promptTokens * 0.1));
+  return Math.max(minimum, window - promptTokens - margin);
+}
+
 /** All generation and judge calls share this path, cancellation and ledger. */
 export class PatchModelCalls {
   readonly usage: CallUsage[] = [];
@@ -80,6 +94,7 @@ export class PatchModelCalls {
     if (promptTokens + settings.patchMaxOutputTokens > window) {
       throw new ContextWindowError(entry.model_id, promptTokens + settings.patchMaxOutputTokens, window);
     }
+    const maxTokens = outputCap(entry, window, promptTokens, settings.patchMaxOutputTokens);
     let reservation = 0;
     if (entry.cost_class === 'paid') {
       const reserved = this.ledger.reserve(entry, promptTokens);
@@ -113,7 +128,7 @@ export class PatchModelCalls {
         this.checkStop();
         invoked = true;
         return provider.executeTask(entry.model_id, prompt, {
-          systemPrompt: system, maxTokens: settings.patchMaxOutputTokens,
+          systemPrompt: system, maxTokens,
           timeoutMs: settings.patchInferenceTimeoutMs, signal: controller.signal,
         });
       }, { modelId: entry.model_id, workload: 'task' });

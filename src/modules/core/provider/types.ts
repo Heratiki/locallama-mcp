@@ -85,6 +85,8 @@ export interface TaskExecutionResult {
   completionTokens?: number;
   totalTokens?: number;
   timeTakenMs?: number;
+  /** The provider stopped at the output token cap (stop reason "length"). Absent or false otherwise. */
+  truncated?: boolean;
 }
 
 export interface LLMProvider {

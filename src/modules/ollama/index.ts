@@ -625,6 +625,7 @@ export const ollamaModule = {
       completion_tokens: number;
     };
     error?: OllamaErrorType;
+    truncated?: boolean;
   }> {
     logger.debug(`Calling Ollama API for model ${modelId}`);
     
@@ -712,7 +713,8 @@ export const ollamaModule = {
           usage: response.data.usage || {
             prompt_tokens: 0,
             completion_tokens: 0
-          }
+          },
+          truncated: (response.data as { done_reason?: string }).done_reason === 'length',
         };
       } else {
         logger.warn('Invalid response from Ollama API:', response.data);
@@ -1023,7 +1025,7 @@ export const ollamaModule = {
    * @param task The task to execute
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal }): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal; onFinish?: (info: { truncated: boolean }) => void }): Promise<string> {
     logger.info(`Executing task using Ollama model ${modelId}`);
     
     try {
@@ -1073,6 +1075,7 @@ export const ollamaModule = {
         logger.debug(`Ollama usage: ${result.usage.prompt_tokens} prompt tokens, ${result.usage.completion_tokens} completion tokens`);
       }
       
+      options?.onFinish?.({ truncated: result.truncated === true });
       return result.text;
     } catch (error) {
       if (error instanceof Error) {

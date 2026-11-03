@@ -62,4 +62,9 @@ export interface TaskExecutionResult {
    * Time taken to complete the task (ms)
    */
   timeTaken?: number;
+
+  /**
+   * The provider stopped at the output token cap (stop reason "length")
+   */
+  truncated?: boolean;
 }
