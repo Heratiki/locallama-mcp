@@ -1268,9 +1268,11 @@ export const lmStudioModule = {
    * Execute a task using a specific LM Studio model
    * @param modelId The ID of the model to use
    * @param task The task to execute
+   * @param options Optional execution overrides; caller-provided maxTokens and
+   *   systemPrompt win over the code-task profile values (#168)
    * @returns The result of the task execution
    */
-  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; signal?: AbortSignal; onFinish?: (info: { truncated: boolean }) => void }): Promise<string> {
+  async executeTask(modelId: string, task: string, options?: { timeoutMs?: number; systemPrompt?: string; maxTokens?: number; signal?: AbortSignal; onFinish?: (info: { truncated: boolean }) => void }): Promise<string> {
     logger.info(`Executing task using LM Studio model ${modelId}`);
 
     try {
@@ -1284,12 +1286,17 @@ export const lmStudioModule = {
         ? options.timeoutMs
         : config.providerTimeoutMs;
 
-      // Call the LM Studio API
+      // Profile defaults apply first; caller-provided maxTokens/systemPrompt win (#168).
       const result = await this.callLMStudioApi(
         modelId,
         task,
         timeout,
-        { ...buildCodeTaskExecutionOptions(task, 'lm-studio'), signal: options?.signal },
+        {
+          ...buildCodeTaskExecutionOptions(task, 'lm-studio'),
+          ...(options?.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+          ...(options?.systemPrompt !== undefined ? { systemPrompt: options.systemPrompt } : {}),
+          signal: options?.signal,
+        },
       ); // Use this.
 
       if (!result.success || !result.text) {
