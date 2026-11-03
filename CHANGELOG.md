@@ -1,3 +1,16 @@
+# [1.35.0](https://github.com/Heratiki/locallama-mcp/compare/v1.34.0...v1.35.0) (2026-11-03)
+
+
+### Bug Fixes
+
+* **config:** LOCALLAMA_ENV_FILE; jest never reads the repo .env ([05a556a](https://github.com/Heratiki/locallama-mcp/commit/05a556a98eabbc6d4a4f8f00a90c837928938cde)), closes [#164](https://github.com/Heratiki/locallama-mcp/issues/164)
+* **patch:** PATCH_RESEARCH_ENABLED gate, unredacted attribution URL, shared notes ([4f36e14](https://github.com/Heratiki/locallama-mcp/commit/4f36e14ec4c4e1309db529e800b418096c5f4e28)), closes [#163](https://github.com/Heratiki/locallama-mcp/issues/163)
+
+
+### Features
+
+* **patch:** Stack Exchange API and offline explain research sources ([5c92ab0](https://github.com/Heratiki/locallama-mcp/commit/5c92ab0778ab5377bdbad5c54e805f36a150d052)), closes [#163](https://github.com/Heratiki/locallama-mcp/issues/163)
+
 # [1.34.0](https://github.com/Heratiki/locallama-mcp/compare/v1.33.0...v1.34.0) (2026-11-03)
 
 
