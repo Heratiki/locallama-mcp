@@ -1,3 +1,4 @@
+import { config } from '../../../config/index.js';
 import { logger } from '../../../utils/logger.js';
 
 export type SearxngProbeState = 'ok' | 'disabled' | 'unreachable';
@@ -28,6 +29,9 @@ function searchUrl(base: string, query: string): string {
   const url = new URL('search', base.endsWith('/') ? base : `${base}/`);
   url.searchParams.set('q', query);
   url.searchParams.set('format', 'json');
+  // #161: general engines are often blocked; the default also asks for "it".
+  const categories = config.patchResearchSearxngCategories ?? [];
+  if (categories.length > 0) url.searchParams.set('categories', categories.join(','));
   return url.toString();
 }
 
