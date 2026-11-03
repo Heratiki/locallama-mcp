@@ -1,3 +1,10 @@
+## [1.35.1](https://github.com/Heratiki/locallama-mcp/compare/v1.35.0...v1.35.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **patch:** validate Stack Exchange question_id and answer_id as positive integers ([0c12790](https://github.com/Heratiki/locallama-mcp/commit/0c127901c17cff9c30d29ee72519525c824d4909)), closes [#165](https://github.com/Heratiki/locallama-mcp/issues/165)
+
 # [1.35.0](https://github.com/Heratiki/locallama-mcp/compare/v1.34.0...v1.35.0) (2026-11-03)
 
 
