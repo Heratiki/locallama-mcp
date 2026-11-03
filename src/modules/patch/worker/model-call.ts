@@ -24,16 +24,26 @@ const OUTPUT_SAFETY_MARGIN_TOKENS = 128;
  * Output cap for one call (#167). Local and free entries may use the whole free
  * context, so a long answer is not cut at PATCH_MAX_OUTPUT_TOKENS. Paid entries
  * keep PATCH_MAX_OUTPUT_TOKENS because the paid ledger reserves money on it.
+ *
+ * A known `maxCompletionTokens` is an upper bound for local/free entries (#170):
+ * `max_tokens = min(cap from #167, maxCompletionTokens)`, but never below
+ * `minimum` unless `maxCompletionTokens` is itself smaller (then it wins).
  */
 export function outputCap(
   entry: LadderEntry, window: number, promptTokens: number, minimum: number, contextTokens?: number,
+  maxCompletionTokens?: number,
 ): number {
   if (entry.cost_class === 'paid') return minimum;
   // The reported window can be the training window, far above what the server runs with.
   // Use the same bound as the prompt builder.
   if (contextTokens !== undefined && Number.isFinite(contextTokens)) window = Math.min(window, contextTokens);
   const margin = Math.max(OUTPUT_SAFETY_MARGIN_TOKENS, Math.ceil(promptTokens * 0.1));
-  return Math.max(minimum, window - promptTokens - margin);
+  const cap = Math.max(minimum, window - promptTokens - margin);
+  if (maxCompletionTokens !== undefined && Number.isFinite(maxCompletionTokens) && maxCompletionTokens > 0) {
+    if (maxCompletionTokens < minimum) return maxCompletionTokens;
+    return Math.min(cap, maxCompletionTokens);
+  }
+  return cap;
 }
 
 /** All generation and judge calls share this path, cancellation and ledger. */
@@ -69,10 +79,15 @@ export class PatchModelCalls {
   }
 
   async contextWindow(entry: LadderEntry): Promise<number> {
+    return (await this.resolveModel(entry)).window;
+  }
+
+  private async resolveModel(entry: LadderEntry): Promise<{ window: number; maxCompletionTokens?: number }> {
     const provider = this.provider(entry);
     const model = (await raceAbort(provider.listModels(), this.options.signal)).find(m => m.id === entry.model_id);
-    return resolveModelContextWindow({ id: entry.model_id, provider: entry.provider_id, contextWindow: model?.contextWindow })
+    const window = resolveModelContextWindow({ id: entry.model_id, provider: entry.provider_id, contextWindow: model?.contextWindow })
       .contextWindow ?? this.options.settings.patchContextTokens;
+    return { window, maxCompletionTokens: model?.maxCompletionTokens };
   }
 
   provider(entry: LadderEntry): LLMProvider {
@@ -92,14 +107,14 @@ export class PatchModelCalls {
     await raceAbort(this.previousCall, signal);
     this.checkStop();
     const provider = this.provider(entry);
-    const window = await this.contextWindow(entry);
+    const { window, maxCompletionTokens } = await this.resolveModel(entry);
     this.checkStop();
     assertPromptWithinContextWindow({ id: entry.model_id, provider: entry.provider_id, contextWindow: window }, `${system}\n${prompt}`);
     const promptTokens = promptTokensOf(system, prompt);
     if (promptTokens + settings.patchMaxOutputTokens > window) {
       throw new ContextWindowError(entry.model_id, promptTokens + settings.patchMaxOutputTokens, window);
     }
-    const maxTokens = outputCap(entry, window, promptTokens, settings.patchMaxOutputTokens, settings.patchContextTokens);
+    const maxTokens = outputCap(entry, window, promptTokens, settings.patchMaxOutputTokens, settings.patchContextTokens, maxCompletionTokens);
     let reservation = 0;
     if (entry.cost_class === 'paid') {
       const reserved = this.ledger.reserve(entry, promptTokens);

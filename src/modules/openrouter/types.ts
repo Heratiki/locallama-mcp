@@ -20,6 +20,9 @@ export interface OpenRouterModel {
   
   /** Context window size in tokens */
   contextWindow: number;
+
+  /** Largest completion the serving provider accepts (top_provider.max_completion_tokens). */
+  maxCompletionTokens?: number;
   
   /** Model capabilities */
   capabilities: {
@@ -92,6 +95,12 @@ export interface OpenRouterModelsResponse {
       
       /** Whether the model supports vision */
       vision?: boolean;
+    };
+
+    /** Serving provider metadata (OpenRouter's top_provider). */
+    top_provider?: {
+      /** Largest completion the provider accepts, in tokens. */
+      max_completion_tokens?: number;
     };
   }[];
 }
