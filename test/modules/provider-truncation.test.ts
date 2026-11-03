@@ -46,9 +46,17 @@ const openAi = (finish?: string) => ({
   status: 200, headers: {},
   data: { choices: [{ index: 0, message: { role: 'assistant', content: 'body' }, ...(finish === undefined ? {} : { finish_reason: finish }) }], usage },
 });
+const openAiEmpty = (finish?: string) => ({
+  status: 200, headers: {},
+  data: { choices: [{ index: 0, message: { role: 'assistant', content: '' }, ...(finish === undefined ? {} : { finish_reason: finish }) }], usage },
+});
 const ollama = (done?: string) => ({
   status: 200, headers: {},
   data: { message: { role: 'assistant', content: 'body' }, done: true, ...(done === undefined ? {} : { done_reason: done }) },
+});
+const ollamaEmpty = (done?: string) => ({
+  status: 200, headers: {},
+  data: { message: { role: 'assistant', content: '' }, done: true, ...(done === undefined ? {} : { done_reason: done }) },
 });
 
 const cases = [
@@ -56,6 +64,12 @@ const cases = [
   { name: 'LM Studio', run: () => lmStudioProvider.executeTask('m', 'task'), reply: openAi },
   { name: 'Ollama', run: () => ollamaProvider.executeTask('m', 'task'), reply: ollama },
   { name: 'OpenRouter', run: () => openRouterProvider.executeTask('m/free', 'task'), reply: openAi },
+];
+
+const emptyCases = [
+  { name: 'llama.cpp', run: () => llamaCppProvider.executeTask('m', 'task'), reply: openAiEmpty },
+  { name: 'LM Studio', run: () => lmStudioProvider.executeTask('m', 'task'), reply: openAiEmpty },
+  { name: 'Ollama', run: () => ollamaProvider.executeTask('m', 'task'), reply: ollamaEmpty },
 ];
 
 describe('provider stop reason maps to truncated (#167)', () => {
@@ -90,6 +104,36 @@ describe('provider stop reason maps to truncated (#167)', () => {
       it('gives truncated: false when the response has no stop reason', async () => {
         jest.spyOn(axios, 'post').mockResolvedValueOnce(c.reply(undefined));
         expect((await c.run()).truncated).toBe(false);
+      });
+    });
+  }
+});
+
+describe('empty visible content with a "length" stop is truncation, not an error (#169)', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    const now = new Date().toISOString();
+    const model = (id: string, provider: string) => ({
+      id, name: id, provider, contextWindow: 8192, capabilities: { chat: true, completion: true },
+      costPerToken: { prompt: 0, completion: 0 }, lastUpdated: now, version: '1',
+      promptingStrategy: { systemPrompt: 'sys', useChat: true },
+    });
+    lmStudioModule.modelTracking = { lastUpdated: now, models: { m: model('m', 'lm-studio') } } as never;
+    ollamaModule.modelTracking = { lastUpdated: now, models: { m: model('m', 'ollama') } } as never;
+  });
+
+  for (const c of emptyCases) {
+    describe(c.name, () => {
+      it('returns success with empty content and truncated: true for the "length" stop reason', async () => {
+        jest.spyOn(axios, 'post').mockResolvedValueOnce(c.reply('length'));
+        const result = await c.run();
+        expect(result.content).toBe('');
+        expect(result.truncated).toBe(true);
+      });
+
+      it('still throws for empty content with a normal stop', async () => {
+        jest.spyOn(axios, 'post').mockResolvedValueOnce(c.reply('stop'));
+        await expect(c.run()).rejects.toThrow();
       });
     });
   }

@@ -234,6 +234,21 @@ describe('patch worker', () => {
     expect(calls[1].prompt).not.toContain('No edit blocks in model output');
   });
 
+  it('treats an empty truncated answer as a truncation apply error and does not record a provider failure (#169)', async () => {
+    registry.register(provider('fake', 'local', async () => (
+      calls.length === 1 ? { content: '', completionTokens: 2000, truncated: true } : { content: block() })));
+    const recordFailure = jest.spyOn(registry, 'recordProviderFailure');
+    await submit();
+    const result = await worker().run('job');
+    expect(result.status).toBe('passed');
+    expect(result.attempts).toBe(2);
+    expect(calls[1].prompt).toContain(`cut off at ${calls[0].options.maxTokens} output tokens`);
+    const [first] = await store.getPatchAttempts('job');
+    expect(first.outcome).toBe('apply_error');
+    expect(JSON.parse(first.edit_blocks!).truncated).toBe(true);
+    expect(recordFailure).not.toHaveBeenCalled();
+  });
+
   it('names the max_tokens the provider got when the provider returns no usage (#167)', async () => {
     registry.register(provider('fake', 'local', async () => (
       calls.length === 1 ? { content: 'a.ts\n<<<<<<< SEARCH\nx', truncated: true } : { content: block() })));

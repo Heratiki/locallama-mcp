@@ -1043,7 +1043,7 @@ export const ollamaModule = {
       // Call the Ollama API
       const result = await this.callOllamaApi(modelId, task, timeout, executionOptions);
       
-      if (!result.success || !result.text) {
+      if (!result.success || (!result.text && result.truncated !== true)) {
         if (options?.signal?.aborted) throw abortError();
         if (result.error) {
           switch (result.error) {
@@ -1076,7 +1076,7 @@ export const ollamaModule = {
       }
       
       options?.onFinish?.({ truncated: result.truncated === true });
-      return result.text;
+      return result.text ?? '';
     } catch (error) {
       if (error instanceof Error) {
         logger.error(`Error executing task with Ollama model ${modelId}:`, error);
