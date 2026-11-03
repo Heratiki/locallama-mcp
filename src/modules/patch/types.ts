@@ -111,7 +111,7 @@ export interface PatchDiagnosis {
 }
 
 /** Research sources (#155 ruling 1 and 3): local first, SearXNG only when configured. */
-export type ResearchSourceKind = 'searxng' | 'repo' | 'deps' | 'pydoc' | 'go doc' | 'man';
+export type ResearchSourceKind = 'searxng' | 'repo' | 'deps' | 'pydoc' | 'go doc' | 'man' | 'explain' | 'stackexchange';
 
 export type ResearchSourceStatus = 'ran' | 'skipped' | 'timed_out' | 'error';
 

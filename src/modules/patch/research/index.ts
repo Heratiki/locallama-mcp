@@ -10,8 +10,11 @@ export { redactText, normalizeSignatureText } from './redact.js';
 export { probeSearxng, searchSearxng, resetSearxngProbeCache } from './searxng.js';
 export type { SearxngProbeState, SearxngResult, FetchLike } from './searxng.js';
 export {
-  detectLanguage, repoAdapter, depsAdapter, pydocAdapter, goDocAdapter, manAdapter, searxngAdapter, runTool, ToolMissingError,
+  detectLanguage, repoAdapter, depsAdapter, pydocAdapter, goDocAdapter, manAdapter, cManAdapter, shellHelpAdapter,
+  searxngAdapter, runTool, ToolMissingError,
 } from './sources.js';
+export { explainAdapter, explainCommands } from './explain.js';
+export { stackexchangeAdapter, resetStackexchangeState } from './stackexchange.js';
 export type { ResearchLanguage, ResearchSourceAdapter, ResearchSourceContext, SourceText } from './sources.js';
 export { findReusedNote } from './notes.js';
 export type { ReusableNote, ReuseLookup } from './notes.js';
@@ -19,8 +22,10 @@ import type { StuckResult } from './detect.js';
 import type { RedactTerms } from './redact.js';
 import { buildQueries, type ResearchQuery } from './queries.js';
 import { probeSearxng, type FetchLike } from './searxng.js';
+import { explainAdapter, explainCommands } from './explain.js';
+import { stackexchangeAdapter } from './stackexchange.js';
 import {
-  detectLanguage, depsAdapter, goDocAdapter, manAdapter, pydocAdapter, repoAdapter, searxngAdapter,
+  detectLanguage, depsAdapter, goDocAdapter, manAdapter, cManAdapter, shellHelpAdapter, pydocAdapter, repoAdapter, searxngAdapter,
   ToolMissingError, type ResearchSourceAdapter, type ResearchSourceContext,
 } from './sources.js';
 import { findReusedNote, type ReusableNote } from './notes.js';
@@ -37,6 +42,11 @@ export interface ResearchLimits {
   notesMax: number;
   /** Top N SearXNG results to keep (criterion 5). */
   searxngResults?: number;
+  /**
+   * Stack Exchange API source (#163). Present = on (PATCH_RESEARCH_STACKEXCHANGE),
+   * absent = off. `key` is the optional app key.
+   */
+  stackexchange?: { key?: string };
 }
 
 export interface RunResearchInput extends RedactTerms {
@@ -207,12 +217,20 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
     ...(language === 'python' ? [{ adapter: pydocAdapter, query: firstOfKind(queries, 'module') ?? queries[0] }] : []),
     ...(language === 'go' ? [{ adapter: goDocAdapter, query: firstOfKind(queries, 'module') ?? queries[0] }] : []),
     ...(language === 'unknown' ? [{ adapter: manAdapter, query: firstOfKind(queries, 'identifier') ?? queries[0] }] : []),
+    ...(language === 'c' ? [{ adapter: cManAdapter, query: firstOfKind(queries, 'identifier') ?? queries[0] }] : []),
+    ...(language === 'shell' ? [{ adapter: shellHelpAdapter, query: firstOfKind(queries, 'identifier') ?? queries[0] }] : []),
+    // Offline explain commands for error codes in the failing output (#163).
+    ...(explainCommands(input.stuck.errorText).length > 0 ? [{ adapter: explainAdapter, query: queries[0] ?? { text: 'explain', kind: 'code' as const } }] : []),
+    ...(limits.stackexchange ? [{ adapter: stackexchangeAdapter, query: queries[0] }] : []),
     ...(probe === 'ok' ? [{ adapter: searxngAdapter, query: queries[0] }] : []),
   ];
   const ctx: ResearchSourceContext = {
     workspacePath: input.workspacePath,
     repoSearch: input.repoSearch,
     timeoutMs: limits.sourceTimeoutMs,
+    errorText: input.stuck.errorText,
+    jobId: input.jobId,
+    ...(limits.stackexchange ? { stackexchange: { key: limits.stackexchange.key, fetchImpl: input.fetchImpl } } : {}),
     ...(probe === 'ok' ? {
       searxng: { url: limits.searxngUrl, results: limits.searxngResults ?? 3, fetchImpl: input.fetchImpl },
     } : {}),

@@ -110,6 +110,10 @@ export interface Config {
   patchResearchSourceTimeoutMs: number;
   patchResearchTokens: number;
   patchResearchNotesMax: number;
+  // Stack Exchange API research source (#163): PATCH_RESEARCH_STACKEXCHANGE, default on.
+  patchResearchStackexchange: boolean;
+  // Optional Stack Exchange app key (not a secret, never logged in full).
+  patchResearchStackexchangeKey: string;
 
   // Savings report (G1, get_savings): estimated frontier tokens saved per
   // small-model token on accepted patch tasks. Must be > 0; an invalid
@@ -231,6 +235,8 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'patchResearchSourceTimeoutMs',
   'patchResearchTokens',
   'patchResearchNotesMax',
+  'patchResearchStackexchange',
+  'patchResearchStackexchangeKey',
   'savingsTokenFactor',
 ] as const;
 
@@ -405,6 +411,8 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     patchResearchSourceTimeoutMs: parseNumber(env.PATCH_RESEARCH_SOURCE_TIMEOUT_MS, 5000),
     patchResearchTokens: parseNumber(env.PATCH_RESEARCH_TOKENS, 800),
     patchResearchNotesMax: parseNumber(env.PATCH_RESEARCH_NOTES_MAX, 500),
+    patchResearchStackexchange: !['off', 'false', '0', 'no'].includes((env.PATCH_RESEARCH_STACKEXCHANGE ?? 'on').trim().toLowerCase()),
+    patchResearchStackexchangeKey: (env.PATCH_RESEARCH_STACKEXCHANGE_KEY || '').trim(),
 
     // Savings report (G1): steward ruling 1 on #152 — default factor 1.0.
     savingsTokenFactor: parsePositiveNumberStrict(env.SAVINGS_TOKEN_FACTOR, 1.0, 'SAVINGS_TOKEN_FACTOR'),

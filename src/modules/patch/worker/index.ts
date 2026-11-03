@@ -462,6 +462,8 @@ export class PatchWorker {
                   sourceTimeoutMs: config.patchResearchSourceTimeoutMs,
                   tokens: config.patchResearchTokens,
                   notesMax: config.patchResearchNotesMax,
+                  ...(config.patchResearchStackexchange
+                    ? { stackexchange: { key: config.patchResearchStackexchangeKey || undefined } } : {}),
                 },
                 now: this.now,
               });
