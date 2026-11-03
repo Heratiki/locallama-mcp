@@ -88,8 +88,11 @@ async function call(
   return { kind: 'ok', json };
 }
 
-interface SearchItem { question_id?: number; title?: string; accepted_answer_id?: number }
-interface AnswerItem { answer_id?: number; is_accepted?: boolean; score?: number; body?: string }
+// Ids come from a remote response and reach a request path and an unredacted URL.
+const isValidId = (id: unknown): id is number => typeof id === 'number' && Number.isSafeInteger(id) && id > 0;
+
+interface SearchItem { question_id?: unknown; title?: string; accepted_answer_id?: unknown }
+interface AnswerItem { answer_id?: unknown; is_accepted?: boolean; score?: number; body?: string }
 
 export const stackexchangeAdapter: ResearchSourceAdapter = {
   source: 'stackexchange',
@@ -115,7 +118,7 @@ export const stackexchangeAdapter: ResearchSourceAdapter = {
     try {
       const found = await call(SEARCH_METHOD, search, job, ctx.timeoutMs, fetchImpl, now);
       if (found.kind === 'skip') return { text: '', skipped: found.reason };
-      const item = ((found.json.items as SearchItem[] | undefined) ?? []).find(candidate => candidate.question_id !== undefined);
+      const item = ((found.json.items as SearchItem[] | undefined) ?? []).find(candidate => isValidId(candidate.question_id));
       if (!item) return { text: '' };
 
       const answersUrl = withKey(new URL(`${API}/questions/${item.question_id}/answers`));
@@ -126,8 +129,8 @@ export const stackexchangeAdapter: ResearchSourceAdapter = {
       answersUrl.searchParams.set('pagesize', '5');
       const got = await call(ANSWERS_METHOD, answersUrl, job, ctx.timeoutMs, fetchImpl, now);
       if (got.kind === 'skip') return { text: '', skipped: got.reason };
-      const answers = ((got.json.items as AnswerItem[] | undefined) ?? []).filter(answer => answer.answer_id !== undefined);
-      const best = answers.find(answer => answer.answer_id === item.accepted_answer_id || answer.is_accepted)
+      const answers = ((got.json.items as AnswerItem[] | undefined) ?? []).filter(answer => isValidId(answer.answer_id));
+      const best = answers.find(answer => (isValidId(item.accepted_answer_id) && answer.answer_id === item.accepted_answer_id) || answer.is_accepted)
         ?? [...answers].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
       if (!best) return { text: '' };
       // Title and excerpt are redacted; the attribution URL is built from the

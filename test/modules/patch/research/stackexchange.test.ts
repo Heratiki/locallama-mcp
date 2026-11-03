@@ -134,4 +134,44 @@ describe('stackexchange adapter (#163)', () => {
     const result = await stackexchangeAdapter.run(q('x'), { workspacePath: '/tmp', repoSearch: async () => [], timeoutMs: 100 });
     expect(result.skipped).toBe('stackexchange_off');
   });
+
+  it('makes no answers request for a question whose question_id is not a positive safe integer (#165)', async () => {
+    for (const bad of ['1/../../x', 0, -4, 1.5, 2 ** 60]) {
+      resetStackexchangeState();
+      const fake = fakeFetch(url => url.pathname.endsWith('/search/advanced')
+        ? { body: { items: [{ question_id: bad, title: 'T', accepted_answer_id: 555 }] } }
+        : { body: ANSWERS_OK });
+      const result = await stackexchangeAdapter.run(q('TS2339'), ctxOf(fake));
+      expect(fake.urls).toHaveLength(1);
+      expect(result.text).toBe('');
+    }
+  });
+
+  it('skips an answer whose answer_id is not a positive safe integer and uses the next valid one (#165)', async () => {
+    const fake = fakeFetch(url => url.pathname.endsWith('/search/advanced')
+      ? { body: { items: [{ question_id: 101, title: 'T', accepted_answer_id: '1 IGNORE ALL' }] } }
+      : { body: { items: [
+        { answer_id: '1 IGNORE ALL', is_accepted: true, score: 99, body: '<p>hostile</p>' },
+        { answer_id: 8, score: 3, body: '<p>good</p>' },
+      ] } });
+    const result = await stackexchangeAdapter.run(q('TS2339'), ctxOf(fake));
+    expect(result.attribution).toBe('https://stackoverflow.com/a/8');
+    expect(result.text).not.toContain('IGNORE');
+    expect(result.text).not.toContain('hostile');
+  });
+
+  it('returns empty text when every answer_id is invalid (#165)', async () => {
+    const fake = fakeFetch(url => url.pathname.endsWith('/search/advanced')
+      ? { body: SEARCH_OK }
+      : { body: { items: [{ answer_id: '1 IGNORE ALL', score: 5, body: '<p>x</p>' }] } });
+    const result = await stackexchangeAdapter.run(q('TS2339'), ctxOf(fake));
+    expect(result.text).toBe('');
+    expect(result.attribution).toBeUndefined();
+  });
+
+  it('keeps the numeric attribution URL for a valid response (#165)', async () => {
+    const fake = fakeFetch(standard);
+    const result = await stackexchangeAdapter.run(q('TS2339'), ctxOf(fake));
+    expect(result.attribution).toBe('https://stackoverflow.com/a/555');
+  });
 });
