@@ -103,7 +103,7 @@ export const LANGUAGES: LintLanguage[] = [
         label: 'clang-tidy', scope: 'files',
         args: wt => existsSync(path.join(wt, 'compile_commands.json')) ? ['-p', '.'] : [],
         tail: wt => existsSync(path.join(wt, 'compile_commands.json')) ? [] : ['--'],
-      }]),
+      }], { needsAny: ['.clang-tidy'] }),
       one('gcc', [files('gcc-syntax', '-fsyntax-only', '-Wall', '-Wextra')]),
     ] }],
   },

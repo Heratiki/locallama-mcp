@@ -84,6 +84,35 @@ describe('auto lint planning with fake tools', () => {
     const { specs } = await plan(['run.sh', 'gone.sh']);
     expect(specs[0].argv.slice(-1)).toEqual(['run.sh']);
   });
+
+  describe('c/c++ clang-tidy needs the repo .clang-tidy', () => {
+    beforeEach(async () => {
+      await writeFile(path.join(worktree, 'm.c'), 'int main(void){return 0;}\n');
+      await fake('clang-tidy');
+      await fake('gcc');
+    });
+
+    it('falls through to gcc-syntax when the repo has no .clang-tidy', async () => {
+      const { specs } = await plan(['m.c']);
+      expect(names(specs)).toEqual(['lint:gcc-syntax']);
+    });
+
+    it('plans clang-tidy with a trailing -- when .clang-tidy exists and no compile_commands.json', async () => {
+      await writeFile(path.join(worktree, '.clang-tidy'), 'Checks: "-*,clang-analyzer-*"\n');
+      const { specs } = await plan(['m.c']);
+      expect(names(specs)).toContain('lint:clang-tidy');
+      expect(specs.find(s => s.name === 'lint:clang-tidy')!.argv)
+        .toEqual([expect.stringContaining('clang-tidy'), 'm.c', '--']);
+    });
+
+    it('plans clang-tidy with -p . when .clang-tidy and compile_commands.json exist', async () => {
+      await writeFile(path.join(worktree, '.clang-tidy'), 'Checks: "-*,clang-analyzer-*"\n');
+      await writeFile(path.join(worktree, 'compile_commands.json'), '[]\n');
+      const { specs } = await plan(['m.c']);
+      expect(specs.find(s => s.name === 'lint:clang-tidy')!.argv)
+        .toEqual([expect.stringContaining('clang-tidy'), '-p', '.', 'm.c']);
+    });
+  });
 });
 
 describe('stdout-means-fail wrapper', () => {
