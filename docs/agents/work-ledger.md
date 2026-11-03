@@ -64,7 +64,7 @@ One line each: what to check, where, and which ticket it closes.
 Newest first: `## Wave N — <date>, <pushed at sha | NOT pushed>` and one line
 per ticket.
 
-## Wave — 2026-11-03, #159-#170; #159-#167 pushed, #168-#170 NOT pushed (main `fabd64c`, ahead 8)
+## Wave — 2026-11-03, #159-#170, pushed at `fabd64c`, all issues closed
 
 - #159-#166: merged and pushed; issues closed. (#159 stacked SEARCH fallback; #160/#162 lint resume shortcut; #161 SearXNG categories; #163 Stack Exchange + offline explain; #164 `LOCALLAMA_ENV_FILE`; #165 SE id validation; #166 auto clang-tidy only with `.clang-tidy`.)
 - #167 output cap from free context + truncation feedback: lane-dev Sonnet, 1 fix round after an Opus adversarial review (cap bounded by `PATCH_CONTEXT_TOKENS`; message names sent `max_tokens`). Pushed; issue open.

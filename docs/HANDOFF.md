@@ -3,10 +3,10 @@
 ## Last Updated
 
 2026-11-03, session close (Linux host). Landed #159-#170 on local main
-`fabd64c`; #159-#167 are on origin, #168-#170 are NOT pushed (main ahead 8).
-Full suite green at `fabd64c`: 125/125 suites, 974/974 tests. Open issues:
-#168-#170 (merged; close after the push; #167 closed). A push attempt at close did not reach origin. Deploy: none; `dist/` rebuilt at
-HEAD, so reconnect `locallama-dev` with `/mcp` to load #168-#170.
+`fabd64c`; all of it is pushed. Issues #159-#170 are closed; no open issues.
+Full suite green at `fabd64c`: 125/125 suites, 974/974 tests. Deploy: none;
+`dist/` rebuilt at HEAD, so reconnect `locallama-dev` with `/mcp` to load
+#168-#170 if it was not reconnected after the push.
 
 ## Session 2026-11-03: what landed
 
@@ -43,8 +43,8 @@ Not verified: #168-#170 in a live job (no language run since they merged).
 
 ## Next session, first three things
 
-1. Ask the maintainer to push main (8 ahead) with the push Button or `/push`,
-   then reconnect `locallama-dev`; close #168-#170 after the push (check `git status -sb` first: a push at close did not reach origin).
+1. Check `git status -sb` (main should equal origin, or be ahead only by
+   handoff commits) and reconnect `locallama-dev` with `/mcp`.
 2. Ask the ruling on the #167 output cap (see the ledger "Open ruling"):
    lower `PATCH_CONTEXT_TOKENS`, or the large cap only on the attempt after a
    truncation. Recommended: the large cap only after a truncation.
