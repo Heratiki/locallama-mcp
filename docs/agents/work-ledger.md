@@ -9,6 +9,7 @@ fails, and when the maintainer rules. Procedure:
 1. `~/.claude/lane-usage.sh`; log the line (memory `lane-usage-tally`,
    "Pool readings"). Baseline 2026-10-29: `claude5hUsed=2% claudeWkUsed=65% gemini5h=100% geminiWk=86% codex5hUsed=0.0% codexWkUsed=12.0% zaiWkUsed=31.0% go5hUsed=0.0% goWkUsed=11.0% goMoUsed=5.0%`.
    Close 2026-10-30T05:26Z: `claude5hUsed=18% claudeWkUsed=69% gemini5h=99% geminiWk=86% codex5hUsed=16.0% codexWkUsed=16.0% zai5hUsed=42.0% zaiWkUsed=39.0% go5hUsed=0.0% goWkUsed=11.0% goMoUsed=5.0%`.
+   Close 2026-11-03T15:24Z: `claude5hUsed=83% claudeWkUsed=20% geminiWk=98% codexWkUsed=30.0% zaiWkUsed=93.0% go5hUsed=13.0% goWkUsed=5.0% goMoUsed=29.0%`. Z.ai week resets 2026-11-03 night; OC-Go was 0%/0%/26% before lanes #168-#170.
 2. Check the model lists (`codex debug models`, `agy models`, the Claude
    models in the session) against the register.
 3. If this repo uses external lanes: the `lanes` tool `list` (and the tmux
@@ -62,6 +63,18 @@ One line each: what to check, where, and which ticket it closes.
 
 Newest first: `## Wave N — <date>, <pushed at sha | NOT pushed>` and one line
 per ticket.
+
+## Wave — 2026-11-03, #159-#170; #159-#167 pushed, #168-#170 NOT pushed (main `fabd64c`, ahead 8)
+
+- #159-#166: merged and pushed; issues closed. (#159 stacked SEARCH fallback; #160/#162 lint resume shortcut; #161 SearXNG categories; #163 Stack Exchange + offline explain; #164 `LOCALLAMA_ENV_FILE`; #165 SE id validation; #166 auto clang-tidy only with `.clang-tidy`.)
+- #167 output cap from free context + truncation feedback: lane-dev Sonnet, 1 fix round after an Opus adversarial review (cap bounded by `PATCH_CONTEXT_TOKENS`; message names sent `max_tokens`). Pushed; issue open.
+- #168 LM Studio honors caller `maxTokens`/`systemPrompt`: opencode `zai-coding-plan/glm-5.3`, ~8 min, PASS first time. NOT pushed; issue open.
+- #169 empty content + length stop = truncation: opencode `opencode-go/kimi-k2.7-code`, ~8 min, PASS first time. NOT pushed; issue open.
+- #170 OpenRouter `max_completion_tokens` bound: opencode `opencode-go/deepseek-v4-pro` (~10 min), then a lane-dev Sonnet fix round (brief missed `openrouter/provider.ts`; orchestrator fault). NOT pushed; issue open.
+- Full suite green at `fabd64c`: 125/125 suites, 974/974 tests.
+- Open ruling: the #167 cap. Language run 4 (gemma-4-12B, $0): the model fills a ~5000-token cap (8 truncations), TS took 674 s vs 50 s. Options: lower `PATCH_CONTEXT_TOKENS`, or a large cap only on the attempt after a truncation.
+- Unfiled follow-ups (orchestrator findings; file only on the maintainer's request): #170 cached tracking lacks the field for up to 24 h; shared `Model` type lacks `maxCompletionTokens`; no HTTP-body test for `max_tokens`; `gate-check --reverify` ran only G1 on the #170 ledger; #169 empty-stop tests assert no message.
+- Dirty paths not committed: `scratch/` (patch worker scratch dirs from live jobs), `docs/agents/model-register.runs.json` and `.lock` (register source, untracked).
 
 ## Wave 0 — 2026-10-29/30, setup only, pushed at 9f2ce2d
 

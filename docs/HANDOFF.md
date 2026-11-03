@@ -2,6 +2,65 @@
 
 ## Last Updated
 
+2026-11-03, session close (Linux host). Landed #159-#170 on local main
+`fabd64c`; #159-#167 are on origin, #168-#170 are NOT pushed (main ahead 8).
+Full suite green at `fabd64c`: 125/125 suites, 974/974 tests. Open issues:
+#167-#170 (merged; close after the push). Deploy: none; `dist/` rebuilt at
+HEAD, so reconnect `locallama-dev` with `/mcp` to load #168-#170.
+
+## Session 2026-11-03: what landed
+
+- #159 stacked apply when SEARCH misses the base; #160/#162 lint resume
+  shortcut; #161 SearXNG categories (`PATCH_RESEARCH_SEARXNG_CATEGORIES`);
+  #163 Stack Exchange API + offline explain sources
+  (`PATCH_RESEARCH_ENABLED`, `PATCH_RESEARCH_STACKEXCHANGE`); #164
+  `LOCALLAMA_ENV_FILE` (jest runs with `none`); #165 SE id validation; #166
+  auto lint runs clang-tidy only with a `.clang-tidy` file (else gcc).
+- #167: for local/free entries `max_tokens` = min(model window,
+  `PATCH_CONTEXT_TOKENS`) − prompt − margin, floor `PATCH_MAX_OUTPUT_TOKENS`;
+  providers report `truncated`; a cut-off answer gets a feedback message.
+- #168 LM Studio passes caller `maxTokens`/`systemPrompt`; #169 empty content
+  with a length stop is truncation, not a call error; #170 OpenRouter
+  `top_provider.max_completion_tokens` bounds the cap.
+- Lanes: Sonnet lane-dev for #166, #167 (+1 fix round after an Opus review),
+  #170 fix round; opencode for #168 (Z.ai glm-5.3), #169 (OC-Go
+  kimi-k2.7-code), #170 (OC-Go deepseek-v4-pro). Details:
+  `docs/agents/work-ledger.md` (wave 2026-11-03).
+
+Language tests (sandbox repos `~/Source/locallama-sandbox/*`, on this host
+only; gemma-4-12B on llama.cpp, $0, `validate: false`, `"lint": "auto"`):
+
+| Run | ts | py | go | sh | c | rust |
+|---|---|---|---|---|---|---|
+| 3 (before #167) | pass | pass | pass | pass | pass | fail (cut-off answers) |
+| 4 (#167, before #168-#170) | fail | pass | pass | pass | pass | fail (3 cut-off, 3 wrong logic) |
+
+Run 4: gemma fills a ~5000-token cap; 8 attempts were cut off; TS took 674 s
+(50 s in run 3). The truncation feedback works (py passed with a 178-token
+answer after it). Run 4 did not have #168-#170 loaded.
+
+Not verified: #168-#170 in a live job (no language run since they merged).
+
+## Next session, first three things
+
+1. Ask the maintainer to push main (8 ahead) with the push Button or `/push`,
+   then reconnect `locallama-dev`; close #167-#170 after the push.
+2. Ask the ruling on the #167 output cap (see the ledger "Open ruling"):
+   lower `PATCH_CONTEXT_TOKENS`, or the large cap only on the attempt after a
+   truncation. Recommended: the large cap only after a truncation.
+3. Run the 6 language tests again (inputs: the `request_json` of the
+   `live-*-lint4` jobs in `data/jobs.db`; task types `live-*-lint5`) and
+   compare with run 4.
+
+## What Is Currently In-Flight
+
+Nothing. No lane, worktree or background command runs. Old `.unlazy` scopes
+with unmet gates (work landed long ago; ask before archive):
+`verify-issue-143`, `verify-issue-146`, `verify-issue-153`,
+`verify-lane-issue-148`, `verify-lane-issue-152`.
+
+## Earlier entries
+
 2026-11-01, /ship: PRD 01 wave (#137-#154) on origin at `3b6e0e6`. Full
 suite green at `3b6e0e6` (99/99 suites, 761/761 tests, `--maxWorkers=2`
 because host RAM was low). `dist/` rebuilt at HEAD for `locallama-dev`

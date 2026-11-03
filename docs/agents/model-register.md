@@ -120,4 +120,50 @@ Ratings: **A** lands the class first time, **B** lands with follow-ups,
 | 2026-11-01T07:10Z | agent-a63e64a2 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=issue-154 |
 | 2026-11-01T07:14Z | issue-148b | codex | ? | medium | write | codex | done | 2.2 | 3 | 0 | gates=4 |
 | 2026-11-01T07:15Z | agent-aa593092 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.9 | 0 | 0 | split, lane=issue-148 |
+| 2026-11-01T13:56Z | agent-ab9d95fb | claude | claude-sonnet-5-5 | low | write | claude | completed | 20.7 | 0 | 0 | split |
+| 2026-11-01T14:15Z | agent-a5c749da | claude | claude-sonnet-5-5 | low | write | claude | completed | 0.6 | 0.1 | 0 | split |
+| 2026-11-01T14:18Z | agent-a6dfcc2e | claude | claude-sonnet-5-5 | medium | build | claude | completed | 2.4 | 0.1 | 0 | split, lane=issue-157, lane=issue-157. |
+| 2026-11-01T14:18Z | agent-a2f3c85a | claude | claude-sonnet-5-5 | medium | build | claude | completed | 2.3 | 0.2 | 0 | split, lane=issue-156 |
+| 2026-11-01T14:19Z | agent-a634ab79 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.6 | 0 | 0 | split, lane=agent-a2f3c85a460b2ad17 |
+| 2026-11-01T14:19Z | agent-ad5f063b | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=agent-a6dfcc2e7f91abb80 |
+| 2026-11-01T14:33Z | issue-155 | opencode | zai-coding-plan/glm-5.3 | ? | ? | opencode | failed | 36.4 | 0 | 0 | no-reading |
+| 2026-11-01T14:39Z | agent-a8c33024 | claude | claude-sonnet-5-5 | low | write | claude | completed | 0.5 | 0 | 0 | split |
+| 2026-11-01T14:49Z | issue-155b | opencode | opencode-go/kimi-k2.7-code | ? | ? | opencode | done | 10.6 | 0 | 0 | no-reading |
+| 2026-11-01T14:51Z | agent-a5f725f4 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1.1 | 0 | 0 | split, lane=issue-155 |
+| 2026-11-01T15:19Z | review-155 | codex | ? | high | ? | codex | done | 28.6 | 7 | 1 | partial |
+| 2026-11-01T15:08Z | fix155-1 | codex | ? | high | ? | codex | done | 12.2 | 10 | 2 |  |
+| 2026-11-01T15:09Z | agy-pid2616547 | agy | ? | ? | ? | agy | exited | 0.1 | 0 | 0 |  |
+| 2026-11-01T15:19Z | agent-a0acd4f4 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 10 | 0.2 | 0.1 | split, lane=issue-155, lane=lane |
+| 2026-11-01T15:18Z | fix155-2 | codex | ? | high | ? | codex | done | 7.1 | 5 | 1 |  |
+| 2026-11-01T15:20Z | agent-a2d44d4c | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0 | 0 | split, lane=issue-155 |
+| 2026-11-01T18:34Z | agent-a68cd2b6 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 2.3 | 0.2 | 0 | split, lane=lane |
+| 2026-11-01T18:35Z | agent-af39d77b | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.6 | 0 | 0 | split, lane=agent-a68cd2b6bf58a4b4b |
+| 2026-11-01T18:44Z | agent-a110fa3c | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=agent-a68c8f1fd12002a70 |
+| 2026-11-02T23:10Z | agent-a1b8d7d5 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 1.3 | 0.3 | 0 | split, lane=lane |
+| 2026-11-02T23:11Z | agent-a3a1d7e0 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.6 | 0 | 0 | split, lane=agent-a1b8d7d5d46848f34 |
+| 2026-11-03T00:56Z | agy-pid1871347 | agy | ? | ? | ? | agy | exited | 103.2 | 1 | 1 | partial |
+| 2026-11-03T01:08Z | agent-a2e700be | claude | claude-sonnet-5-5 | medium | build | claude | completed | 1.6 | 0 | 0 | split, lane=lane |
+| 2026-11-03T01:09Z | agent-ac8e1591 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 2.2 | 0.2 | 0.2 | split, lane=lane |
+| 2026-11-03T01:10Z | agent-a0c3bbd9 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 1 | 0.2 | 0 | split, lane=agent-a2e700beb394c8ac3 |
+| 2026-11-03T01:10Z | agent-a20f3573 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.9 | 0 | 0 | split, lane=agent-ac8e1591922b9f576 |
+| 2026-11-03T01:18Z | agent-a3490cf0 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 3.8 | 0.3 | 0 | split, reset, lane=lane |
+| 2026-11-03T01:19Z | agent-a5fa38d2 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.9 | 0 | 0 | split, lane=agent-a3490cf0c29da299a |
+| 2026-11-03T01:20Z | agent-a4f63165 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.5 | 0 | 0 | split, lane=agent-a3490cf0c29da299a |
+| 2026-11-03T01:25Z | agent-a50eea72 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 9.9 | 0.5 | 0 | split, lane=lane |
+| 2026-11-03T01:27Z | agent-af493cf1 | claude | claude-opus-5-5 | low | verify | claude | completed | 1.9 | 0 | 0 | split, lane=agent-a50eea7226c05b6a2 |
+| 2026-11-03T01:45Z | agent-a13587f1 | claude | claude-sonnet-5-5 | medium | build | claude | completed | 1.1 | 0 | 0 | split, lane=lane |
+| 2026-11-03T01:45Z | agent-aa667cf6 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.4 | 0 | 0 | split, lane=agent-a13587f14e772f264 |
+| 2026-11-03T12:59Z | agent-aa997b1d | claude | claude-sonnet-5-5 | medium | build | claude | completed | 1.5 | 0 | 0 | split, lane=issue-166 |
+| 2026-11-03T13:00Z | agent-a8f64046 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=agent-aa997b1dc1c996509 |
+| 2026-11-03T14:11Z | agent-a06c1a7d | claude | claude-sonnet-5-5 | medium | build | claude | completed | 10.7 | 0.2 | 0 | split, lane=issue-167 |
+| 2026-11-03T14:07Z | agent-ab1f7e04 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.9 | 0 | 0 | split, lane=agent-a06c1a7dfb73d0a0e |
+| 2026-11-03T14:09Z | agent-ad384fa2 | claude | claude-opus-5-5 | medium | ? | claude | completed | 1.9 | 0 | 0 | split, lane=agent-a06c1a7dfb73d0a0e |
+| 2026-11-03T14:14Z | agent-a9e59a28 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 2.8 | 0 | 0 | split, lane=agent-a06c1a7dfb73d0a0e |
+| 2026-11-03T15:08Z | issue-170 | opencode | opencode-go/deepseek-v4-pro | ? | ? | opencode | done | 10.4 | 0 | 0 | shared |
+| 2026-11-03T15:09Z | issue-168 | opencode | zai-coding-plan/glm-5.3 | ? | ? | opencode | done | 8 | 0 | 0 | shared |
+| 2026-11-03T15:10Z | agent-ad7354ce | claude | claude-sonnet-5-5 | medium | build | claude | completed | 1.1 | 0.2 | 0 | split, lane=issue-170 |
+| 2026-11-03T15:10Z | agent-ac8ad8df | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.7 | 0 | 0 | split, lane=issue-168 |
+| 2026-11-03T15:11Z | agent-a47d1718 | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.8 | 0 | 0 | split, lane=agent-ad7354ce100cad921 |
+| 2026-11-03T15:19Z | issue-169 | opencode | opencode-go/kimi-k2.7-code | ? | ? | opencode | done | 8.3 | 0 | 0 | no-reading |
+| 2026-11-03T15:20Z | agent-ab9d5e8d | claude | claude-sonnet-5-5 | low | verify | claude | completed | 0.6 | 0 | 0 | split, lane=lane |
 <!-- generated from model-register.runs.json; edit with register.py, not by hand -->
