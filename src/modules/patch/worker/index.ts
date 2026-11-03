@@ -64,6 +64,8 @@ const message = (error: unknown): string => error instanceof Error ? error.messa
 const sameModel = (row: PatchAttemptRow, entry: LadderEntry): boolean =>
   row.model_id === entry.model_id && row.provider_id === entry.provider_id;
 
+const sameNames = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
+
 /** The dispatcher claims jobs before run(), and calls cancel() after cancelling their rows. */
 export class PatchWorker {
   private readonly running = new Map<string, AbortController>();
@@ -236,10 +238,18 @@ export class PatchWorker {
       // If the process died between the durable passing attempt and terminal
       // write, its proven diff can complete without another inference/check run.
       // With lint on, a passing attempt also stored the planned lint checks (named lint:*).
-      const lintResumable = lint !== undefined && lastChecks.length > specs.length
-        && specs.every(s => lastChecks.some(c => c.name === s.name))
-        && lastChecks.filter(c => !specs.some(s => s.name === c.name)).every(c => c.name.startsWith('lint:'));
-      if (last?.outcome === 'passed' && (lastChecks.length === specs.length || lintResumable) && lastChecks.every(c => c.exit_code === 0 && !c.timed_out)) {
+      // The stored check names must equal the explicit specs plus the lint plan for the
+      // attempt's changed files; a plan that fails to build means no shortcut.
+      let expectedLint: string[] | undefined;
+      if (lint !== undefined && last?.outcome === 'passed') {
+        try {
+          const plan = await planLint({ worktree: ws.path, files: details(last).files, lint });
+          expectedLint = plan.specs.map(s => s.name);
+        } catch { expectedLint = undefined; }
+      }
+      const lintResumable = lint !== undefined && expectedLint !== undefined
+        && sameNames(lastChecks.map(c => c.name), [...specs.map(s => s.name), ...expectedLint]);
+      if (last?.outcome === 'passed' && (lint === undefined ? lastChecks.length === specs.length : lintResumable) && lastChecks.every(c => c.exit_code === 0 && !c.timed_out)) {
         const saved = details(last);
         result.status = 'passed'; result.reason = 'passed'; result.diff = saved.diff; result.files_changed = saved.files;
         try { if (researchEnabled()) await store.markResearchNotesHelped(jobId, last.n, 1,
