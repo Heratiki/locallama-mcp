@@ -1,3 +1,11 @@
+## [1.35.3](https://github.com/Heratiki/locallama-mcp/compare/v1.35.2...v1.35.3) (2026-11-03)
+
+
+### Bug Fixes
+
+* **patch:** bound output cap by PATCH_CONTEXT_TOKENS, name sent max_tokens on truncation ([bc08494](https://github.com/Heratiki/locallama-mcp/commit/bc08494892b8d0b385c50ba0c22630cd3e172449)), closes [#167](https://github.com/Heratiki/locallama-mcp/issues/167)
+* **patch:** size output cap from free context and report truncated answers ([405607c](https://github.com/Heratiki/locallama-mcp/commit/405607c16a4bd1e9795a6f94c5ad2d7c0c564b61)), closes [#167](https://github.com/Heratiki/locallama-mcp/issues/167)
+
 ## [1.35.2](https://github.com/Heratiki/locallama-mcp/compare/v1.35.1...v1.35.2) (2026-11-03)
 
 
