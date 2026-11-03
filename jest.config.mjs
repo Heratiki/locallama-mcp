@@ -24,6 +24,8 @@ export default {
   // excluded test runs inside git worktrees under .claude/worktrees/.
   // To revert: remove `roots` and restore testPathIgnorePatterns to
   //   ['/node_modules/', '/.claude/']
+  // Never read the developer's repo .env under jest (issue #164).
+  setupFiles: ['<rootDir>/test/setup/no-env-file.cjs'],
   roots: ['<rootDir>/test'],
   testPathIgnorePatterns: ['/node_modules/'],
   injectGlobals: true,

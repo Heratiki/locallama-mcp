@@ -98,6 +98,7 @@ describe('root path resolution', () => {
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
       LOCALLAMA_ROOT_DIR: tempRootDir,
+      LOCALLAMA_ENV_FILE: path.join(tempRootDir, '.env'),
     };
     delete childEnv.BENCHMARK_RESULTS_PATH;
 

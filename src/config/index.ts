@@ -8,8 +8,23 @@ import { fileURLToPath } from 'url';
 // LOCALLAMA_ROOT_DIR overrides for tests or custom deployments.
 const rootDir = process.env.LOCALLAMA_ROOT_DIR ||
   path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+/**
+ * Resolve the env file to read. LOCALLAMA_ENV_FILE overrides the default
+ * <rootDir>/.env; the value "none" means read no file (jest sets this).
+ */
+function resolveEnvFile(): string | null {
+  const override = process.env.LOCALLAMA_ENV_FILE;
+  if (override === undefined || override === '') {
+    return path.join(rootDir, '.env');
+  }
+  return override === 'none' ? null : override;
+}
+
 // Load environment variables from a stable root path instead of caller cwd.
-dotenv.config({ path: path.join(rootDir, '.env') });
+const startupEnvFile = resolveEnvFile();
+if (startupEnvFile) {
+  dotenv.config({ path: startupEnvFile });
+}
 
 /**
  * Type definitions for the configuration
@@ -625,12 +640,14 @@ function validateConfigValues(cfg: Config): void {
  * If validation fails, the active runtime config remains unchanged.
  */
 export function reloadConfig(): ReloadConfigResult {
-  const envPath = path.join(rootDir, '.env');
-  const dotenvResult = dotenv.config({ path: envPath, override: true });
-  if (dotenvResult.error) {
-    const err = dotenvResult.error as NodeJS.ErrnoException;
-    if (err.code !== 'ENOENT') {
-      throw dotenvResult.error;
+  const envPath = resolveEnvFile();
+  if (envPath) {
+    const dotenvResult = dotenv.config({ path: envPath, override: true });
+    if (dotenvResult.error) {
+      const err = dotenvResult.error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw dotenvResult.error;
+      }
     }
   }
 
@@ -642,7 +659,7 @@ export function reloadConfig(): ReloadConfigResult {
     success: true,
     message:
       'Configuration reloaded from .env. Hot-reloadable fields were applied; restart-required fields were left unchanged.',
-    envPath,
+    envPath: envPath ?? 'none',
     appliedFields: HOT_RELOADABLE_CONFIG_FIELDS,
     restartRequiredFields: RESTART_REQUIRED_CONFIG_FIELDS,
     activeConfig: getActiveHotReloadSnapshot(config),
