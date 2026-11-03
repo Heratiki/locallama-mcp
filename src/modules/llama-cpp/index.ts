@@ -455,7 +455,7 @@ export const llamaCppModule = {
   async executeTask(
     modelId: string,
     task: string,
-    options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal },
+    options?: { timeoutMs?: number; systemPrompt?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal; onFinish?: (info: { truncated: boolean }) => void },
   ): Promise<string> {
     if (!config.llamaCppEndpoint) {
       throw new Error('LLAMA_CPP_ENDPOINT not configured');
@@ -488,6 +488,7 @@ export const llamaCppModule = {
       }
     }
 
+    options?.onFinish?.({ truncated: result.truncated === true });
     return result.text;
   },
 
@@ -551,6 +552,7 @@ export const llamaCppModule = {
         usage: usage
           ? { prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens }
           : undefined,
+        truncated: response.data.choices[0].finish_reason === 'length',
       };
     } catch (error) {
       clearTimeout(timeoutId);

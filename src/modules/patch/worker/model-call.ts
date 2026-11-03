@@ -17,9 +17,28 @@ export interface ModelCallOptions {
   persistSpend: (value: { paid_spent_usd: number; paid_reserved_usd: number }) => Promise<void>;
 }
 
+/** Tokens kept free below the output cap: our token count is an estimate of the model's own. */
+const OUTPUT_SAFETY_MARGIN_TOKENS = 128;
+
+/**
+ * Output cap for one call (#167). Local and free entries may use the whole free
+ * context, so a long answer is not cut at PATCH_MAX_OUTPUT_TOKENS. Paid entries
+ * keep PATCH_MAX_OUTPUT_TOKENS because the paid ledger reserves money on it.
+ */
+export function outputCap(
+  entry: LadderEntry, window: number, promptTokens: number, minimum: number, contextTokens?: number,
+): number {
+  if (entry.cost_class === 'paid') return minimum;
+  // The reported window can be the training window, far above what the server runs with.
+  // Use the same bound as the prompt builder.
+  if (contextTokens !== undefined && Number.isFinite(contextTokens)) window = Math.min(window, contextTokens);
+  const margin = Math.max(OUTPUT_SAFETY_MARGIN_TOKENS, Math.ceil(promptTokens * 0.1));
+  return Math.max(minimum, window - promptTokens - margin);
+}
+
 /** All generation and judge calls share this path, cancellation and ledger. */
 export class PatchModelCalls {
-  readonly usage: CallUsage[] = [];
+  readonly usage: (CallUsage & { max_tokens?: number })[] = [];
   private readonly ledger: PaidLedger;
   private previousCall: Promise<unknown> = Promise.resolve();
 
@@ -80,6 +99,7 @@ export class PatchModelCalls {
     if (promptTokens + settings.patchMaxOutputTokens > window) {
       throw new ContextWindowError(entry.model_id, promptTokens + settings.patchMaxOutputTokens, window);
     }
+    const maxTokens = outputCap(entry, window, promptTokens, settings.patchMaxOutputTokens, settings.patchContextTokens);
     let reservation = 0;
     if (entry.cost_class === 'paid') {
       const reserved = this.ledger.reserve(entry, promptTokens);
@@ -113,7 +133,7 @@ export class PatchModelCalls {
         this.checkStop();
         invoked = true;
         return provider.executeTask(entry.model_id, prompt, {
-          systemPrompt: system, maxTokens: settings.patchMaxOutputTokens,
+          systemPrompt: system, maxTokens,
           timeoutMs: settings.patchInferenceTimeoutMs, signal: controller.signal,
         });
       }, { modelId: entry.model_id, workload: 'task' });
@@ -147,7 +167,7 @@ export class PatchModelCalls {
           model_id: entry.model_id, provider_id: entry.provider_id, cost_class: entry.cost_class,
           prompt_tokens: valid(result?.promptTokens) ? result.promptTokens : promptTokens,
           completion_tokens: valid(result?.completionTokens) ? result.completionTokens : countTokens(result?.content ?? ''),
-          cost_usd: cost,
+          cost_usd: cost, max_tokens: maxTokens,
         });
       }
     }

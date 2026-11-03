@@ -282,6 +282,7 @@ export class PatchWorker {
         const usageOffset = calls.usage.length;
         let attemptChecks: CheckResult[] = [];
         let blocks: EditBlock[] = [];
+        let truncated = false;
         let stackedBlocks: EditBlock[] | undefined;
         let diff = '';
         let files: string[] = [];
@@ -324,7 +325,15 @@ export class PatchWorker {
               blocks = parsed.blocks;
               if (parsed.errors.length || blocks.length === 0) {
                 outcome = 'apply_error';
-                error = parsed.errors.join('\n') || 'No edit blocks in model output';
+                if (response.truncated === true) {
+                  // #167: the model did not make a format error; its answer hit the output cap.
+                  truncated = true;
+                  const cut = calls.usage[calls.usage.length - 1]?.max_tokens ?? settings.patchMaxOutputTokens;
+                  error = `Your answer was cut off at ${cut} output tokens before the edit blocks ended. ` +
+                    'Send only the edit blocks: no explanation, no comments that think aloud, and the shortest correct code.';
+                } else {
+                  error = parsed.errors.join('\n') || 'No edit blocks in model output';
+                }
                 return;
               }
               await this.options.backend.reset(ws!);
@@ -400,9 +409,10 @@ export class PatchWorker {
         const duration = Math.max(0, this.now() - attemptStarted);
         if (began) {
           const attemptUsage = calls.usage.slice(usageOffset);
-          const meta: AttemptDetails & { research?: ResearchRecord; stacked?: boolean; effective_blocks?: EditBlock[] } = {
+          const meta: AttemptDetails & { research?: ResearchRecord; stacked?: boolean; effective_blocks?: EditBlock[]; truncated?: boolean } = {
             blocks, calls: attemptUsage, diff, files, ...(validation ? { validation } : {}),
             ...(stackedBlocks ? { stacked: true, effective_blocks: stackedBlocks } : {}),
+            ...(truncated ? { truncated: true } : {}),
           };
           if (attemptResearch) {
             meta.research = attemptResearch;

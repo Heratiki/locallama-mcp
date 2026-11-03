@@ -78,6 +78,8 @@ export interface LlamaCppApiCallResult {
     prompt_tokens: number;
     completion_tokens: number;
   };
+  /** finish_reason was "length": the answer was cut at the output cap. */
+  truncated?: boolean;
   error?: LlamaCppErrorType;
 }
 

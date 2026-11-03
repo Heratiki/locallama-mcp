@@ -38,7 +38,7 @@ const local = (model_id = 'qwen-1'): LadderEntry => ({ model_id, provider_id: 'f
 const paid: LadderEntry = { model_id: 'paid-1', provider_id: 'paid', cost_class: 'paid', prompt_price: 0.00001, completion_price: 0.00002 };
 const block = (value = 2) => `a.ts\n<<<<<<< SEARCH\nexport const value = 1;\n=======\nexport const value = ${value};\n>>>>>>> REPLACE\n`;
 const check: CheckSpec = { name: 'unit', argv: [process.execPath, '-e', "const f=require('fs'); if(!f.readFileSync('a.ts','utf8').includes('value = 2')) {console.error('expected value TWO');process.exit(1)}"] };
-type Reply = (model: string, prompt: string, options: TaskExecutionOptions) => Promise<{ content: string; promptTokens?: number; completionTokens?: number }>;
+type Reply = (model: string, prompt: string, options: TaskExecutionOptions) => Promise<{ content: string; promptTokens?: number; completionTokens?: number; truncated?: boolean }>;
 
 function provider(id = 'fake', costClass: 'local' | 'free' | 'paid' = 'local', reply: Reply = async () => ({ content: block() })): LLMProvider {
   return {
@@ -112,7 +112,8 @@ describe('patch worker', () => {
     expect(spans.map(s => s.name)).toEqual(expect.arrayContaining(['patch.snapshot', 'patch.worktree.create', 'patch.attempt', 'patch.check', 'patch.diff']));
     expect(spans.find(s => s.name === 'patch.task')!.attributes).toMatchObject({ 'patch.outcome': 'passed', 'patch.attempts': 1, 'patch.cost_usd': 0 });
     expect(scheduled).toHaveBeenCalledTimes(1);
-    expect(calls[0].options).toMatchObject({ maxTokens: 2000, timeoutMs: 900000, signal: expect.any(AbortSignal) });
+    expect(calls[0].options.maxTokens).toBeGreaterThanOrEqual(2000); // #167: a local entry gets the free context
+    expect(calls[0].options).toMatchObject({ timeoutMs: 900000, signal: expect.any(AbortSignal) });
     expect(calls[0].options.systemPrompt).toContain('SEARCH');
     expect((await store.getPatchAttempts('job'))[0]).toMatchObject({ n: 1, outcome: 'passed' });
     expect(JSON.parse((await store.getJob('job'))!.result!)).toEqual(result);
@@ -207,6 +208,48 @@ describe('patch worker', () => {
     expect((await worker().run('job')).status).toBe('passed');
     expect(calls[1].prompt).toContain('No edit blocks');
     expect(calls[2].prompt).toContain('SEARCH text not found');
+  });
+
+  it('tells the model its answer was cut off when a truncated answer has an unfinished block (#167)', async () => {
+    const cut = 'a.ts\n<<<<<<< SEARCH\nexport const value = 1;\n=======\nexport const value = 2; // thinking aloud';
+    registry.register(provider('fake', 'local', async () => (
+      calls.length === 1 ? { content: cut, completionTokens: 1234, truncated: true } : { content: block() })));
+    await submit();
+    expect((await worker().run('job')).status).toBe('passed');
+    expect(calls[1].prompt).toContain(`cut off at ${calls[0].options.maxTokens} output tokens`);
+    expect(calls[1].prompt).toContain('only the edit blocks');
+    expect(calls[1].prompt).toContain('no comments');
+    expect(calls[1].prompt).not.toContain('missing the >>>>>>> REPLACE end marker');
+    const [first] = await store.getPatchAttempts('job');
+    expect(first.outcome).toBe('apply_error');
+    expect(JSON.parse(first.edit_blocks!).truncated).toBe(true);
+  });
+
+  it('also names truncation when a truncated answer holds no edit block (#167)', async () => {
+    registry.register(provider('fake', 'local', async () => (
+      calls.length === 1 ? { content: 'Let me think about this...', completionTokens: 2000, truncated: true } : { content: block() })));
+    await submit();
+    expect((await worker().run('job')).status).toBe('passed');
+    expect(calls[1].prompt).toContain(`cut off at ${calls[0].options.maxTokens} output tokens`);
+    expect(calls[1].prompt).not.toContain('No edit blocks in model output');
+  });
+
+  it('names the max_tokens the provider got when the provider returns no usage (#167)', async () => {
+    registry.register(provider('fake', 'local', async () => (
+      calls.length === 1 ? { content: 'a.ts\n<<<<<<< SEARCH\nx', truncated: true } : { content: block() })));
+    await submit();
+    expect((await worker().run('job')).status).toBe('passed');
+    const sent = calls[0].options.maxTokens;
+    expect(sent).toBeGreaterThan(0);
+    expect(calls[1].prompt).toContain(`cut off at ${sent} output tokens`);
+  });
+
+  it('applies a truncated answer whose blocks parse cleanly as usual (#167)', async () => {
+    registry.register(provider('fake', 'local', async () => ({ content: block(), completionTokens: 2000, truncated: true })));
+    await submit();
+    const result = await worker().run('job');
+    expect(result).toMatchObject({ status: 'passed', attempts: 1 });
+    expect(calls).toHaveLength(1);
   });
 
   it('passes PATCH_WHOLE_FILE_MAX_LINES from config to the applier', async () => {

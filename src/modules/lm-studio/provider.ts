@@ -87,9 +87,15 @@ class LMStudioProvider implements LLMProvider {
       ...buildCodeTaskExecutionOptions(task, 'lm-studio'),
       ...options,
     };
-    const content = await raceAbort(lmStudioModule.executeTask(id, task, { ...executionOptions, timeoutMs: options?.timeoutMs }), options?.signal);
+    let truncated = false;
+    const content = await raceAbort(
+      lmStudioModule.executeTask(id, task, {
+        ...executionOptions, timeoutMs: options?.timeoutMs, onFinish: info => { truncated = info.truncated; },
+      }),
+      options?.signal,
+    );
     this.lastExecutedModelId = id;
-    return { content, model: id };
+    return { content, model: id, truncated };
   }
 
   async releaseResources(options?: { reason?: 'cross-provider-handoff' | 'same-provider-model-switch' | 'shutdown' | 'manual'; modelId?: string }): Promise<void> {
