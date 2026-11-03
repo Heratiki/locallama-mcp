@@ -128,4 +128,41 @@ describe('patch worker with lint auto', () => {
     expect(prompts.length).toBeGreaterThan(0);
     expect(result.status).toBe('passed');
   });
+
+  // #162: the shortcut must match the current lint plan, not just the lint: prefix.
+  const persistChecks = (names: string[]) => async (backend: InstanceType<typeof GitWorkspaceBackend>, base: string) => {
+    const ws = await backend.create(base, 'job');
+    await writeFile(path.join(ws.path, 'a.ts'), 'export const value = 2; // ok\n');
+    const diff = await backend.diff(ws);
+    await store.recordAttemptStart('job', { cursor_model: 0, attempts_used: 1 });
+    await store.insertPatchAttempt({ job_id: 'job', n: 1, model_id: 'qwen-1', provider_id: 'fake', cost_class: 'local',
+      prompt_tokens: 10, completion_tokens: 20, cost_usd: 0,
+      edit_blocks: JSON.stringify({ blocks: [], calls: [], files: ['a.ts'], diff }), outcome: 'passed', apply_error: null,
+      checks_json: JSON.stringify(names.map(name => ({ name, exit_code: 0, timed_out: false, duration_ms: 1, tail: '' }))),
+      duration_ms: 1, started_at: 1, ended_at: 2 });
+  };
+
+  it('does not resume when the plan now has a second lint check the stored attempt lacks', async () => {
+    await writeFile(path.join(repo, 'tsconfig.json'), '{}\n');
+    await git('add', 'tsconfig.json');
+    await git('commit', '-qm', 'tsconfig');
+    const tsc = path.join(root, 'bin', 'tsc');
+    await writeFile(tsc, '#!/bin/sh\nexit 0\n');
+    await chmod(tsc, 0o755);
+    const result = await run({ checks: [unit], lint: 'auto' }, persistChecks(['unit', 'lint:oxlint']));
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(result.status).toBe('passed');
+  });
+
+  it('does not resume when a stored lint check is not in the current plan', async () => {
+    const result = await run({ checks: [unit], lint: { auto: true, exclude: ['oxlint'] } }, persistChecks(['unit', 'lint:oxlint']));
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(result.status).toBe('passed');
+  });
+
+  it('resumes with no model call when lint is on, every linter is skipped and stored checks equal the specs', async () => {
+    const result = await run({ checks: [unit], lint: { auto: true, exclude: ['oxlint'] } }, persistChecks(['unit']));
+    expect(result).toMatchObject({ status: 'passed', attempts: 1 });
+    expect(prompts).toHaveLength(0);
+  });
 });
