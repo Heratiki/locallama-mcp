@@ -105,6 +105,8 @@ export interface Config {
   // Harness-driven research between patch attempts (#155): off unless
   // PATCH_RESEARCH_SEARXNG_URL is configured (maintainer ruling 3).
   patchResearchSearxngUrl: string;
+  // SearXNG categories sent with each search (#161); empty list sends none.
+  patchResearchSearxngCategories: string[];
   patchResearchSourceTimeoutMs: number;
   patchResearchTokens: number;
   patchResearchNotesMax: number;
@@ -225,6 +227,7 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'patchWholeFileMaxLines',
   'patchPaidCapUsd',
   'patchResearchSearxngUrl',
+  'patchResearchSearxngCategories',
   'patchResearchSourceTimeoutMs',
   'patchResearchTokens',
   'patchResearchNotesMax',
@@ -279,6 +282,23 @@ function parseNumber(value: string | undefined, defaultValue: number, min?: numb
   if (min !== undefined && num < min) return min;
   if (max !== undefined && num > max) return max;
   return num;
+}
+
+/**
+ * PATCH_RESEARCH_SEARXNG_CATEGORIES (#161): comma-separated SearXNG categories.
+ * Unset gives it,general; an empty value gives none (no parameter is sent).
+ * Items are trimmed; empty ones are dropped; items outside [a-z0-9 _-] are
+ * dropped with one warning. (Not the logger: it imports this module.)
+ */
+function parseSearxngCategories(value: string | undefined): string[] {
+  if (value === undefined) return ['it', 'general'];
+  const items = value.split(',').map(item => item.trim()).filter(item => item !== '');
+  const valid = items.filter(item => /^[a-z0-9 _-]+$/.test(item));
+  if (valid.length !== items.length) {
+    const dropped = items.filter(item => !valid.includes(item));
+    console.warn(`PATCH_RESEARCH_SEARXNG_CATEGORIES: dropped invalid items (allowed: a-z 0-9 space _ -): ${dropped.join(', ')}`);
+  }
+  return valid;
 }
 
 /**
@@ -381,6 +401,7 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
 
     // Research between attempts (#155): no default URL — empty means off.
     patchResearchSearxngUrl: (env.PATCH_RESEARCH_SEARXNG_URL || '').trim(),
+    patchResearchSearxngCategories: parseSearxngCategories(env.PATCH_RESEARCH_SEARXNG_CATEGORIES),
     patchResearchSourceTimeoutMs: parseNumber(env.PATCH_RESEARCH_SOURCE_TIMEOUT_MS, 5000),
     patchResearchTokens: parseNumber(env.PATCH_RESEARCH_TOKENS, 800),
     patchResearchNotesMax: parseNumber(env.PATCH_RESEARCH_NOTES_MAX, 500),

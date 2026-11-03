@@ -10,6 +10,7 @@ jest.unstable_mockModule('../../../../dist/utils/logger.js', () => ({
   logger: { error: jest.fn(), warn, info: jest.fn(), debug: jest.fn() },
 }));
 
+const { config } = await import('../../../../dist/config/index.js');
 const { probeSearxng, searchSearxng, resetSearxngProbeCache } = await import('../../../../dist/modules/patch/research/searxng.js');
 
 let server: http.Server | undefined;
@@ -142,4 +143,33 @@ it('S7 times out while reading a stalled response body after headers', async () 
   await expect(searchSearxng(baseUrl, 'stalled body', 100, 3)).rejects.toThrow('timed out');
   expect(Date.now() - began).toBeLessThan(500);
   expect(await probeSearxng(baseUrl, 100)).toBe('unreachable');
+});
+
+describe('SearXNG categories parameter (#161)', () => {
+  const saved = config.patchResearchSearxngCategories;
+  afterEach(() => { config.patchResearchSearxngCategories = saved; });
+  const ok = (_req: http.IncomingMessage, res: http.ServerResponse) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"results":[]}'); };
+
+  it('sends categories=it,general (URL-encoded) with format=json by default', async () => {
+    config.patchResearchSearxngCategories = ['it', 'general'];
+    await start(ok);
+    await searchSearxng(baseUrl, 'TS2339 fix', 1000, 3);
+    expect(requests[0].url).toContain('categories=it%2Cgeneral');
+    expect(requests[0].url).toContain('format=json');
+  });
+
+  it('sends no categories parameter when the list is empty', async () => {
+    config.patchResearchSearxngCategories = [];
+    await start(ok);
+    await searchSearxng(baseUrl, 'TS2339 fix', 1000, 3);
+    expect(requests[0].url).not.toContain('categories');
+  });
+
+  it('the probe uses the same URL shape', async () => {
+    config.patchResearchSearxngCategories = ['it', 'general'];
+    await start(ok);
+    await probeSearxng(baseUrl, 1000);
+    expect(requests[0].url).toContain('categories=it%2Cgeneral');
+    expect(requests[0].url).toContain('format=json');
+  });
 });

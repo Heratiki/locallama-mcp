@@ -211,6 +211,7 @@ Resolved worker settings are persisted at submission
 | `PATCH_WHOLE_FILE_MAX_LINES` | `150` | Existing-file whole-file replacement limit. |
 | `PATCH_PAID_CAP_USD` | `0.25` | Default cap when paid calls are opted into. |
 | `PATCH_RESEARCH_SEARXNG_URL` | empty | SearXNG base URL; empty disables research. Must serve `format=json`. |
+| `PATCH_RESEARCH_SEARXNG_CATEGORIES` | `it,general` | Comma-separated SearXNG `categories` sent with every search and the probe. Empty sends none (old behavior). Items are trimmed; empty or non `[a-z0-9 _-]` items are dropped with one warning. Restart required. |
 | `PATCH_RESEARCH_SOURCE_TIMEOUT_MS` | `5000` | Per-source timeout, also applied to SearXNG. |
 | `PATCH_RESEARCH_TOKENS` | `800` | Hard token budget for the research block; 0 disables research. |
 | `PATCH_RESEARCH_NOTES_MAX` | `500` | Helped notes cap per scope; oldest evicted first. Scope filtering precedes top-k ranking; index fingerprints include note IDs
