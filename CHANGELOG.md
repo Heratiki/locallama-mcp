@@ -1,3 +1,12 @@
+## [1.35.4](https://github.com/Heratiki/locallama-mcp/compare/v1.35.3...v1.35.4) (2026-11-03)
+
+
+### Bug Fixes
+
+* **lm-studio:** let executeTask honor caller maxTokens and systemPrompt ([091c562](https://github.com/Heratiki/locallama-mcp/commit/091c5623ffac50cb2cbe10968b52a2ebda1aa88c)), closes [#167](https://github.com/Heratiki/locallama-mcp/issues/167) [#168](https://github.com/Heratiki/locallama-mcp/issues/168)
+* **openrouter:** pass maxCompletionTokens through the provider adapter ([091c589](https://github.com/Heratiki/locallama-mcp/commit/091c589dada29960b6b7c660594344f3b8b9396a)), closes [#170](https://github.com/Heratiki/locallama-mcp/issues/170)
+* **providers:** empty content with length stop is truncation, not error ([00f8aed](https://github.com/Heratiki/locallama-mcp/commit/00f8aedc1567f79e5494b4a21bf0779d10cc3196)), closes [#169](https://github.com/Heratiki/locallama-mcp/issues/169)
+
 ## [1.35.3](https://github.com/Heratiki/locallama-mcp/compare/v1.35.2...v1.35.3) (2026-11-03)
 
 
