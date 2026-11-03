@@ -7,7 +7,7 @@ import { runChecks, loadChecksConfig, planLint } from '../checks/index.js';
 import { parseEditBlocks, applyEditBlocks } from '../edit-blocks/index.js';
 import { buildPrompt } from '../prompt/index.js';
 import { errorSignature, sameSignature, nextCursor, stopReason, pickValidator, hasBudgetNow } from '../ladder/index.js';
-import { detectStuck, runResearch } from '../research/index.js';
+import { detectStuck, runResearch, researchGate } from '../research/index.js';
 import { truncateTail } from '../checks/output.js';
 import type {
   AttemptOutcome, CheckResult, CheckSpec, ChecksConfig, EditBlock, LadderEntry, LintSkipped, PatchDiagnosis, ResearchRecord, Workspace, WorkspaceBackend,
@@ -137,7 +137,7 @@ export class PatchWorker {
     let noteSpansForNext: { id: number; end: number }[] = [];
     const researchUsed: ResearchRecord[] = [];
     const researchEnabled = (): boolean =>
-      config.patchResearchSearxngUrl !== '' && config.patchResearchTokens > 0;
+      researchGate(config.patchResearchEnabled, config.patchResearchSearxngUrl, config.patchResearchTokens);
     const summaries: PatchDiagnosis['attempts'] = [];
     const usage: CallUsage[] = [];
     try {
@@ -462,6 +462,7 @@ export class PatchWorker {
                   sourceTimeoutMs: config.patchResearchSourceTimeoutMs,
                   tokens: config.patchResearchTokens,
                   notesMax: config.patchResearchNotesMax,
+                  enabled: config.patchResearchEnabled,
                   ...(config.patchResearchStackexchange
                     ? { stackexchange: { key: config.patchResearchStackexchangeKey || undefined } } : {}),
                 },

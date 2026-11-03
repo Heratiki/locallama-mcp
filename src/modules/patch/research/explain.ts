@@ -1,6 +1,5 @@
-import { accessSync, constants, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import path from 'node:path';
+import { findBin } from '../checks/lint/index.js';
 import type { ResearchSourceAdapter, SourceText } from './sources.js';
 import { runTool, ToolMissingError } from './sources.js';
 
@@ -43,29 +42,6 @@ export function explainCommands(errorText: string): ExplainCommand[] {
   return out;
 }
 
-function isExecutable(file: string): boolean {
-  try {
-    if (!statSync(file).isFile()) return false;
-    accessSync(file, constants.X_OK);
-    return true;
-  } catch { return false; }
-}
-
-/** Same lookup dirs as the #158 lint planner (its helper is not exported). */
-function findBin(bin: string, worktree: string): string | undefined {
-  const home = process.env.HOME || homedir();
-  const dirs = [
-    path.join(worktree, 'node_modules', '.bin'),
-    ...(process.env.PATH ?? '').split(path.delimiter).filter(dir => path.isAbsolute(dir)),
-    path.join(home, '.local', 'bin'), path.join(home, 'go', 'bin'), path.join(home, '.cargo', 'bin'),
-  ];
-  for (const dir of dirs) {
-    const candidate = path.join(dir, bin);
-    if (isExecutable(candidate)) return candidate;
-  }
-  return undefined;
-}
-
 export const explainAdapter: ResearchSourceAdapter = {
   source: 'explain',
   async run(_query, ctx): Promise<SourceText> {
@@ -76,7 +52,7 @@ export const explainAdapter: ResearchSourceAdapter = {
     for (const command of commands) {
       if (command.hint) { parts.push(`See ${command.hint}`); continue; }
       const argv = command.argv!;
-      const abs = findBin(argv[0], ctx.workspacePath);
+      const abs = findBin(argv[0], ctx.workspacePath, process.env.PATH ?? '', process.env.HOME || homedir());
       if (!abs) { missing = true; continue; }
       let result;
       try {

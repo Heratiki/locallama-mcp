@@ -134,7 +134,7 @@ tool; the harness builds queries from the error text and touched files, runs loc
 and a user-configured SearXNG instance, and appends a bounded "## Research notes" section
 to the next prompt after the errors section.
 
-Research is **off by default**. It turns on only when `PATCH_RESEARCH_SEARXNG_URL` is set
+Research is **off by default**. It turns on when `PATCH_RESEARCH_ENABLED=on`, or (unset) when `PATCH_RESEARCH_SEARXNG_URL` is set
 to a reachable SearXNG URL and `PATCH_RESEARCH_TOKENS` is greater than 0. Local sources
 (BM25 over the repo, dependency docs/types, `pydoc`, `go doc`, `man`) always run; the
 SearXNG source runs only when the instance probes OK. A 403 on `format=json` means the
@@ -156,8 +156,10 @@ come from `sysconfig`, with optional external search paths passed as arguments.
 ### Stack Exchange and offline explain sources (#163)
 
 Two more sources need no general web search. Run order: repo, deps, language docs, `explain`,
-`stackexchange`, then SearXNG. The research gate is unchanged: the step still runs only when
-`PATCH_RESEARCH_SEARXNG_URL` is set and `PATCH_RESEARCH_TOKENS` > 0.
+`stackexchange`, then SearXNG. Gate: `PATCH_RESEARCH_ENABLED` (`on`/`off`, default unset). On: the local,
+explain and Stack Exchange sources run when stuck, and SearXNG adds web results only when
+`PATCH_RESEARCH_SEARXNG_URL` is set. Unset: on only when that URL is set (the #155 behavior). `off`:
+all research off even with a URL. `PATCH_RESEARCH_TOKENS` 0 is always off.
 
 - **`stackexchange`** (`PATCH_RESEARCH_STACKEXCHANGE`, default `on`; optional
   `PATCH_RESEARCH_STACKEXCHANGE_KEY`, an app key that is not a secret and is never logged).
@@ -244,6 +246,7 @@ Resolved worker settings are persisted at submission
 | `PATCH_RESEARCH_SEARXNG_URL` | empty | SearXNG base URL; empty disables research. Must serve `format=json`. |
 | `PATCH_RESEARCH_SEARXNG_CATEGORIES` | `it,general` | Comma-separated SearXNG `categories` sent with every search and the probe. Empty sends none (old behavior). Items are trimmed; empty or non `[a-z0-9 _-]` items are dropped with one warning. Restart required. |
 | `PATCH_RESEARCH_SOURCE_TIMEOUT_MS` | `5000` | Per-source timeout, also applied to SearXNG. |
+| `PATCH_RESEARCH_ENABLED` | unset | `on`/`off`; unset = on only when a SearXNG URL is set. `off` beats a URL. |
 | `PATCH_RESEARCH_STACKEXCHANGE` | `on` | Stack Exchange API source (`off`, `false`, `0`, `no` disable it). Free; 10,000 requests/day per IP. |
 | `PATCH_RESEARCH_STACKEXCHANGE_KEY` | empty | Optional Stack Exchange app key. Not a secret; never logged in full. |
 | `PATCH_RESEARCH_TOKENS` | `800` | Hard token budget for the research block; 0 disables research. |

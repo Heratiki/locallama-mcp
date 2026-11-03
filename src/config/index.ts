@@ -127,6 +127,8 @@ export interface Config {
   patchResearchNotesMax: number;
   // Stack Exchange API research source (#163): PATCH_RESEARCH_STACKEXCHANGE, default on.
   patchResearchStackexchange: boolean;
+  // PATCH_RESEARCH_ENABLED (#163): 'on', 'off', or 'auto' (unset: on only when a SearXNG URL is set).
+  patchResearchEnabled: 'on' | 'off' | 'auto';
   // Optional Stack Exchange app key (not a secret, never logged in full).
   patchResearchStackexchangeKey: string;
 
@@ -251,6 +253,7 @@ export const RESTART_REQUIRED_CONFIG_FIELDS = [
   'patchResearchTokens',
   'patchResearchNotesMax',
   'patchResearchStackexchange',
+  'patchResearchEnabled',
   'patchResearchStackexchangeKey',
   'savingsTokenFactor',
 ] as const;
@@ -303,6 +306,14 @@ function parseNumber(value: string | undefined, defaultValue: number, min?: numb
   if (min !== undefined && num < min) return min;
   if (max !== undefined && num > max) return max;
   return num;
+}
+
+/** PATCH_RESEARCH_ENABLED (#163): on/true/1/yes, off/false/0/no; unset or other gives 'auto'. */
+function parseResearchEnabled(value: string | undefined): 'on' | 'off' | 'auto' {
+  const v = (value ?? '').trim().toLowerCase();
+  if (['on', 'true', '1', 'yes'].includes(v)) return 'on';
+  if (['off', 'false', '0', 'no'].includes(v)) return 'off';
+  return 'auto';
 }
 
 /**
@@ -427,6 +438,7 @@ function buildConfigFromEnv(env: NodeJS.ProcessEnv): Config {
     patchResearchTokens: parseNumber(env.PATCH_RESEARCH_TOKENS, 800),
     patchResearchNotesMax: parseNumber(env.PATCH_RESEARCH_NOTES_MAX, 500),
     patchResearchStackexchange: !['off', 'false', '0', 'no'].includes((env.PATCH_RESEARCH_STACKEXCHANGE ?? 'on').trim().toLowerCase()),
+    patchResearchEnabled: parseResearchEnabled(env.PATCH_RESEARCH_ENABLED),
     patchResearchStackexchangeKey: (env.PATCH_RESEARCH_STACKEXCHANGE_KEY || '').trim(),
 
     // Savings report (G1): steward ruling 1 on #152 — default factor 1.0.

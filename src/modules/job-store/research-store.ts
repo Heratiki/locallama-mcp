@@ -17,7 +17,7 @@ export interface ResearchNoteRow {
 export type ResearchNoteInsert = Omit<ResearchNoteRow, 'id' | 'helped'> & { helped?: 1 | 0 | null };
 
 /** Sources shared across repos; 'repo' is the only repo-scoped source (12g/12h). */
-export const SHARED_RESEARCH_SOURCES = ['searxng', 'deps', 'pydoc', 'go doc', 'man'] as const;
+export const SHARED_RESEARCH_SOURCES = ['searxng', 'deps', 'pydoc', 'go doc', 'man', 'explain', 'stackexchange'] as const;
 
 export async function insertResearchNote(note: ResearchNoteInsert): Promise<number> {
   const result = await getDbForPatchStore().run(

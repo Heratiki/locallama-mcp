@@ -98,8 +98,6 @@ export const stackexchangeAdapter: ResearchSourceAdapter = {
     if (!se) return { text: '', skipped: 'stackexchange_off' };
     const job = ctx.jobId ?? '';
     const now = se.now ?? Date.now;
-    // Guard: a test that did not inject a fetch must never reach the real API.
-    if (!se.fetchImpl && process.env.NODE_ENV === 'test') return { text: '', skipped: 'stackexchange_no_fetch_in_tests' };
     const fetchImpl = se.fetchImpl ?? fetch;
     if (throttledJobs.has(job)) return { text: '', skipped: 'stackexchange_throttled' };
     // Queries leave the host: redact first, like the other web source.
@@ -132,10 +130,13 @@ export const stackexchangeAdapter: ResearchSourceAdapter = {
       const best = answers.find(answer => answer.answer_id === item.accepted_answer_id || answer.is_accepted)
         ?? [...answers].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
       if (!best) return { text: '' };
-      const title = decodeEntities(String(item.title ?? '')).slice(0, 160);
-      const excerpt = htmlToText(String(best.body ?? '')).slice(0, EXCERPT_CHARS);
+      // Title and excerpt are redacted; the attribution URL is built from the
+      // answer id afterwards and stays unredacted (runResearch honours `attribution`).
+      const title = redactText(decodeEntities(String(item.title ?? ''))).slice(0, 160);
+      const excerpt = redactText(htmlToText(String(best.body ?? ''))).slice(0, EXCERPT_CHARS);
+      const url = `https://stackoverflow.com/a/${best.answer_id}`;
       // Attribution first, so line-based block assembly never drops it.
-      return { text: `Stack Overflow, CC BY-SA, ${title}: https://stackoverflow.com/a/${best.answer_id}\n${excerpt}` };
+      return { text: `Stack Overflow, CC BY-SA, ${title}: ${url}\n${excerpt}`, attribution: url };
     } catch (error) {
       if (error instanceof SourceTimeoutError) return { text: '', timedOut: true };
       throw error;

@@ -287,6 +287,26 @@ it.each(['empty URL', 'zero tokens'])('S12 research OFF (%s) makes zero research
   for (const spy of Object.values(spies)) expect(spy).not.toHaveBeenCalled();
 });
 
+it('PATCH_RESEARCH_ENABLED=off makes zero research-store calls even with a SearXNG URL (#163)', async () => {
+  const saved = config.patchResearchEnabled;
+  config.patchResearchEnabled = 'off';
+  try {
+    await enableResearch();
+    const spies = {
+      insertResearchNote: jest.fn(store.insertResearchNote),
+      getHelpedResearchNotes: jest.fn(store.getHelpedResearchNotes),
+      markResearchNotesHelped: jest.fn(store.markResearchNotesHelped),
+      failPendingResearchNotes: jest.fn(store.failPendingResearchNotes),
+      enforceResearchNotesCap: jest.fn(store.enforceResearchNotesCap),
+    };
+    registry.register(provider(async () => ({ content: calls.length < 3 ? block(3) : block() })));
+    await submit();
+    const result = await new PatchWorker({ backend, registry, store: { ...store, ...spies } }).run('job');
+    expect(result.status).toBe('passed');
+    for (const spy of Object.values(spies)) expect(spy).not.toHaveBeenCalled();
+  } finally { config.patchResearchEnabled = saved; }
+});
+
 it('S6 notes dropped by prompt fitting are never credited for a passing attempt', async () => {
   await enableResearch();
   registry.register(provider(async () => ({ content: calls.length < 3 ? block(3) : block() })));

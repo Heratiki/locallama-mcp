@@ -156,6 +156,8 @@ export interface SourceText {
   timedOut?: boolean;
   /** Machine-readable skip reason, e.g. 'no node_modules'. */
   skipped?: string;
+  /** URL already built after redaction; runResearch keeps it unredacted (#163). */
+  attribution?: string;
 }
 
 export interface ResearchSourceContext {

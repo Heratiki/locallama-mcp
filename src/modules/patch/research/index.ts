@@ -34,6 +34,8 @@ import { redactText } from './redact.js';
 export interface ResearchLimits {
   /** PATCH_RESEARCH_SEARXNG_URL; empty means research is off (ruling 3). */
   searxngUrl: string;
+  /** PATCH_RESEARCH_ENABLED (#163); absent = 'auto' (on only with a SearXNG URL). */
+  enabled?: 'on' | 'off' | 'auto';
   /** PATCH_RESEARCH_SOURCE_TIMEOUT_MS, applied to SearXNG too (criterion 10). */
   sourceTimeoutMs: number;
   /** PATCH_RESEARCH_TOKENS; 0 turns research off (criterion 11). */
@@ -47,6 +49,15 @@ export interface ResearchLimits {
    * absent = off. `key` is the optional app key.
    */
   stackexchange?: { key?: string };
+}
+
+/**
+ * Research gate (#163): tokens 0 is off; PATCH_RESEARCH_ENABLED=off is off even
+ * with a URL; on is on without a URL; unset ('auto') keeps the #155 rule (URL set = on).
+ */
+export function researchGate(mode: 'on' | 'off' | 'auto' | undefined, searxngUrl: string, tokens: number): boolean {
+  if (tokens <= 0 || mode === 'off') return false;
+  return mode === 'on' ? true : searxngUrl !== '';
 }
 
 export interface RunResearchInput extends RedactTerms {
@@ -144,7 +155,13 @@ async function runAdapter(
   if (!value) return { source: adapter.source, query: query.text, status: 'skipped', detail: 'no result' };
   if (value.timedOut) return { source: adapter.source, query: query.text, status: 'timed_out' };
   if (value.skipped) return { source: adapter.source, query: query.text, status: 'skipped', detail: value.skipped };
-  const info = value.text ? redactText(value.text, terms) : '';
+  // An attribution URL (built after redaction) is shielded from redaction.
+  const marker = '\u0000ATTRIBUTION\u0000';
+  const info = value.text
+    ? (value.attribution
+      ? redactText(value.text.split(value.attribution).join(marker), terms).split(marker).join(value.attribution)
+      : redactText(value.text, terms))
+    : '';
   return info
     ? { source: adapter.source, query: query.text, status: 'ran', info }
     : { source: adapter.source, query: query.text, status: 'ran' };
@@ -173,7 +190,7 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
   });
   // Ruling 3 + criteria 1 and 11: off unless a SearXNG URL is configured and
   // the token budget is positive.
-  if (!limits.searxngUrl || limits.tokens <= 0) return off();
+  if (!researchGate(limits.enabled, limits.searxngUrl, limits.tokens)) return off();
 
   const privateTerms = [...(input.privateTerms ?? []), path.basename(input.repoPath), homeBasename()].filter(Boolean) as string[];
   const terms: RedactTerms = { privateTerms };
@@ -206,7 +223,9 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
   // 2. probe the instance at first web use (criterion 6): a 403 on
   // format=json disables research for the run; a down or timed-out instance
   // only skips the web source.
-  const probe = await probeSearxng(limits.searxngUrl, limits.sourceTimeoutMs, input.fetchImpl);
+  const probe = limits.searxngUrl
+    ? await probeSearxng(limits.searxngUrl, limits.sourceTimeoutMs, input.fetchImpl)
+    : 'unreachable';
   if (probe === 'disabled') return off();
 
   // 2. run the sources: local first, SearXNG when the probe passed.

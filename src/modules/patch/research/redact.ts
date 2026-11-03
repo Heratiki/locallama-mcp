@@ -49,10 +49,7 @@ export function redactText(text: string, terms: RedactTerms = {}): string {
     .map(([, value]) => value!).sort((a, b) => b.length - a.length);
   let out = text;
   for (const value of values) out = out.split(value).join('<redacted>');
-  // An http(s):// URL is not a filesystem path; keep it (attribution URLs, #163).
-  out = out.replace(ABSOLUTE_PATH, (match, prefix: string, found: string, offset: number, whole: string) =>
-    prefix === ':' && /^\/\/[^/\s]/.test(found) && /https?$/i.test(whole.slice(Math.max(0, offset - 5), offset))
-      ? match : `${prefix}<path>`);
+  out = out.replace(ABSOLUTE_PATH, '$1<path>');
   for (const term of terms.privateTerms ?? []) {
     if (term && term.length >= 4) out = out.replace(new RegExp(`\\b${escapeRegExp(term)}\\b`, 'g'), '<private>');
   }
