@@ -6,6 +6,7 @@ import { pathToFileURL } from 'url';
 import { afterEach, describe, expect, it } from '@jest/globals';
 
 const originalRootDir = process.env.LOCALLAMA_ROOT_DIR;
+const originalEnvFile = process.env.LOCALLAMA_ENV_FILE;
 const originalOpenRouterFreeOnly = process.env.OPENROUTER_FREE_ONLY;
 const originalTokenThreshold = process.env.TOKEN_THRESHOLD;
 const originalQualityThreshold = process.env.QUALITY_THRESHOLD;
@@ -18,6 +19,12 @@ function importFreshConfigModule(cacheKey: string) {
 }
 
 afterEach(() => {
+  if (originalEnvFile === undefined) {
+    delete process.env.LOCALLAMA_ENV_FILE;
+  } else {
+    process.env.LOCALLAMA_ENV_FILE = originalEnvFile;
+  }
+
   if (originalRootDir === undefined) {
     delete process.env.LOCALLAMA_ROOT_DIR;
   } else {
@@ -54,6 +61,7 @@ describe('reloadConfig', () => {
     const tempRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-reload-valid-'));
 
     process.env.LOCALLAMA_ROOT_DIR = tempRootDir;
+    process.env.LOCALLAMA_ENV_FILE = path.join(tempRootDir, '.env');
     process.env.OPENROUTER_FREE_ONLY = 'true';
     process.env.TOKEN_THRESHOLD = '1000';
 
@@ -85,6 +93,8 @@ describe('reloadConfig', () => {
     const tempRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-reload-invalid-'));
 
     process.env.LOCALLAMA_ROOT_DIR = tempRootDir;
+    // The module is cached from the first test; the env file stays 'none' so the
+    // invalid in-process value below is not overridden by the temp .env.
     process.env.LM_STUDIO_ENDPOINT = 'http://localhost:1234/v1';
 
     fs.writeFileSync(path.join(tempRootDir, '.env'), 'LM_STUDIO_ENDPOINT=http://localhost:1234/v1\n', 'utf8');

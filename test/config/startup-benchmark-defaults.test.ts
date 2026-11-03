@@ -14,6 +14,7 @@ import { pathToFileURL } from 'url';
 import { randomUUID } from 'crypto';
 
 const originalRootDir = process.env.LOCALLAMA_ROOT_DIR;
+const originalEnvFile = process.env.LOCALLAMA_ENV_FILE;
 const originalStartupTargets = process.env.STARTUP_BENCHMARK_TARGETS;
 const originalFreshnessHours = process.env.BENCHMARK_FRESHNESS_HOURS;
 const originalReliableBenchmarkCount = process.env.RELIABLE_BENCHMARK_COUNT;
@@ -45,6 +46,7 @@ beforeAll(async () => {
   tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'locallama-startup-cfg-'));
   fs.writeFileSync(path.join(tempRoot, '.env'), BASE_ENV_CONTENT, 'utf8');
   process.env.LOCALLAMA_ROOT_DIR = tempRoot;
+  process.env.LOCALLAMA_ENV_FILE = path.join(tempRoot, '.env');
   // Delete env vars that could bleed into config at module init time
   delete process.env.STARTUP_BENCHMARK_TARGETS;
   delete process.env.BENCHMARK_FRESHNESS_HOURS;
@@ -57,6 +59,7 @@ beforeAll(async () => {
 afterAll(() => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
   restoreEnv('LOCALLAMA_ROOT_DIR', originalRootDir);
+  restoreEnv('LOCALLAMA_ENV_FILE', originalEnvFile);
   restoreEnv('STARTUP_BENCHMARK_TARGETS', originalStartupTargets);
   restoreEnv('BENCHMARK_FRESHNESS_HOURS', originalFreshnessHours);
   restoreEnv('RELIABLE_BENCHMARK_COUNT', originalReliableBenchmarkCount);

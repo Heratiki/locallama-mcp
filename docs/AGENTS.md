@@ -63,6 +63,7 @@ with Windows paths.
 - `npm test` - Run all tests
 - `npm test:watch` - Run tests in watch mode
 - Tests live in `test/` and mirror `src/`
+- Jest sets `LOCALLAMA_ENV_FILE=none` (`test/setup/no-env-file.cjs`), so config never reads the repo-root `.env` in tests. Set the variable to a temp file path to test `.env` loading; without it the server reads `<rootDir>/.env`.
 - The test scripts are OS-agnostic: they invoke Jest through `node --experimental-vm-modules ./node_modules/jest/bin/jest.js` instead of shell-specific environment-variable syntax.
 
 ### Code Quality
