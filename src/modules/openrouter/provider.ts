@@ -70,6 +70,7 @@ class OpenRouterProvider implements LLMProvider {
       displayName: m.name,
       contextWindow: m.contextWindow,
       costPerToken: m.costPerToken,
+      maxCompletionTokens: openRouterModule.modelTracking.models[m.id]?.maxCompletionTokens,
     }));
   }
 
