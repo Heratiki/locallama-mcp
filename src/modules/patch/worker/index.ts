@@ -328,7 +328,7 @@ export class PatchWorker {
                 if (response.truncated === true) {
                   // #167: the model did not make a format error; its answer hit the output cap.
                   truncated = true;
-                  const cut = calls.usage[calls.usage.length - 1]?.completion_tokens ?? settings.patchMaxOutputTokens;
+                  const cut = calls.usage[calls.usage.length - 1]?.max_tokens ?? settings.patchMaxOutputTokens;
                   error = `Your answer was cut off at ${cut} output tokens before the edit blocks ended. ` +
                     'Send only the edit blocks: no explanation, no comments that think aloud, and the shortest correct code.';
                 } else {

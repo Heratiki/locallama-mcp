@@ -17,6 +17,7 @@ const prompt = 'alpha beta gamma delta '.repeat(150);
 let registry: InstanceType<typeof ProviderRegistry>;
 let seen: TaskExecutionOptions[];
 let window: number;
+let contextTokens = 8192;
 
 function provider(id: string, costClass: 'local' | 'free' | 'paid'): LLMProvider {
   return {
@@ -29,7 +30,7 @@ function provider(id: string, costClass: 'local' | 'free' | 'paid'): LLMProvider
 
 function calls() {
   const state = { deadline_at: Date.now() + 60000, paid_spent_usd: 0, paid_reserved_usd: 0 } as PatchState;
-  const settings = { patchMaxOutputTokens: MAX_OUTPUT, patchInferenceTimeoutMs: 5000, patchContextTokens: 8192 } as WorkerSettings;
+  const settings = { patchMaxOutputTokens: MAX_OUTPUT, patchInferenceTimeoutMs: 5000, patchContextTokens: contextTokens } as WorkerSettings;
   return new PatchModelCalls({
     registry, state, settings, capUsd: 10, signal: new AbortController().signal, now: Date.now, persistSpend: async () => {},
   });
@@ -44,6 +45,7 @@ beforeEach(() => {
   registry.register(provider('pay', 'paid'));
   seen = [];
   window = 8192;
+  contextTokens = 8192;
 });
 afterEach(() => { _setProviderRegistryForTests(undefined); });
 
@@ -55,6 +57,21 @@ describe('patch model call output cap (#167)', () => {
     expect(promptTokens).toBeGreaterThan(400);
     expect(seen[0].maxTokens).toBeGreaterThan(MAX_OUTPUT);
     expect(seen[0].maxTokens).toBeLessThanOrEqual(8192 - promptTokens);
+  });
+
+  it.each(['local', 'free'] as const)('bounds the cap by PATCH_CONTEXT_TOKENS when the model reports a far larger window (%s)', async (cost) => {
+    window = 131072;
+    contextTokens = 6000;
+    await calls().execute(entry(cost === 'local' ? 'loc' : 'fre', cost), 'system', prompt);
+    const promptTokens = promptTokensOf('system', prompt);
+    expect(seen[0].maxTokens).toBeLessThanOrEqual(6000 - promptTokens);
+    expect(seen[0].maxTokens).toBeGreaterThanOrEqual(MAX_OUTPUT);
+  });
+
+  it('exposes the cap it sent on the usage entry', async () => {
+    const c = calls();
+    await c.execute(entry('loc', 'local'), 'system', prompt);
+    expect(c.usage[0].max_tokens).toBe(seen[0].maxTokens);
   });
 
   it('keeps PATCH_MAX_OUTPUT_TOKENS for a paid entry', async () => {

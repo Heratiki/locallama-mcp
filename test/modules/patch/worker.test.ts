@@ -216,7 +216,7 @@ describe('patch worker', () => {
       calls.length === 1 ? { content: cut, completionTokens: 1234, truncated: true } : { content: block() })));
     await submit();
     expect((await worker().run('job')).status).toBe('passed');
-    expect(calls[1].prompt).toContain('cut off at 1234 output tokens');
+    expect(calls[1].prompt).toContain(`cut off at ${calls[0].options.maxTokens} output tokens`);
     expect(calls[1].prompt).toContain('only the edit blocks');
     expect(calls[1].prompt).toContain('no comments');
     expect(calls[1].prompt).not.toContain('missing the >>>>>>> REPLACE end marker');
@@ -230,8 +230,18 @@ describe('patch worker', () => {
       calls.length === 1 ? { content: 'Let me think about this...', completionTokens: 2000, truncated: true } : { content: block() })));
     await submit();
     expect((await worker().run('job')).status).toBe('passed');
-    expect(calls[1].prompt).toContain('cut off at 2000 output tokens');
+    expect(calls[1].prompt).toContain(`cut off at ${calls[0].options.maxTokens} output tokens`);
     expect(calls[1].prompt).not.toContain('No edit blocks in model output');
+  });
+
+  it('names the max_tokens the provider got when the provider returns no usage (#167)', async () => {
+    registry.register(provider('fake', 'local', async () => (
+      calls.length === 1 ? { content: 'a.ts\n<<<<<<< SEARCH\nx', truncated: true } : { content: block() })));
+    await submit();
+    expect((await worker().run('job')).status).toBe('passed');
+    const sent = calls[0].options.maxTokens;
+    expect(sent).toBeGreaterThan(0);
+    expect(calls[1].prompt).toContain(`cut off at ${sent} output tokens`);
   });
 
   it('applies a truncated answer whose blocks parse cleanly as usual (#167)', async () => {
