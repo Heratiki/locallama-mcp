@@ -1,3 +1,16 @@
+# [1.34.0](https://github.com/Heratiki/locallama-mcp/compare/v1.33.0...v1.34.0) (2026-11-03)
+
+
+### Bug Fixes
+
+* **patch:** lint resume shortcut must match the current lint plan ([6b2dce9](https://github.com/Heratiki/locallama-mcp/commit/6b2dce96285c64aef867dbe0ce8b6a5388f4becf)), closes [#162](https://github.com/Heratiki/locallama-mcp/issues/162)
+* **patch:** resume shortcut accepts a passing attempt that stored lint checks ([73aee79](https://github.com/Heratiki/locallama-mcp/commit/73aee79e47fb3f4d9ce5159d8ed719079f51903e)), closes [#160](https://github.com/Heratiki/locallama-mcp/issues/160)
+
+
+### Features
+
+* **patch:** send SearXNG categories (default it,general) in research ([637ea84](https://github.com/Heratiki/locallama-mcp/commit/637ea841e8c5f87a71d39b5ebf851e13a2cd33f8)), closes [#161](https://github.com/Heratiki/locallama-mcp/issues/161)
+
 # [1.33.0](https://github.com/Heratiki/locallama-mcp/compare/v1.32.0...v1.33.0) (2026-11-02)
 
 
