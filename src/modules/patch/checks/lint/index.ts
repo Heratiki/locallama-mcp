@@ -30,7 +30,7 @@ function isExecutable(file: string): boolean {
 }
 
 /** Absolute path of a tool: repo node_modules/.bin, PATH, then the usual user bin dirs. */
-function findBin(bin: string, worktree: string, pathEnv: string, home: string): string | undefined {
+export function findBin(bin: string, worktree: string, pathEnv: string, home: string): string | undefined {
   const dirs = [
     path.join(worktree, 'node_modules', '.bin'),
     ...pathEnv.split(path.delimiter).filter(dir => path.isAbsolute(dir)),

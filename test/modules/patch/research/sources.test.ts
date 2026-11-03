@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   repoAdapter, depsAdapter, pydocAdapter, goDocAdapter, manAdapter,
-  detectLanguage, runTool,
+  detectLanguage, runTool, cManAdapter, shellHelpAdapter,
 } from '../../../../dist/modules/patch/research/sources.js';
 
 let tmp: string;
@@ -45,6 +45,25 @@ describe('source adapters (#155 criteria 7, 8, 9)', () => {
     expect(detectLanguage('main.go:5:2: cannot find package "x"')).toBe('go');
     expect(detectLanguage("src/a.ts(1,1): error TS2339: nope")).toBe('typescript');
     expect(detectLanguage('make: *** [all] Error 1\nundefined reference to `snprintf\'')).toBe('unknown');
+  });
+
+  it('detects rust, c and shell error text (#163)', () => {
+    expect(detectLanguage('error[E0308]: mismatched types\n --> src/main.rs:4:5')).toBe('rust');
+    expect(detectLanguage('error: could not compile `app` (bin "app") due to 1 previous error')).toBe('rust');
+    expect(detectLanguage("main.c:12:5: error: implicit declaration of function 'strlcpy'")).toBe('c');
+    expect(detectLanguage('util.h:3:10: fatal error: missing.h: No such file or directory')).toBe('c');
+    expect(detectLanguage('In deploy.sh line 3:\nfoo=$(ls $dir)\n^-- SC2086 (info): Double quote')).toBe('shell');
+    expect(detectLanguage('./run.sh: line 7: foo: command not found')).toBe('shell');
+  });
+
+  it('C and shell doc adapters run man 3 and the bash help builtin (#163)', async () => {
+    await fakeTool('man', '#!/bin/sh\necho "man:$*"\n');
+    const c = await cManAdapter.run({ text: 'snprintf', kind: 'identifier' }, ctx());
+    expect(c.text).toContain('man:3 snprintf');
+    expect((await cManAdapter.run({ text: '-k;rm', kind: 'identifier' }, ctx())).skipped).toBe('invalid_name');
+    const sh = await shellHelpAdapter.run({ text: 'cd', kind: 'identifier' }, ctx());
+    expect(sh.text).toContain('cd');
+    expect((await shellHelpAdapter.run({ text: 'cd; id', kind: 'identifier' }, ctx())).skipped).toBe('invalid_name');
   });
 
   it('repo adapter searches the workspace BM25 and formats hits', async () => {

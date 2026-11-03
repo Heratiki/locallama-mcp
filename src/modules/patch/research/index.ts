@@ -10,8 +10,11 @@ export { redactText, normalizeSignatureText } from './redact.js';
 export { probeSearxng, searchSearxng, resetSearxngProbeCache } from './searxng.js';
 export type { SearxngProbeState, SearxngResult, FetchLike } from './searxng.js';
 export {
-  detectLanguage, repoAdapter, depsAdapter, pydocAdapter, goDocAdapter, manAdapter, searxngAdapter, runTool, ToolMissingError,
+  detectLanguage, repoAdapter, depsAdapter, pydocAdapter, goDocAdapter, manAdapter, cManAdapter, shellHelpAdapter,
+  searxngAdapter, runTool, ToolMissingError,
 } from './sources.js';
+export { explainAdapter, explainCommands } from './explain.js';
+export { stackexchangeAdapter, resetStackexchangeState } from './stackexchange.js';
 export type { ResearchLanguage, ResearchSourceAdapter, ResearchSourceContext, SourceText } from './sources.js';
 export { findReusedNote } from './notes.js';
 export type { ReusableNote, ReuseLookup } from './notes.js';
@@ -19,8 +22,10 @@ import type { StuckResult } from './detect.js';
 import type { RedactTerms } from './redact.js';
 import { buildQueries, type ResearchQuery } from './queries.js';
 import { probeSearxng, type FetchLike } from './searxng.js';
+import { explainAdapter, explainCommands } from './explain.js';
+import { stackexchangeAdapter } from './stackexchange.js';
 import {
-  detectLanguage, depsAdapter, goDocAdapter, manAdapter, pydocAdapter, repoAdapter, searxngAdapter,
+  detectLanguage, depsAdapter, goDocAdapter, manAdapter, cManAdapter, shellHelpAdapter, pydocAdapter, repoAdapter, searxngAdapter,
   ToolMissingError, type ResearchSourceAdapter, type ResearchSourceContext,
 } from './sources.js';
 import { findReusedNote, type ReusableNote } from './notes.js';
@@ -29,6 +34,8 @@ import { redactText } from './redact.js';
 export interface ResearchLimits {
   /** PATCH_RESEARCH_SEARXNG_URL; empty means research is off (ruling 3). */
   searxngUrl: string;
+  /** PATCH_RESEARCH_ENABLED (#163); absent = 'auto' (on only with a SearXNG URL). */
+  enabled?: 'on' | 'off' | 'auto';
   /** PATCH_RESEARCH_SOURCE_TIMEOUT_MS, applied to SearXNG too (criterion 10). */
   sourceTimeoutMs: number;
   /** PATCH_RESEARCH_TOKENS; 0 turns research off (criterion 11). */
@@ -37,6 +44,20 @@ export interface ResearchLimits {
   notesMax: number;
   /** Top N SearXNG results to keep (criterion 5). */
   searxngResults?: number;
+  /**
+   * Stack Exchange API source (#163). Present = on (PATCH_RESEARCH_STACKEXCHANGE),
+   * absent = off. `key` is the optional app key.
+   */
+  stackexchange?: { key?: string };
+}
+
+/**
+ * Research gate (#163): tokens 0 is off; PATCH_RESEARCH_ENABLED=off is off even
+ * with a URL; on is on without a URL; unset ('auto') keeps the #155 rule (URL set = on).
+ */
+export function researchGate(mode: 'on' | 'off' | 'auto' | undefined, searxngUrl: string, tokens: number): boolean {
+  if (tokens <= 0 || mode === 'off') return false;
+  return mode === 'on' ? true : searxngUrl !== '';
 }
 
 export interface RunResearchInput extends RedactTerms {
@@ -134,7 +155,13 @@ async function runAdapter(
   if (!value) return { source: adapter.source, query: query.text, status: 'skipped', detail: 'no result' };
   if (value.timedOut) return { source: adapter.source, query: query.text, status: 'timed_out' };
   if (value.skipped) return { source: adapter.source, query: query.text, status: 'skipped', detail: value.skipped };
-  const info = value.text ? redactText(value.text, terms) : '';
+  // An attribution URL (built after redaction) is shielded from redaction.
+  const marker = '\u0000ATTRIBUTION\u0000';
+  const info = value.text
+    ? (value.attribution
+      ? redactText(value.text.split(value.attribution).join(marker), terms).split(marker).join(value.attribution)
+      : redactText(value.text, terms))
+    : '';
   return info
     ? { source: adapter.source, query: query.text, status: 'ran', info }
     : { source: adapter.source, query: query.text, status: 'ran' };
@@ -163,7 +190,7 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
   });
   // Ruling 3 + criteria 1 and 11: off unless a SearXNG URL is configured and
   // the token budget is positive.
-  if (!limits.searxngUrl || limits.tokens <= 0) return off();
+  if (!researchGate(limits.enabled, limits.searxngUrl, limits.tokens)) return off();
 
   const privateTerms = [...(input.privateTerms ?? []), path.basename(input.repoPath), homeBasename()].filter(Boolean) as string[];
   const terms: RedactTerms = { privateTerms };
@@ -196,7 +223,9 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
   // 2. probe the instance at first web use (criterion 6): a 403 on
   // format=json disables research for the run; a down or timed-out instance
   // only skips the web source.
-  const probe = await probeSearxng(limits.searxngUrl, limits.sourceTimeoutMs, input.fetchImpl);
+  const probe = limits.searxngUrl
+    ? await probeSearxng(limits.searxngUrl, limits.sourceTimeoutMs, input.fetchImpl)
+    : 'unreachable';
   if (probe === 'disabled') return off();
 
   // 2. run the sources: local first, SearXNG when the probe passed.
@@ -207,12 +236,20 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchOutc
     ...(language === 'python' ? [{ adapter: pydocAdapter, query: firstOfKind(queries, 'module') ?? queries[0] }] : []),
     ...(language === 'go' ? [{ adapter: goDocAdapter, query: firstOfKind(queries, 'module') ?? queries[0] }] : []),
     ...(language === 'unknown' ? [{ adapter: manAdapter, query: firstOfKind(queries, 'identifier') ?? queries[0] }] : []),
+    ...(language === 'c' ? [{ adapter: cManAdapter, query: firstOfKind(queries, 'identifier') ?? queries[0] }] : []),
+    ...(language === 'shell' ? [{ adapter: shellHelpAdapter, query: firstOfKind(queries, 'identifier') ?? queries[0] }] : []),
+    // Offline explain commands for error codes in the failing output (#163).
+    ...(explainCommands(input.stuck.errorText).length > 0 ? [{ adapter: explainAdapter, query: queries[0] ?? { text: 'explain', kind: 'code' as const } }] : []),
+    ...(limits.stackexchange ? [{ adapter: stackexchangeAdapter, query: queries[0] }] : []),
     ...(probe === 'ok' ? [{ adapter: searxngAdapter, query: queries[0] }] : []),
   ];
   const ctx: ResearchSourceContext = {
     workspacePath: input.workspacePath,
     repoSearch: input.repoSearch,
     timeoutMs: limits.sourceTimeoutMs,
+    errorText: input.stuck.errorText,
+    jobId: input.jobId,
+    ...(limits.stackexchange ? { stackexchange: { key: limits.stackexchange.key, fetchImpl: input.fetchImpl } } : {}),
     ...(probe === 'ok' ? {
       searxng: { url: limits.searxngUrl, results: limits.searxngResults ?? 3, fetchImpl: input.fetchImpl },
     } : {}),

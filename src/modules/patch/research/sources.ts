@@ -10,7 +10,7 @@ import type { ResearchQuery } from './queries.js';
 import { searchSearxng, SourceTimeoutError, type FetchLike } from './searxng.js';
 import { PYTHON_DOCS_SCRIPT } from './python-docs.js';
 
-export type ResearchLanguage = 'python' | 'go' | 'typescript' | 'unknown';
+export type ResearchLanguage = 'python' | 'go' | 'typescript' | 'rust' | 'c' | 'shell' | 'unknown';
 
 /** Language guess from the error text; drives which doc tool runs (#155 criterion 8). */
 export function detectLanguage(errorText: string): ResearchLanguage {
@@ -22,6 +22,16 @@ export function detectLanguage(errorText: string): ResearchLanguage {
   }
   if (/error TS\d+|\w+\.(?:ts|tsx)\(\d+,\s*\d+\)/.test(errorText)) {
     return 'typescript';
+  }
+  // #163: rust, C and shell. A bare linker error stays 'unknown'.
+  if (/error\[E\d{4}\]|\.rs:\d+:\d+|error: could not compile/.test(errorText)) {
+    return 'rust';
+  }
+  if (/\.(?:c|h|cc|cpp|hpp):\d+:\d+: (?:fatal )?(?:error|warning)\b/.test(errorText)) {
+    return 'c';
+  }
+  if (/\bSC\d{4}\b|\.sh: line \d+|\.sh:\d+|\bIn \S+\.sh line \d+/.test(errorText)) {
+    return 'shell';
   }
   return 'unknown';
 }
@@ -146,6 +156,8 @@ export interface SourceText {
   timedOut?: boolean;
   /** Machine-readable skip reason, e.g. 'no node_modules'. */
   skipped?: string;
+  /** URL already built after redaction; runResearch keeps it unredacted (#163). */
+  attribution?: string;
 }
 
 export interface ResearchSourceContext {
@@ -155,6 +167,12 @@ export interface ResearchSourceContext {
   /** Explicit external Python installation directories; never executed or added via site. */
   pythonSearchPaths?: string[];
   searxng?: { url: string; results: number; fetchImpl?: FetchLike };
+  /** Failing check output; the explain adapter reads error codes from it (#163). */
+  errorText?: string;
+  /** Job id; Stack Exchange throttle state lasts for one job (#163). */
+  jobId?: string;
+  /** Present only when PATCH_RESEARCH_STACKEXCHANGE is on (#163). */
+  stackexchange?: { key?: string; fetchImpl?: FetchLike; now?: () => number };
 }
 
 /** One adapter interface per source (#155 criterion 7). */
@@ -221,6 +239,30 @@ export const goDocAdapter: ResearchSourceAdapter = docAdapter('go doc', target =
 
 /** (c) Manual pages via man. */
 export const manAdapter: ResearchSourceAdapter = docAdapter('man', target => ['man', target]);
+
+const SAFE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+
+/** (c) C library functions via `man 3 <name>` (#163). */
+export const cManAdapter: ResearchSourceAdapter = {
+  source: 'man',
+  async run(query, ctx) {
+    if (!SAFE_NAME.test(query.text)) return { text: '', skipped: 'invalid_name' };
+    const result = await runTool(['man', '3', query.text], { cwd: ctx.workspacePath, timeoutMs: ctx.timeoutMs });
+    if (result.timedOut) return { text: '', timedOut: true };
+    return { text: result.ok && result.output ? clip(result.output, 1500) : '' };
+  },
+};
+
+/** (c) Shell builtins via bash `help <name>`; the name is validated and passed as an argument (#163). */
+export const shellHelpAdapter: ResearchSourceAdapter = {
+  source: 'man',
+  async run(query, ctx) {
+    if (!SAFE_NAME.test(query.text)) return { text: '', skipped: 'invalid_name' };
+    const result = await runTool(['bash', '-c', 'help -- "$1"', 'bash', query.text], { cwd: ctx.workspacePath, timeoutMs: ctx.timeoutMs });
+    if (result.timedOut) return { text: '', timedOut: true };
+    return { text: result.ok && result.output ? clip(result.output, 1500) : '' };
+  },
+};
 
 /** The user-configured SearXNG instance; snippets only (#155 criteria 5, 6). */
 export const searxngAdapter: ResearchSourceAdapter = {
