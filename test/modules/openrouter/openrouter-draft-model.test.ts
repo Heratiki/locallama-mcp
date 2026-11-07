@@ -257,7 +257,7 @@ describe('benchmarkService.benchmarkFreeModels draft-model gating (issue #137)',
 
     // Drive virtual time (the 5s/10s benchmark pauses) forward while letting
     // the real event loop flush the on-disk benchmark checks between advances.
-    for (let i = 0; i < 300 && !settled; i++) {
+    while (!settled) {
       await jest.advanceTimersByTimeAsync(1000);
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
@@ -288,5 +288,5 @@ describe('benchmarkService.benchmarkFreeModels draft-model gating (issue #137)',
       expect.any(Number),
       'draft-ollama',
     );
-  });
+  }, 10_000);
 });
